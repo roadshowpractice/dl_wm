@@ -7,6 +7,17 @@ import subprocess
 import sys
 from pathlib import Path
 
+repo_root = Path(__file__).resolve().parent.parent
+
+
+def resolve_repo_path(path_value: str) -> str:
+    if not path_value:
+        return path_value
+    if os.path.isabs(path_value):
+        return path_value
+    return str((repo_root / path_value).resolve())
+
+
 
 def load_json(path: Path):
     try:
@@ -72,7 +83,6 @@ def resolve_output_dir(config):
 
 
 def main():
-    repo_root = Path(__file__).resolve().parent.parent
     app_config_path = repo_root / "conf" / "app_config.json"
     config_path = repo_root / "conf" / "config.json"
 
@@ -99,6 +109,11 @@ def main():
 
     output_dir = resolve_output_dir(platform_config)
     metadata_dir = app_config.get("metadata_dir")
+
+    if output_dir:
+        output_dir = resolve_repo_path(output_dir)
+    if metadata_dir:
+        metadata_dir = resolve_repo_path(metadata_dir)
 
     if not output_dir:
         print("[ERR] output_dir missing in conf/config.json (target_usb fallback also empty)")
