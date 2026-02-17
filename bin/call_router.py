@@ -14,7 +14,7 @@ lib_path = os.path.join(root_dir, "lib")
 sys.path.append(lib_path)
 
 # Import utilities
-from teton_utils import initialize_logging, load_config, load_app_config
+from teton_utils import initialize_logging, load_config, load_app_config, resolve_repo_path
 from tasks_lib import find_url_json
 
 # Map tasks to their respective scripts
@@ -123,7 +123,7 @@ def main():
         config = load_config()
         logger = initialize_logging()
         app_config = load_app_config()
-        metadata_dir = app_config.get("metadata_dir", "./metadata")
+        metadata_dir = resolve_repo_path(app_config.get("metadata_dir", "./metadata"))
         # Ensure metadata directory exists before searching index/files.
         os.makedirs(metadata_dir, exist_ok=True)
         logger.info("🔁 Task Router Started")

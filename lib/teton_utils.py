@@ -69,6 +69,18 @@ import platform
 logger = logging.getLogger(__name__)
 
 
+def resolve_repo_path(path_value: str) -> str:
+    """Resolve relative config paths against the repository root."""
+    if not path_value:
+        return path_value
+    if os.path.isabs(path_value):
+        return path_value
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.abspath(os.path.join(current_dir, ".."))
+    return os.path.abspath(os.path.join(repo_root, path_value))
+
+
 def create_original_filename(params: dict) -> dict:
     """
     Generates an original filename for the video based on parameters and ensures a fallback name if uploader is missing.
