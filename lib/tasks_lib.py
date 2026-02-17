@@ -504,8 +504,13 @@ def write_masked_metadata_with_tasks(
         metadata["default_tasks"].setdefault(task, status)
 
     output_path = params.get("to_process") or params.get("original_filename")
-    if output_path:
+    if output_path and os.path.exists(output_path):
         metadata["default_tasks"]["perform_download"] = output_path
+    elif output_path:
+        logger.warning(
+            "⚠️ Download output path recorded in params but file does not exist yet; "
+            "leaving perform_download as incomplete."
+        )
 
     try:
         with open(metadata_path, "w", encoding="utf-8") as f:
