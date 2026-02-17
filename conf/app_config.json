@@ -1,0 +1,74 @@
+{
+    "_comment": "Application-wide defaults for download, metadata, watermarking and rendering.",
+    "video_download": {
+        "format": "bestvideo[height<=?1080]+bestaudio/best",
+        "bitrate": "5000k",
+        "noplaylist": true,
+        "cookie_path": "./app/data/cookies.txt"
+    },
+    "metadata_dir": "./metadata/",
+    "raw_metadata_mode": "gzip",
+    "test_url": "https://www.facebook.com/share/v/19G7Jx2x2n/?mibextid=wwXIfr&__cft__[0]=AZWs3WaCFeC33JnjAcnjMQY3QtjFqvbJRzFTrsf8f5rSrAaIJD_vGKwFjnV9z_bDTGhR9vOJo1-e_7dveL6RpZHG2qRLXLxnDAEccB6cF5cOQWj1r6gVfZNbwKi0sffOUKc&__tn__=R]-R",
+    "watermark_config": {
+        "font": "fonts/InterVariable.ttf",
+        "font_size": 32,
+        "username_color": "yellow",
+        "date_color": "cyan",
+        "timestamp_color": "red",
+        "username_position": [
+            "left",
+            "top"
+        ],
+        "date_position": [
+            "left",
+            "bottom"
+        ],
+        "timestamp_position": [
+            "right",
+            "bottom"
+        ],
+        "text_pad": 10,
+        "watermark_target_width": 0
+    },
+    "ken_burns": {
+        "brightness": 1.3,
+        "slide_length": 9,
+        "border": 0.03,
+        "source_path": "./data/4.source.txt",
+        "languages": [
+            "en",
+            "es",
+            "fr"
+        ],
+        "style": {
+            "font": "Arial",
+            "font_size": 24,
+            "color": "white",
+            "background_color": "black",
+            "opacity": 0.8,
+            "border_color": "black",
+            "border_width": 2
+        }
+    },
+    "captions": {
+        "font": "fonts/Inter-Bold.ttf",
+        "font_size": 32,
+        "username_color": "yellow",
+        "source_path": "./data/4.source.txt",
+        "overall_start": 1,
+        "caption_bottom": "75%",
+        "line_width": "8%",
+        "hor_offset": "4%",
+        "cap_length": 5,
+        "max_number": 60,
+        "max_char_width": 65,
+        "next_line": 1.7,
+        "pause_between_para": 2,
+        "image_dir": "/home/fritz/Pictures/post",
+        "shadow": {
+            "color": "black",
+            "offset": 5,
+            "opacity": 0.6
+        }
+    }
+}
