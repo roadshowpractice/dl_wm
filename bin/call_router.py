@@ -51,7 +51,7 @@ def execute_tasks(task_config, url, to_process, dry_run=False):
                     f"[Dry Run] Would run: {sys.executable} {script_path} {task_input}"
                 )
             else:
-                result = subprocess.run([sys.executable, script_path, task_input])
+                result = subprocess.run([sys.executable, script_path, task_input], cwd=root_dir)
                 if result.returncode != 0:
                     logging.error(f"Task failed: {task} (exit code: {result.returncode})")
         elif isinstance(status, str):
@@ -68,7 +68,8 @@ def run_my_existing_downloader(url, logger):
     result = subprocess.run(
         [sys.executable, script_path, url],
         capture_output=True,
-        text=True
+        text=True,
+        cwd=root_dir
     )
 
     if result.returncode != 0:
@@ -111,6 +112,7 @@ def wait_for_download_file(to_process, logger, timeout_seconds=90, poll_interval
 
 def main():
     try:
+        os.chdir(root_dir)
         dry_run = "--dry-run" in sys.argv
         url_args = [arg for arg in sys.argv[1:] if not arg.startswith("--")]
 

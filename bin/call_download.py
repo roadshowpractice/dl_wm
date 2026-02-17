@@ -78,6 +78,7 @@ def detect_target_usb(config):
 # Main Function
 def main():
     try:
+        os.chdir(root_dir)
         # Load configurations
         platform_config = load_config()
         app_config = load_app_config()
