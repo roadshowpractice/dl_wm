@@ -93,14 +93,20 @@ def extract_metadata(params):
         resolved_cookie_path = resolve_repo_path(resolved_cookie_path)
         params["cookie_path"] = resolved_cookie_path
 
+
+        # Fail fast: if user/config requested cookies, do NOT silently proceed without them.
+        if not os.path.exists(resolved_cookie_path):
+            raise FileNotFoundError(
+                "cookie_path is configured but the cookie file does not exist:\n"
+                f"  cookie_path: {cookie_path!r}\n"
+                f"  app_config cookie_path: {app_cookie_path!r}\n"
+                f"  resolved: {resolved_cookie_path}\n"
+                "Fix: update conf/app_config.json video_download.cookie_path OR place the cookie file at that path."
+            )
     try:
         # Set up yt-dlp options for extracting metadata
         ydl_opts = {
-            "cookiefile": (
-                resolved_cookie_path
-                if resolved_cookie_path and os.path.exists(resolved_cookie_path)
-                else None
-            ),
+            "cookiefile": resolved_cookie_path,
             "noplaylist": True,  # Ensure only the single video is processed if the URL is a playlist
             "skip_download": True,  # Skip actual video download
         }
@@ -322,6 +328,14 @@ def download_video(params):
     if cookie_path:
         cookie_path = resolve_repo_path(cookie_path)
 
+
+        # Fail fast here too (belt + suspenders) so we don\'t pass cookiefile=None to yt-dlp.
+        if not os.path.exists(cookie_path):
+            raise FileNotFoundError(
+                "cookie_path is configured but the cookie file does not exist:\n"
+                f"  cookie_path (resolved): {cookie_path}\n"
+                "Fix: update conf/app_config.json video_download.cookie_path OR place the cookie file at that path."
+            )
     if not url:
         logger.error("No URL provided for download.")
         return None
@@ -333,7 +347,7 @@ def download_video(params):
         # Set up yt-dlp options for actual download based on video_download_config
         ydl_opts = {
             "outtmpl": params["original_filename"],
-            "cookiefile": cookie_path if cookie_path and os.path.exists(cookie_path) else None,
+            "cookiefile": cookie_path,
             "format": video_download_config.get("format", "bestvideo+bestaudio/best"),
             "noplaylist": video_download_config.get("noplaylist", True),
             "verbose": True,
