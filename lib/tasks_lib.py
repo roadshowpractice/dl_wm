@@ -48,6 +48,7 @@ import json
 import logging
 import shutil
 import traceback
+from urllib.parse import urlparse
 
 # Initialize the logger
 logger = logging.getLogger(__name__)
@@ -411,9 +412,38 @@ def write_masked_metadata_with_tasks(
         logger.warning("⚠️ No metadata_path or config_json found in params.")
         return {"updated_metadata": None}
 
-    metadata_dir = os.path.dirname(metadata_path)
-    if metadata_dir:
-        os.makedirs(metadata_dir, exist_ok=True)
+    # Keep all searchable metadata in the configured metadata directory so
+    # call_router/find_url_json can always discover it through metadata/index.jsonl.
+    try:
+        app_config = load_app_config()
+    except Exception as e:
+        logger.warning(f"Could not read app_config for metadata dir resolution: {e}")
+        app_config = {}
+
+    metadata_dir = app_config.get("metadata_dir", "./metadata")
+    if not os.path.isabs(metadata_dir):
+        repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        metadata_dir = os.path.join(repo_root, metadata_dir)
+    metadata_dir = os.path.abspath(metadata_dir)
+    os.makedirs(metadata_dir, exist_ok=True)
+
+    # If metadata_path points elsewhere (for example outputs/*.json from
+    # store_params_as_json), re-home it into metadata_dir.
+    if os.path.abspath(os.path.dirname(metadata_path) or ".") != metadata_dir:
+        preferred_name = None
+        if params.get("id"):
+            preferred_name = f"{params['id']}.json"
+        elif params.get("url"):
+            parsed = urlparse(params["url"])
+            slug = parsed.path.rstrip("/").split("/")[-1] if parsed.path else ""
+            if slug:
+                preferred_name = f"{slug}.json"
+
+        if not preferred_name:
+            preferred_name = os.path.basename(metadata_path)
+
+        metadata_path = os.path.join(metadata_dir, preferred_name)
+        params["metadata_path"] = metadata_path
 
     existing_metadata = {}
     try:
@@ -580,4 +610,3 @@ def load_app_config():
         return app_config
     except json.JSONDecodeError as e:
         raise ValueError(f"Failed to parse JSON configuration at {config_path}: {e}")
-
