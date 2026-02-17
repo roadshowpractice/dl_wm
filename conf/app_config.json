@@ -4,7 +4,7 @@
         "format": "bestvideo[height<=?1080]+bestaudio/best",
         "bitrate": "5000k",
         "noplaylist": true,
-        "cookie_path": ".conf/instagram.cookies.txt"
+        "cookie_path": "conf/instagram.cookies.txt"
     },
     "metadata_dir": "./metadata/",
     "raw_metadata_mode": "gzip",
