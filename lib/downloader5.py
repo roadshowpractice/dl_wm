@@ -83,11 +83,23 @@ def extract_metadata(params):
     metadata_dir = resolve_repo_path(app_config.get("metadata_dir", "./metadata"))
     os.makedirs(metadata_dir, exist_ok=True)
 
+    app_cookie_path = (
+        app_config.get("video_download", {}).get("cookie_path")
+        if isinstance(app_config.get("video_download"), dict)
+        else None
+    )
+    resolved_cookie_path = cookie_path or app_cookie_path
+    if resolved_cookie_path:
+        resolved_cookie_path = resolve_repo_path(resolved_cookie_path)
+        params["cookie_path"] = resolved_cookie_path
+
     try:
         # Set up yt-dlp options for extracting metadata
         ydl_opts = {
             "cookiefile": (
-                cookie_path if cookie_path and os.path.exists(cookie_path) else None
+                resolved_cookie_path
+                if resolved_cookie_path and os.path.exists(resolved_cookie_path)
+                else None
             ),
             "noplaylist": True,  # Ensure only the single video is processed if the URL is a playlist
             "skip_download": True,  # Skip actual video download
@@ -294,7 +306,21 @@ def download_video(params):
         logger.info(f"{key}: {value}")
 
     url = params.get("url")
-    video_download_config = params.get("video_download", {})
+    try:
+        app_config = load_app_config()
+    except Exception as e:
+        logger.warning(f"Could not read app_config.json: {e}")
+        app_config = {}
+
+    video_download_config = params.get("video_download") or app_config.get(
+        "video_download", {}
+    )
+    if not isinstance(video_download_config, dict):
+        video_download_config = {}
+
+    cookie_path = params.get("cookie_path") or video_download_config.get("cookie_path")
+    if cookie_path:
+        cookie_path = resolve_repo_path(cookie_path)
 
     if not url:
         logger.error("No URL provided for download.")
@@ -307,7 +333,7 @@ def download_video(params):
         # Set up yt-dlp options for actual download based on video_download_config
         ydl_opts = {
             "outtmpl": params["original_filename"],
-            "cookiefile": video_download_config.get("cookie_path"),
+            "cookiefile": cookie_path if cookie_path and os.path.exists(cookie_path) else None,
             "format": video_download_config.get("format", "bestvideo+bestaudio/best"),
             "noplaylist": video_download_config.get("noplaylist", True),
             "verbose": True,
@@ -357,5 +383,4 @@ def save_params_to_json(params):
     except Exception as e:
         logger.error(f"Failed to save parameters to JSON: {e}")
         logger.debug(traceback.format_exc())
-
 
