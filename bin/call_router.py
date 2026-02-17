@@ -6,7 +6,6 @@ import logging
 import traceback
 import subprocess
 import time
-from datetime import datetime
 
 # Add lib path to sys.path
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +15,7 @@ sys.path.append(lib_path)
 
 # Import utilities
 from teton_utils import initialize_logging, load_config, load_app_config
-from python_utils.tasks_lib import find_url_json
+from tasks_lib import find_url_json
 
 # Map tasks to their respective scripts
 TASK_DISPATCH = {
@@ -44,10 +43,17 @@ def execute_tasks(task_config, url, to_process, dry_run=False):
         if status is True:
             logging.info(f"🚀 Running task: {task} -> {script}")
             script_path = os.path.join(root_dir, script)
+            if not os.path.isfile(script_path):
+                logging.warning(f"Skipping task {task}; script not found: {script_path}")
+                continue
             if dry_run:
-                logging.info(f"[Dry Run] Would run: python {script_path} {task_input}")
+                logging.info(
+                    f"[Dry Run] Would run: {sys.executable} {script_path} {task_input}"
+                )
             else:
-                subprocess.run(["python", script_path, task_input])
+                result = subprocess.run([sys.executable, script_path, task_input])
+                if result.returncode != 0:
+                    logging.error(f"Task failed: {task} (exit code: {result.returncode})")
         elif isinstance(status, str):
             logging.info(f"✅ Task already completed: {task} @ {status}")
         else:
@@ -60,7 +66,7 @@ def run_my_existing_downloader(url, logger):
 
     script_path = os.path.join(root_dir, "bin/call_download.py")
     result = subprocess.run(
-        ["python", script_path, url],
+        [sys.executable, script_path, url],
         capture_output=True,
         text=True
     )
