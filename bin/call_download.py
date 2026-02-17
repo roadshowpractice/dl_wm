@@ -129,7 +129,9 @@ def main():
         # Prepare parameters for function calls
         params = {
             "download_path": download_path,
-            "cookie_path": platform_config.get("cookie_path"),
+            "cookie_path": platform_config.get("cookie_path")
+            or app_config.get("video_download", {}).get("cookie_path"),
+            "video_download": app_config.get("video_download", {}),
             "url": None,
             **platform_config.get("watermark_config", {}),
         }
