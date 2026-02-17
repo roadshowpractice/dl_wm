@@ -9,3 +9,6 @@ logs/
 *.mov
 *.m4a
 *.wav
+
+# local secrets
+conf/instagram.cookies.txt
