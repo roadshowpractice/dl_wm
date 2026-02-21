@@ -90,8 +90,9 @@ def remove_matching_index_lines(index_path: Path, url: str, dry_run: bool) -> tu
     return len(removed_records), removed_records
 
 
-def find_metadata_files_for_url(metadata_dir: Path, url: str) -> list[Path]:
+def find_metadata_files_for_url(metadata_dir: Path, url: str) -> tuple[list[Path], list[dict]]:
     candidates: list[Path] = []
+    metadata_records: list[dict] = []
     for path in metadata_dir.glob("*.json"):
         if path.name == "index.jsonl":
             continue
@@ -103,8 +104,55 @@ def find_metadata_files_for_url(metadata_dir: Path, url: str) -> list[Path]:
 
         if isinstance(data, dict) and data.get("url") == url:
             candidates.append(path)
+            metadata_records.append(data)
 
-    return candidates
+    return candidates, metadata_records
+
+
+def collect_tokens_from_records(records: list[dict]) -> set[str]:
+    tokens: set[str] = set()
+    token_fields = (
+        "id",
+        "display_id",
+        "shortcode",
+        "webpage_url_basename",
+        "upload_date",
+        "uploader",
+        "uploader_id",
+        "uploader_url",
+        "title",
+        "fulltitle",
+    )
+
+    for record in records:
+        for field in token_fields:
+            value = record.get(field)
+            if not value:
+                continue
+            token = str(value).strip()
+            if token:
+                tokens.add(token)
+                tokens.add(token.replace(" ", "_"))
+
+    return tokens
+
+
+def find_output_json_files_for_url(output_dir: Path, url: str) -> list[Path]:
+    matches: list[Path] = []
+    if not output_dir.exists():
+        return matches
+
+    for path in output_dir.rglob("*.json"):
+        try:
+            with path.open("r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        if isinstance(data, dict) and data.get("url") == url:
+            matches.append(path)
+
+    return matches
 
 
 def remove_paths(paths: list[Path], dry_run: bool) -> list[Path]:
@@ -165,7 +213,7 @@ def main() -> int:
     index_path = metadata_dir / "index.jsonl"
     removed_count, removed_records = remove_matching_index_lines(index_path, args.url, args.dry_run)
 
-    metadata_files = find_metadata_files_for_url(metadata_dir, args.url)
+    metadata_files, metadata_records = find_metadata_files_for_url(metadata_dir, args.url)
 
     # Include metadata files named by index entries even if unreadable.
     for record in removed_records:
@@ -179,6 +227,7 @@ def main() -> int:
 
     raw_dir = metadata_dir / "raw"
     raw_tokens = {slug_from_url(args.url)}
+    raw_tokens.update(collect_tokens_from_records(metadata_records))
     for record in removed_records:
         for key in ("id", "shortcode"):
             value = record.get(key)
@@ -196,6 +245,7 @@ def main() -> int:
 
     removed_raw_files = remove_paths(raw_candidates, args.dry_run)
 
+    output_sidecars: list[Path] = []
     removed_partials: list[Path] = []
     if not args.skip_partials:
         output_dir = load_platform_output_dir()
@@ -206,8 +256,13 @@ def main() -> int:
             partial_tokens.add(metadata_path.stem)
 
         if output_dir:
+            output_sidecars = find_output_json_files_for_url(output_dir, args.url)
+            for sidecar in output_sidecars:
+                partial_tokens.add(sidecar.stem)
+
             partial_candidates = collect_partial_candidates(output_dir, partial_tokens)
             removed_partials = remove_paths(partial_candidates, args.dry_run)
+            output_sidecars = remove_paths(output_sidecars, args.dry_run)
 
     action = "Would remove" if args.dry_run else "Removed"
     print(f"{action} {removed_count} index entry(ies) from {index_path}")
@@ -216,11 +271,13 @@ def main() -> int:
     if args.skip_partials:
         print("Skipped partial download cleanup (--skip-partials)")
     else:
+        print(f"{action} {len(output_sidecars)} output metadata sidecar file(s)")
         print(f"{action} {len(removed_partials)} partial download file(s)")
 
     for label, items in (
         ("metadata", removed_metadata_files),
         ("raw", removed_raw_files),
+        ("output-json", output_sidecars),
         ("partial", removed_partials),
     ):
         for path in items:
