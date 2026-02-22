@@ -14,7 +14,7 @@ dependencies:
   - pip:
       # Core
       - moviepy==1.0.3
-      - requests==2.31.0
+      - requests==2.32.3
       - yt-dlp==2024.8.6
 
 
