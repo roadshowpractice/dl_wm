@@ -299,6 +299,39 @@ def initialize_logging():
     return logger
 
 
+def initialize_logging_from_config(logging_config: dict):
+    """Initialize root logging using the app_config logging section."""
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    if logger.handlers:
+        logger.handlers.clear()
+
+    if logging_config.get("log_to_file"):
+        log_file = os.path.expanduser(logging_config["log_filename"])
+        log_dir = os.path.dirname(log_file)
+        if log_dir:
+            os.makedirs(log_dir, exist_ok=True)
+
+        file_handler = logging.FileHandler(log_file)
+        file_handler.setLevel(logging_config.get("level", "DEBUG"))
+        file_formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        file_handler.setFormatter(file_formatter)
+        logger.addHandler(file_handler)
+
+    if logging_config.get("log_to_console", True):
+        console_handler = logging.StreamHandler(stream=sys.stderr)
+        console_handler.setLevel(logging_config.get("console_level", "INFO"))
+        console_formatter = logging.Formatter("%(asctime)s - %(message)s")
+        console_handler.setFormatter(console_formatter)
+        logger.addHandler(console_handler)
+
+    logger.info("Logging initialized.")
+    return logger
+
+
 
 def load_app_config():
     """Load the application configuration from a JSON file."""
