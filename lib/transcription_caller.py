@@ -3,6 +3,7 @@ import os
 import shlex
 import subprocess
 import sys
+import json
 from importlib import import_module
 from typing import Optional
 
@@ -161,10 +162,69 @@ def sidecar_metadata_path(media_path: str) -> str:
     return f"{base}.json"
 
 
+def _paths_match(path_a: str, path_b: str) -> bool:
+    """Return True when two paths refer to the same file path string."""
+    if not path_a or not path_b:
+        return False
+
+    norm_a = os.path.abspath(os.path.normpath(path_a))
+    norm_b = os.path.abspath(os.path.normpath(path_b))
+    if norm_a == norm_b:
+        return True
+
+    # Fall back to basename match because metadata can be moved between hosts.
+    return os.path.basename(norm_a) == os.path.basename(norm_b)
+
+
+def _metadata_path_for_media(media_path: str) -> Optional[str]:
+    """Find the best metadata json for a media file path."""
+    sidecar_path = sidecar_metadata_path(media_path)
+    if os.path.isfile(sidecar_path):
+        return sidecar_path
+
+    app_config = load_app_config()
+    metadata_dir = app_config.get("metadata_dir", "./metadata")
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    if not os.path.isabs(metadata_dir):
+        metadata_dir = os.path.join(repo_root, metadata_dir)
+
+    if not os.path.isdir(metadata_dir):
+        return None
+
+    for filename in sorted(os.listdir(metadata_dir)):
+        if not filename.endswith(".json"):
+            continue
+
+        metadata_path = os.path.join(metadata_dir, filename)
+        try:
+            with open(metadata_path, "r", encoding="utf-8") as f:
+                metadata = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+
+        task_state = metadata.get("default_tasks", {})
+        if not isinstance(task_state, dict):
+            continue
+
+        download_path = task_state.get("perform_download")
+        if isinstance(download_path, str) and _paths_match(download_path, media_path):
+            return metadata_path
+
+        watermark_path = task_state.get("apply_watermark")
+        if isinstance(watermark_path, str) and _paths_match(watermark_path, media_path):
+            return metadata_path
+
+        file_path = metadata.get("file_path")
+        if isinstance(file_path, str) and _paths_match(file_path, media_path):
+            return metadata_path
+
+    return None
+
+
 def update_task_for_media(media_path: str, task_name: str, output_path: str) -> Optional[str]:
-    metadata_path = sidecar_metadata_path(media_path)
-    if not os.path.isfile(metadata_path):
-        logger.warning("Could not update task '%s'; metadata sidecar not found: %s", task_name, metadata_path)
+    metadata_path = _metadata_path_for_media(media_path)
+    if not metadata_path:
+        logger.warning("Could not update task '%s'; metadata not found for media: %s", task_name, media_path)
         return None
 
     result = update_task_output_path(metadata_path, task_name, output_path)
