@@ -25,7 +25,7 @@ TASK_DISPATCH = {
     "extract_audio": "bin/call_extract_audio.py",
     "generate_captions": "bin/call_captions.py",
     # Convert screenshot timestamps after all other tasks
-    "post_process": "bin/convert_screenshots.py"
+    "post_processed": "bin/convert_screenshots.py"
 }
 
 def execute_tasks(task_config, url, to_process, dry_run=False):
