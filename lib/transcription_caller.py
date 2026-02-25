@@ -180,7 +180,13 @@ def _metadata_path_for_media(media_path: str) -> Optional[str]:
     """Find the best metadata json for a media file path."""
     sidecar_path = sidecar_metadata_path(media_path)
     if os.path.isfile(sidecar_path):
-        return sidecar_path
+        try:
+            with open(sidecar_path, "r", encoding="utf-8") as f:
+                sidecar_metadata = json.load(f)
+            if isinstance(sidecar_metadata.get("default_tasks"), dict):
+                return sidecar_path
+        except (OSError, json.JSONDecodeError):
+            pass
 
     app_config = load_app_config()
     metadata_dir = app_config.get("metadata_dir", "./metadata")
@@ -217,6 +223,9 @@ def _metadata_path_for_media(media_path: str) -> Optional[str]:
         file_path = metadata.get("file_path")
         if isinstance(file_path, str) and _paths_match(file_path, media_path):
             return metadata_path
+
+    if os.path.isfile(sidecar_path):
+        return sidecar_path
 
     return None
 
