@@ -2,6 +2,7 @@ import logging
 import os
 import shlex
 import subprocess
+import sys
 from importlib import import_module
 from typing import Optional
 
@@ -20,6 +21,81 @@ def _format_command(template: str, input_path: str, output_path: str, output_for
     return shlex.split(formatted)
 
 
+def _run_and_validate(cmd: list[str], output_path: str) -> bool:
+    logger.info("Running transcription command: %s", " ".join(cmd))
+    result = subprocess.run(cmd)
+    return result.returncode == 0 and os.path.exists(output_path)
+
+
+def _python_executable(app_config: dict) -> str:
+    return (
+        app_config.get("transcription", {}).get("python_path")
+        or app_config.get("python_path")
+        or sys.executable
+    )
+
+
+def _help_text(script_path: str, python_bin: str) -> str:
+    try:
+        result = subprocess.run(
+            [python_bin, script_path, "--help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        return f"{result.stdout}\n{result.stderr}".lower()
+    except Exception:
+        return ""
+
+
+def _auto_transcribe_with_local_script(
+    input_path: str,
+    output_path: str,
+    output_format: str,
+    app_config: dict,
+) -> bool:
+    """Fallback: use bin/transcribe_media.py with inferred argument shape."""
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    script_path = os.path.join(repo_root, "bin", "transcribe_media.py")
+    if not os.path.isfile(script_path):
+        return False
+
+    py = _python_executable(app_config)
+    help_blob = _help_text(script_path, py)
+    cmd_candidates = []
+
+    has_input = "--input" in help_blob
+    has_output = "--output" in help_blob
+    has_format = "--format" in help_blob
+
+    if has_input and has_output and has_format:
+        cmd_candidates.append(
+            [py, script_path, "--input", input_path, "--output", output_path, "--format", output_format]
+        )
+    if has_input and has_output:
+        cmd_candidates.append([py, script_path, "--input", input_path, "--output", output_path])
+    if "--srt" in help_blob and output_format == "srt":
+        cmd_candidates.append([py, script_path, "--input", input_path, "--output", output_path, "--srt"])
+    if "--txt" in help_blob and output_format == "txt":
+        cmd_candidates.append([py, script_path, "--input", input_path, "--output", output_path, "--txt"])
+
+    # Generic fallbacks for common script signatures.
+    cmd_candidates.extend(
+        [
+            [py, script_path, input_path, "--output", output_path, "--format", output_format],
+            [py, script_path, input_path, "--output", output_path],
+            [py, script_path, input_path, output_path, output_format],
+            [py, script_path, input_path, output_path],
+        ]
+    )
+
+    for cmd in cmd_candidates:
+        if _run_and_validate(cmd, output_path):
+            return True
+
+    return False
+
+
 def run_transcription(input_path: str, output_path: str, output_format: str) -> bool:
     """Run configured transcription caller, returning True on success."""
     app_config = load_app_config()
@@ -28,9 +104,7 @@ def run_transcription(input_path: str, output_path: str, output_format: str) -> 
     command_template = tx_cfg.get("caller_command")
     if command_template:
         cmd = _format_command(command_template, input_path, output_path, output_format)
-        logger.info("Running transcription command: %s", " ".join(cmd))
-        result = subprocess.run(cmd)
-        return result.returncode == 0 and os.path.exists(output_path)
+        return _run_and_validate(cmd, output_path)
 
     module_name = tx_cfg.get("caller_module")
     function_name = tx_cfg.get("caller_function", "transcribe")
@@ -44,8 +118,12 @@ def run_transcription(input_path: str, output_path: str, output_format: str) -> 
             logger.error("Configured transcription module call failed: %s", exc)
             return False
 
+    if _auto_transcribe_with_local_script(input_path, output_path, output_format, app_config):
+        return True
+
     logger.error(
-        "No transcription caller configured. Set transcription.caller_command or transcription.caller_module in conf/app_config.json"
+        "No transcription caller configured. Set transcription.caller_command or transcription.caller_module in conf/app_config.json, "
+        "or place bin/transcribe_media.py in this repo."
     )
     return False
 
