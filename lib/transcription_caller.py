@@ -67,6 +67,9 @@ def _auto_transcribe_with_local_script(
     has_input = "--input" in help_blob
     has_output = "--output" in help_blob
     has_format = "--format" in help_blob
+    has_outdir = "--outdir" in help_blob
+
+    output_dir = os.path.dirname(output_path) or "."
 
     if has_input and has_output and has_format:
         cmd_candidates.append(
@@ -88,6 +91,19 @@ def _auto_transcribe_with_local_script(
             [py, script_path, input_path, output_path],
         ]
     )
+
+    # transcribe_media.py style: positional input, optional --outdir, and format flags.
+    if has_outdir:
+        fmt_flag = f"--{output_format}" if f"--{output_format}" in help_blob else None
+        cmd = [py, script_path, input_path, "--outdir", output_dir]
+        if fmt_flag:
+            cmd.append(fmt_flag)
+        if output_format != "txt" and "--no-txt" in help_blob:
+            cmd.append("--no-txt")
+        cmd_candidates.append(cmd)
+
+    # Last-resort positional-only invocation can still succeed for txt output.
+    cmd_candidates.append([py, script_path, input_path])
 
     for cmd in cmd_candidates:
         if _run_and_validate(cmd, output_path):
