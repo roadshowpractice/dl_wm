@@ -32,7 +32,13 @@ def _metadata_path_for_media(input_video_path: str, metadata_dir: str) -> str:
     base_name = os.path.splitext(input_video_path)[0]
     sidecar_path = f"{base_name}.json"
     if os.path.isfile(sidecar_path):
-        return sidecar_path
+        try:
+            with open(sidecar_path, "r", encoding="utf-8") as file:
+                sidecar_data = json.load(file)
+            if isinstance(sidecar_data.get("default_tasks"), dict):
+                return sidecar_path
+        except (json.JSONDecodeError, OSError):
+            pass
 
     if not os.path.isdir(metadata_dir):
         return ""
@@ -61,6 +67,9 @@ def _metadata_path_for_media(input_video_path: str, metadata_dir: str) -> str:
         file_path = data.get("file_path")
         if isinstance(file_path, str) and _paths_match(file_path, input_video_path):
             return metadata_path
+
+    if os.path.isfile(sidecar_path):
+        return sidecar_path
 
     return ""
 
