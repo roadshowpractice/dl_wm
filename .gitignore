@@ -12,3 +12,7 @@ logs/
 
 # local secrets
 conf/instagram.cookies.txt
+
+# local outputs
+metadata/
+*.save
