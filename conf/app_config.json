@@ -73,9 +73,10 @@
         "burn_into_video": false
     },
     "transcription": {
-        "_comment": "Provide either caller_command (shell template) or caller_module/caller_function.",
+        "_comment": "Prefer caller_command or caller_module/caller_function; fallback auto-detects bin/transcribe_media.py when present.",
         "caller_command": "",
         "caller_module": "",
-        "caller_function": "transcribe"
+        "caller_function": "transcribe",
+        "python_path": ""
     }
 }
