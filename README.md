@@ -39,6 +39,14 @@ This validates:
 - writable output/metadata directories
 - `ffmpeg` availability
 
+
+## Caption/Transcription tasks
+
+- `extract_audio` now writes a transcript text file (`.txt`) beside the media file.
+- `generate_captions` writes an `.srt` file beside the media file.
+- Optional subtitle burn-in is controlled by `conf/app_config.json` via `captions.burn_into_video` or CLI `--burn` on `bin/call_captions.py`.
+- Configure your imported transcription caller under `transcription` in `conf/app_config.json`.
+
 ## Run
 
 Use the router with a media URL:

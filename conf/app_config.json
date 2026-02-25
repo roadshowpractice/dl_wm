@@ -69,6 +69,13 @@
             "color": "black",
             "offset": 5,
             "opacity": 0.6
-        }
+        },
+        "burn_into_video": false
+    },
+    "transcription": {
+        "_comment": "Provide either caller_command (shell template) or caller_module/caller_function.",
+        "caller_command": "",
+        "caller_module": "",
+        "caller_function": "transcribe"
     }
 }
