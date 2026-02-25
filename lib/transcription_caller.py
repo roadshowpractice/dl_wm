@@ -23,7 +23,11 @@ def _format_command(template: str, input_path: str, output_path: str, output_for
 
 def _run_and_validate(cmd: list[str], output_path: str) -> bool:
     logger.info("Running transcription command: %s", " ".join(cmd))
-    result = subprocess.run(cmd)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()
+        if stderr:
+            logger.debug("Transcription command failed stderr: %s", stderr)
     return result.returncode == 0 and os.path.exists(output_path)
 
 
@@ -82,16 +86,6 @@ def _auto_transcribe_with_local_script(
     if "--txt" in help_blob and output_format == "txt":
         cmd_candidates.append([py, script_path, "--input", input_path, "--output", output_path, "--txt"])
 
-    # Generic fallbacks for common script signatures.
-    cmd_candidates.extend(
-        [
-            [py, script_path, input_path, "--output", output_path, "--format", output_format],
-            [py, script_path, input_path, "--output", output_path],
-            [py, script_path, input_path, output_path, output_format],
-            [py, script_path, input_path, output_path],
-        ]
-    )
-
     # transcribe_media.py style: positional input, optional --outdir, and format flags.
     if has_outdir:
         fmt_flag = f"--{output_format}" if f"--{output_format}" in help_blob else None
@@ -101,6 +95,24 @@ def _auto_transcribe_with_local_script(
         if output_format != "txt" and "--no-txt" in help_blob:
             cmd.append("--no-txt")
         cmd_candidates.append(cmd)
+
+        # If the CLI supports --outdir but not --input/--output, it expects positional input.
+        # Do not spam old argument styles that produce repeated usage errors.
+        if not has_input and not has_output:
+            for cmd in cmd_candidates:
+                if _run_and_validate(cmd, output_path):
+                    return True
+            return False
+
+    # Generic fallbacks for common script signatures.
+    cmd_candidates.extend(
+        [
+            [py, script_path, input_path, "--output", output_path, "--format", output_format],
+            [py, script_path, input_path, "--output", output_path],
+            [py, script_path, input_path, output_path, output_format],
+            [py, script_path, input_path, output_path],
+        ]
+    )
 
     # Last-resort positional-only invocation can still succeed for txt output.
     cmd_candidates.append([py, script_path, input_path])
