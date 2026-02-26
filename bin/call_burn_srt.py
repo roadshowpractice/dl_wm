@@ -18,6 +18,33 @@ def _escape_sub_path(path: str) -> str:
     return normalized.replace(":", "\\:").replace("'", "\\'")
 
 
+def _escape_filter_arg(value: str) -> str:
+    normalized = str(value).replace("\\", "/")
+    return normalized.replace(":", "\\:").replace("'", "\\'")
+
+
+def _ass_force_style_from_config(app_config: dict) -> tuple[str, str]:
+    burn_cfg = app_config.get("subtitle_burn", {}) if isinstance(app_config, dict) else {}
+    presets = app_config.get("subtitle_style_presets", {}) if isinstance(app_config, dict) else {}
+
+    fonts_dir = burn_cfg.get("fonts_dir", "") or ""
+    direct_force_style = burn_cfg.get("force_style", "") or ""
+    if direct_force_style:
+        return str(fonts_dir), str(direct_force_style)
+
+    preset_name = burn_cfg.get("style_preset", "") or ""
+    style_dict = presets.get(preset_name, {}) if preset_name else {}
+    if not isinstance(style_dict, dict) or not style_dict:
+        return str(fonts_dir), ""
+
+    style_parts = []
+    for key, value in style_dict.items():
+        if str(key).startswith("_"):
+            continue
+        style_parts.append(f"{key}={value}")
+    return str(fonts_dir), ",".join(style_parts)
+
+
 def _resolve_inputs(input_video: str, app_config: dict, logger) -> tuple[str, str]:
     burn_cfg = app_config.get("subtitle_burn", {})
     video_task = burn_cfg.get("video_task", "apply_watermark")
@@ -59,7 +86,14 @@ def _burn_subtitles(video_path: str, srt_path: str, app_config: dict) -> str:
 
     base, ext = os.path.splitext(video_path)
     output_video = f"{base}{suffix}{ext}"
+
+    fonts_dir, force_style = _ass_force_style_from_config(app_config)
     subtitle_filter = f"subtitles='{_escape_sub_path(srt_path)}'"
+    if fonts_dir:
+        fonts_abs = os.path.abspath(os.path.join(root_dir, fonts_dir))
+        subtitle_filter += f":fontsdir='{_escape_sub_path(fonts_abs)}'"
+    if force_style:
+        subtitle_filter += f":force_style='{_escape_filter_arg(force_style)}'"
 
     cmd = [
         "ffmpeg",
