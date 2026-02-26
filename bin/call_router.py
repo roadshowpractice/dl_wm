@@ -21,9 +21,9 @@ from tasks_lib import find_url_json
 TASK_DISPATCH = {
     "perform_download": "bin/call_download.py",
     "apply_watermark": "bin/call_watermark.py",
-    "make_clips": "bin/call_clips.py",
     "extract_audio": "bin/call_extract_audio.py",
-    "generate_captions": "bin/call_captions.py",
+    "generate_srt": "bin/call_captions.py",
+    "burn_srt": "bin/call_burn_srt.py",
     # Convert screenshot timestamps after all other tasks
     "post_processed": "bin/convert_screenshots.py"
 }
