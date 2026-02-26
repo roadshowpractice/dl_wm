@@ -78,5 +78,13 @@
         "caller_module": "",
         "caller_function": "transcribe",
         "python_path": ""
+    },
+    "subtitle_burn": {
+        "video_task": "apply_watermark",
+        "srt_task": "generate_srt",
+        "output_suffix": ".burned",
+        "video_codec": "libx264",
+        "crf": 18,
+        "preset": "medium"
     }
 }

@@ -43,8 +43,8 @@ This validates:
 ## Caption/Transcription tasks
 
 - `extract_audio` now writes a transcript text file (`.txt`) beside the media file.
-- `generate_captions` writes an `.srt` file beside the media file.
-- Optional subtitle burn-in is controlled by `conf/app_config.json` via `captions.burn_into_video` or CLI `--burn` on `bin/call_captions.py`.
+- `generate_srt` writes an `.srt` file beside the media file.
+- `burn_srt` burns subtitles onto the watermarked output (or fallback input video) using `bin/call_burn_srt.py` and settings under `subtitle_burn` in `conf/app_config.json`.
 - Configure your imported transcription caller under `transcription` in `conf/app_config.json` (or drop `bin/transcribe_media.py` and it will be auto-detected).
 
 ## Run
