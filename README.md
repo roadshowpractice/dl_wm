@@ -38,6 +38,15 @@ This validates:
 - required imports
 - writable output/metadata directories
 - `ffmpeg` availability
+- configured font assets (`watermark_config.font` and `subtitle_burn.fonts_dir`)
+
+## Fonts
+
+The repo does not commit font binaries by default.
+
+- Put custom `.ttf`/`.otf` files under `fonts/` after cloning (for example `fonts/InterVariable.ttf`).
+- If you accidentally configured `.odf`, watermarking now attempts `.otf`/`.ttf` fallbacks automatically.
+- Run `python bin/doctor.py` to verify the configured font paths exist on a given machine.
 
 
 ## Caption/Transcription tasks

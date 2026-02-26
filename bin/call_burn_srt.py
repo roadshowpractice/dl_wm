@@ -91,7 +91,8 @@ def _burn_subtitles(video_path: str, srt_path: str, app_config: dict) -> str:
     subtitle_filter = f"subtitles='{_escape_sub_path(srt_path)}'"
     if fonts_dir:
         fonts_abs = os.path.abspath(os.path.join(root_dir, fonts_dir))
-        subtitle_filter += f":fontsdir='{_escape_sub_path(fonts_abs)}'"
+        if os.path.isdir(fonts_abs):
+            subtitle_filter += f":fontsdir='{_escape_sub_path(fonts_abs)}'"
     if force_style:
         subtitle_filter += f":force_style='{_escape_filter_arg(force_style)}'"
 
@@ -131,6 +132,11 @@ def main() -> int:
         return 1
 
     app_config = load_app_config()
+    fonts_dir, _ = _ass_force_style_from_config(app_config)
+    if fonts_dir:
+        fonts_abs = os.path.abspath(os.path.join(root_dir, fonts_dir))
+        if not os.path.isdir(fonts_abs):
+            logger.warning("Configured subtitle fonts_dir does not exist: %s (continuing without fontsdir)", fonts_abs)
 
     try:
         source_video, srt_path = _resolve_inputs(input_video, app_config, logger)

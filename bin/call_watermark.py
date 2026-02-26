@@ -74,6 +74,54 @@ def _metadata_path_for_media(input_video_path: str, metadata_dir: str) -> str:
     return ""
 
 
+def _candidate_font_paths(font_value: str) -> list[str]:
+    if not font_value:
+        return []
+
+    candidates = [font_value]
+    base, ext = os.path.splitext(font_value)
+    lowered = ext.lower()
+
+    if lowered == ".odf":
+        candidates.append(f"{base}.otf")
+    if lowered == ".otf":
+        candidates.append(f"{base}.odf")
+
+    if lowered in {".odf", ".otf", ".ttf"}:
+        for alt in (".ttf", ".otf", ".odf"):
+            if alt != lowered:
+                candidates.append(f"{base}{alt}")
+
+    return candidates
+
+
+def _resolve_font_value(font_value: str, logger) -> str:
+    if not isinstance(font_value, str) or not font_value.strip():
+        return font_value
+
+    raw = font_value.strip()
+    path_candidates = []
+
+    for candidate in _candidate_font_paths(raw):
+        if os.path.isabs(candidate):
+            path_candidates.append(candidate)
+        else:
+            path_candidates.append(os.path.join(root_dir, candidate))
+            path_candidates.append(os.path.abspath(candidate))
+
+    for path in path_candidates:
+        if os.path.isfile(path):
+            if os.path.normpath(path) != os.path.normpath(raw):
+                logger.info("Resolved watermark font '%s' to '%s'", raw, path)
+            return path
+
+    logger.warning(
+        "Configured watermark font '%s' was not found as a file; falling back to MoviePy font lookup.",
+        raw,
+    )
+    return os.path.basename(raw)
+
+
 def main():
     try:
         app_config = load_app_config()
@@ -121,6 +169,7 @@ def main():
             "username": username,
             "video_date": video_date,
         }
+        params["font"] = _resolve_font_value(params.get("font", ""), logger)
 
         logger.debug(f"Watermark configuration: {watermark_config}")
         logger.info("Starting watermarking process...")

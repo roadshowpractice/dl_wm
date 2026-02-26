@@ -82,6 +82,30 @@ def resolve_output_dir(config):
     return config.get("output_dir") or config.get("target_usb")
 
 
+def check_optional_font_assets(app_config: dict):
+    ok = True
+
+    watermark_cfg = app_config.get("watermark_config", {}) if isinstance(app_config, dict) else {}
+    watermark_font = watermark_cfg.get("font") if isinstance(watermark_cfg, dict) else ""
+    if isinstance(watermark_font, str) and watermark_font.strip() and any(ch in watermark_font for ch in ("/", "\\", ".")):
+        resolved = resolve_repo_path(watermark_font.strip())
+        if os.path.isfile(resolved):
+            print(f"[OK] watermark font file found: {resolved}")
+        else:
+            print(f"[WARN] watermark font file not found: {resolved}")
+
+    burn_cfg = app_config.get("subtitle_burn", {}) if isinstance(app_config, dict) else {}
+    fonts_dir = burn_cfg.get("fonts_dir") if isinstance(burn_cfg, dict) else ""
+    if isinstance(fonts_dir, str) and fonts_dir.strip():
+        resolved_dir = resolve_repo_path(fonts_dir.strip())
+        if os.path.isdir(resolved_dir):
+            print(f"[OK] subtitle fonts_dir found: {resolved_dir}")
+        else:
+            print(f"[WARN] subtitle fonts_dir not found: {resolved_dir}")
+
+    return ok
+
+
 def main():
     app_config_path = repo_root / "conf" / "app_config.json"
     config_path = repo_root / "conf" / "config.json"
@@ -129,6 +153,7 @@ def main():
 
     status = check_imports() and status
     status = check_ffmpeg() and status
+    status = check_optional_font_assets(app_config) and status
 
     print("[OK] doctor completed" if status else "[ERR] doctor found issues")
     return 0 if status else 2
