@@ -85,19 +85,6 @@
         "output_suffix": ".burned",
         "video_codec": "libx264",
         "crf": 18,
-        "preset": "medium",
-        "fonts_dir": "fonts",
-        "style_preset": "default"
-    },
-    "subtitle_style_presets": {
-        "default": {
-            "FontName": "Inter",
-            "FontSize": 18,
-            "BorderStyle": 3,
-            "Outline": 0,
-            "Shadow": 0,
-            "MarginV": 24,
-            "BackColour": "&H80000000"
-        }
+        "preset": "medium"
     }
 }
