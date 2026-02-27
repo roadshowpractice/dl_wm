@@ -44,6 +44,14 @@ def check_imports():
         ("cv2", "opencv-python"),
         ("yt_dlp", "yt-dlp"),
         ("requests", "requests"),
+        ("setuptools", "setuptools"),
+        ("PIL", "Pillow"),
+        ("imageio", "imageio"),
+        ("imageio_ffmpeg", "imageio-ffmpeg"),
+        ("decorator", "decorator"),
+        ("tqdm", "tqdm"),
+        ("proglog", "proglog"),
+        ("dotenv", "python-dotenv"),
     ]
     ok = True
     for module_name, package_name in packages:
