@@ -55,6 +55,17 @@ logger = logging.getLogger(__name__)
 logger.info(f"📦 {__name__} imported into {__file__}")
 
 
+def expand_paths(obj):
+    """Recursively expand environment variables and ~ in loaded config values."""
+    if isinstance(obj, dict):
+        return {key: expand_paths(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [expand_paths(item) for item in obj]
+    if isinstance(obj, str):
+        return os.path.expandvars(os.path.expanduser(obj))
+    return obj
+
+
 def load_default_tasks(config_path="conf/default_tasks.json"):
     """
     Loads the task flags from the default_tasks JSON configuration file.
@@ -611,7 +622,7 @@ def load_app_config():
 
     try:
         with open(config_path, "r") as file:
-            app_config = json.load(file)
+            app_config = expand_paths(json.load(file))
         return app_config
     except json.JSONDecodeError as e:
         raise ValueError(f"Failed to parse JSON configuration at {config_path}: {e}")

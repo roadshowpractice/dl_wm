@@ -69,6 +69,17 @@ import platform
 logger = logging.getLogger(__name__)
 
 
+def expand_paths(obj):
+    """Recursively expand environment variables and user-home markers in config values."""
+    if isinstance(obj, dict):
+        return {key: expand_paths(value) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [expand_paths(item) for item in obj]
+    if isinstance(obj, str):
+        return os.path.expandvars(os.path.expanduser(obj))
+    return obj
+
+
 def resolve_repo_path(path_value: str) -> str:
     """Resolve relative config paths against the repository root."""
     if not path_value:
@@ -348,7 +359,7 @@ def load_app_config():
 
     try:
         with open(config_path, "r") as file:
-            app_config = json.load(file)
+            app_config = expand_paths(json.load(file))
         return app_config
     except json.JSONDecodeError as e:
         raise ValueError(f"Failed to parse JSON configuration at {config_path}: {e}")
@@ -366,13 +377,13 @@ def load_config():
         raise FileNotFoundError(f"Configuration file not found at {config_path}")
 
     with open(config_path, "r") as file:
-        config = json.load(file)
+        config = expand_paths(json.load(file))
 
     os_name = platform.system()
     if os_name not in config:
         raise ValueError(f"Unsupported platform: {os_name}")
 
-    return config[os_name]
+    return expand_paths(config[os_name])
 
 
 # New function to mask metadata
