@@ -319,7 +319,7 @@ def initialize_logging_from_config(logging_config: dict):
         logger.handlers.clear()
 
     if logging_config.get("log_to_file"):
-        log_file = os.path.expanduser(logging_config["log_filename"])
+        log_file = resolve_repo_path(os.path.expanduser(logging_config["log_filename"]))
         log_dir = os.path.dirname(log_file)
         if log_dir:
             os.makedirs(log_dir, exist_ok=True)
