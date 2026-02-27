@@ -14,7 +14,12 @@ This project ships an `environment.yml` file you can use directly.
    ```bash
    conda activate dl_wm
    ```
-3. (Optional) If the environment already exists and you need to refresh dependencies:
+3. (Optional) Add a shortcut alias so `cad` activates this environment:
+   ```bash
+   echo "alias cad='conda activate dl_wm'" >> ~/.bashrc
+   source ~/.bashrc
+   ```
+4. (Optional) If the environment already exists and you need to refresh dependencies:
    ```bash
    conda env update -f environment.yml --prune
    ```
