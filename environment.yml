@@ -7,18 +7,18 @@ channels:
 dependencies:
   - python=3.10.13
   - pip
-  - opencv
-  - setuptools 
-
-  # system helpers (optional but useful)
   - ffmpeg
+  - opencv
 
+  # Keep conda's setuptools out of the equation; we pin pip setuptools below
   - pip:
+      # Critical compatibility: provides pkg_resources for imageio-ffmpeg==0.4.9
+      - setuptools==68.2.2
+
       # Core
       - moviepy==1.0.3
       - requests==2.32.3
       - yt-dlp==2024.8.6
-
 
       # MoviePy stack (critical pins)
       - numpy==1.26.4
