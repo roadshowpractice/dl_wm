@@ -7,7 +7,7 @@
     "logging": {
       "level": "DEBUG",
       "log_to_file": true,
-      "log_filename": "$HOME/Desktop/logs/dl.log",
+      "log_filename": "./logs/dl.log",
       "log_to_console": true,
       "console_level": "INFO"
     }
@@ -19,7 +19,7 @@
     "logging": {
       "level": "DEBUG",
       "log_to_file": true,
-      "log_filename": "$HOME/Desktop/logs/dl.log",
+      "log_filename": "./logs/dl.log",
       "log_to_console": true,
       "console_level": "INFO"
     }
