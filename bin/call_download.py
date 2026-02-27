@@ -21,7 +21,11 @@ def main():
         os.chdir(root_dir)
         platform_config = load_config()
         app_config = load_app_config()
-        logger = initialize_logging_from_config(app_config.get("logging", {}))
+        logging_config = {
+            **platform_config.get("logging", {}),
+            **app_config.get("logging", {}),
+        }
+        logger = initialize_logging_from_config(logging_config)
 
         output_dir = platform_config.get("output_dir") or platform_config.get("target_usb")
         if not output_dir:

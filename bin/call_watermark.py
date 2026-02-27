@@ -12,7 +12,7 @@ if lib_path not in sys.path:
     sys.path.append(lib_path)
 
 from tasks_lib import update_task_output_path
-from teton_utils import load_app_config, initialize_logging_from_config
+from teton_utils import load_app_config, load_config, initialize_logging_from_config
 from watermarker2 import add_watermark, looks_like_filename
 
 
@@ -76,9 +76,14 @@ def _metadata_path_for_media(input_video_path: str, metadata_dir: str) -> str:
 
 def main():
     try:
+        platform_config = load_config()
         app_config = load_app_config()
         watermark_config = app_config.get("watermark_config", {})
-        logger = initialize_logging_from_config(app_config.get("logging", {}))
+        logging_config = {
+            **platform_config.get("logging", {}),
+            **app_config.get("logging", {}),
+        }
+        logger = initialize_logging_from_config(logging_config)
 
         if len(sys.argv) < 2:
             logger.error("Usage: python call_watermark.py <video_file_path>")
