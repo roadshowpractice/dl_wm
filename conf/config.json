@@ -13,8 +13,8 @@
     }
   },
   "Linux": {
-    "python_path": "$HOME/miniconda3/envs/new-env/bin/python",
-    "base_dir": "$HOME/Desktop/bashful-backup",
+    "python_path": "$HOME/miniconda3/envs/dl_wm/bin/python",
+    "base_dir": "$HOME/Desktop/dl_wm",
     "output_dir": "./outputs/",
     "logging": {
       "level": "DEBUG",
