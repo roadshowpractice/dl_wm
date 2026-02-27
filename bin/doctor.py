@@ -22,9 +22,19 @@ def resolve_repo_path(path_value: str) -> str:
 def load_json(path: Path):
     try:
         with path.open("r", encoding="utf-8") as f:
-            return json.load(f), None
+            return expand_paths(json.load(f)), None
     except Exception as exc:
         return None, str(exc)
+
+
+def expand_paths(obj):
+    if isinstance(obj, dict):
+        return {k: expand_paths(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [expand_paths(item) for item in obj]
+    if isinstance(obj, str):
+        return os.path.expandvars(os.path.expanduser(obj))
+    return obj
 
 
 def check_imports():
@@ -82,6 +92,41 @@ def resolve_output_dir(config):
     return config.get("output_dir") or config.get("target_usb")
 
 
+def check_existing_file(label: str, path_value: str):
+    if path_value and os.path.isfile(path_value):
+        print(f"[OK] {label}: {path_value}")
+        return True
+    print(f"[WARN] {label} missing: {path_value}")
+    return True
+
+
+def check_parent_dir(label: str, file_path: str):
+    parent_dir = os.path.dirname(file_path) if file_path else ""
+    if parent_dir and os.path.isdir(parent_dir):
+        print(f"[OK] {label} parent: {parent_dir}")
+        return True
+    print(f"[WARN] {label} parent missing: {parent_dir or '[none]'}")
+    return True
+
+
+def validate_optional_fonts(app_config: dict):
+    font_checks = []
+    watermark_font = app_config.get("watermark_config", {}).get("font")
+    if watermark_font:
+        font_checks.append(("watermark_config.font", watermark_font))
+
+    subtitle_fonts_dir = app_config.get("subtitle_burn", {}).get("fonts_dir")
+    if subtitle_fonts_dir:
+        font_checks.append(("subtitle_burn.fonts_dir", subtitle_fonts_dir))
+
+    for label, configured_path in font_checks:
+        resolved_path = resolve_repo_path(configured_path)
+        if os.path.exists(resolved_path):
+            print(f"[OK] {label}: {resolved_path}")
+        else:
+            print(f"[WARN] {label} missing: {resolved_path}")
+
+
 def main():
     app_config_path = repo_root / "conf" / "app_config.json"
     config_path = repo_root / "conf" / "config.json"
@@ -109,11 +154,15 @@ def main():
 
     output_dir = resolve_output_dir(platform_config)
     metadata_dir = app_config.get("metadata_dir")
+    python_path = platform_config.get("python_path")
+    log_filename = platform_config.get("logging", {}).get("log_filename")
 
     if output_dir:
         output_dir = resolve_repo_path(output_dir)
     if metadata_dir:
         metadata_dir = resolve_repo_path(metadata_dir)
+    if log_filename:
+        log_filename = resolve_repo_path(log_filename)
 
     if not output_dir:
         print("[ERR] output_dir missing in conf/config.json (target_usb fallback also empty)")
@@ -126,6 +175,18 @@ def main():
         status = False
     else:
         status = check_dir("metadata_dir", metadata_dir) and status
+
+    if python_path:
+        status = check_existing_file("python_path", python_path) and status
+    else:
+        print("[WARN] python_path not set in conf/config.json")
+
+    if log_filename:
+        status = check_parent_dir("log_filename", log_filename) and status
+    else:
+        print("[WARN] logging.log_filename not set in conf/config.json")
+
+    validate_optional_fonts(app_config)
 
     status = check_imports() and status
     status = check_ffmpeg() and status
