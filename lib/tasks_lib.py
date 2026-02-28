@@ -50,7 +50,7 @@ import shutil
 import traceback
 from urllib.parse import urlparse
 
-from vendor_router import VENDOR_INSTAGRAM, detect_vendor, extract_vendor_id
+from vendor_router import VENDOR_INSTAGRAM, detect_vendor, extract_vendor_id, format_shortcode
 
 # Initialize the logger
 logger = logging.getLogger(__name__)
@@ -232,11 +232,12 @@ def upsert_metadata_index(metadata_path: str, metadata: dict) -> None:
 
     filename = os.path.basename(metadata_path)
     vendor = detect_vendor(url)
-    shortcode = (
+    raw_shortcode = (
         metadata.get("shortcode")
         or metadata.get("display_id")
         or (extract_vendor_id(vendor, url) if vendor == VENDOR_INSTAGRAM else None)
     )
+    shortcode = format_shortcode(vendor, raw_shortcode)
 
     new_record = {
         "url": url,
