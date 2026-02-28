@@ -6,7 +6,9 @@ channels:
   - defaults
 
 dependencies:
-  - python=3.10.13
+  - python=3.10
+  - numpy=1.23.5
+  - pytorch
   - pip
   - ffmpeg
   - opencv
@@ -22,7 +24,6 @@ dependencies:
       - yt-dlp==2024.8.6
 
       # MoviePy stack (critical pins)
-      - numpy==1.26.4
       - Pillow==9.5.0
       - imageio==2.34.0
       - imageio-ffmpeg==0.4.9
@@ -35,4 +36,3 @@ dependencies:
       # Optional helper
       - python-dotenv==1.0.1
       
-

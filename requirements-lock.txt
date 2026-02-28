@@ -1,3 +1,5 @@
+setuptools==68.2.2
+
 # Core
 moviepy==1.0.3
 requests==2.31.0
@@ -5,7 +7,7 @@ yt-dlp==2024.8.6
 
 
 # MoviePy stack (critical pins)
-numpy==1.26.4
+numpy==1.23.5
 Pillow==9.5.0
 imageio==2.34.0
 imageio-ffmpeg==0.4.9
