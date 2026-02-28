@@ -13,6 +13,7 @@ import logging
 import gzip
 
 from teton_utils import load_app_config, resolve_repo_path
+from vendor_router import detect_vendor, extract_vendor_id, infer_kind, metadata_filename
 
 ####################
 # Logger setup
@@ -116,25 +117,35 @@ def extract_metadata(params):
                 url, download=False
             )  # Extract metadata without downloading
 
-            video_identifier = (
-                info_dict.get("id")
+            vendor = detect_vendor(url)
+            vendor_id = (
+                extract_vendor_id(vendor, url)
+                or info_dict.get("id")
                 or info_dict.get("display_id")
                 or info_dict.get("webpage_url_basename")
                 or str(int(time.time()))
             )
+            media_kind = infer_kind(vendor, url)
 
-            if not metadata_path:
-                # Use video ID/shortcode naming instead of timestamp-based filenames.
-                filename = f"{video_identifier}.json"
+            video_identifier = vendor_id
+
+            filename = metadata_filename(vendor, vendor_id)
+            if metadata_path:
+                metadata_path = os.path.join(os.path.dirname(metadata_path), filename)
+            else:
                 metadata_path = unique_output_path(metadata_dir, filename)
-                params["metadata_path"] = metadata_path
+            params["metadata_path"] = metadata_path
 
             index_record = {
                 "url": url,
                 "metadata_file": os.path.basename(metadata_path),
+                "vendor": vendor,
+                "vendor_id": vendor_id,
                 "id": info_dict.get("id"),
                 "shortcode": info_dict.get("display_id") or info_dict.get("webpage_url_basename"),
             }
+            if media_kind:
+                index_record["kind"] = media_kind
 
             index_path = os.path.join(metadata_dir, "index.jsonl")
             with open(index_path, "a", encoding="utf-8") as index_file:
