@@ -13,7 +13,13 @@ import logging
 import gzip
 
 from teton_utils import load_app_config, resolve_repo_path
-from vendor_router import detect_vendor, extract_vendor_id, infer_kind, metadata_filename
+from vendor_router import (
+    detect_vendor,
+    extract_vendor_id,
+    infer_kind,
+    metadata_filename,
+    VENDOR_INSTAGRAM,
+)
 
 ####################
 # Logger setup
@@ -136,13 +142,19 @@ def extract_metadata(params):
                 metadata_path = unique_output_path(metadata_dir, filename)
             params["metadata_path"] = metadata_path
 
+            shortcode = (
+                info_dict.get("display_id")
+                or info_dict.get("webpage_url_basename")
+                or (vendor_id if vendor == VENDOR_INSTAGRAM else None)
+            )
+
             index_record = {
                 "url": url,
                 "metadata_file": os.path.basename(metadata_path),
                 "vendor": vendor,
                 "vendor_id": vendor_id,
                 "id": info_dict.get("id"),
-                "shortcode": info_dict.get("display_id") or info_dict.get("webpage_url_basename"),
+                "shortcode": shortcode,
             }
             if media_kind:
                 index_record["kind"] = media_kind
@@ -408,4 +420,3 @@ def save_params_to_json(params):
     except Exception as e:
         logger.error(f"Failed to save parameters to JSON: {e}")
         logger.debug(traceback.format_exc())
-
