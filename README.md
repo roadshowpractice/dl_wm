@@ -65,3 +65,12 @@ Dry run mode:
 ```bash
 python bin/call_router.py "<media-url>" --dry-run
 ```
+
+## Add-url examples
+
+Add a new URL (writes `vendor`, `vendor_id`, optional `kind`, and metadata file names like `{vendor}__{vendor_id}.json`):
+
+```bash
+python bin/call_download.py "https://www.instagram.com/reel/<CODE>/"
+python bin/call_download.py "https://www.youtube.com/watch?v=<ID>"
+```
