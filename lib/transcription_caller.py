@@ -23,13 +23,17 @@ def _format_command(template: str, input_path: str, output_path: str, output_for
 
 
 def _run_and_validate(cmd: list[str], output_path: str) -> bool:
-    logger.info("Running transcription command: %s", " ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    logger.warning("Running transcription command: %s", " ".join(cmd))
+    result = subprocess.run(cmd, text=True)
     if result.returncode != 0:
-        stderr = (result.stderr or "").strip()
-        if stderr:
-            logger.debug("Transcription command failed stderr: %s", stderr)
-    return result.returncode == 0 and os.path.exists(output_path)
+        logger.error("Transcription command failed with exit code %s", result.returncode)
+        return False
+
+    if not os.path.exists(output_path):
+        logger.error("Transcription command completed but output was not created: %s", output_path)
+        return False
+
+    return True
 
 
 def _python_executable(app_config: dict) -> str:
