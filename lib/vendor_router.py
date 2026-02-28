@@ -82,3 +82,16 @@ def metadata_filename(vendor: str, vendor_id: str, fallback: str = "unknown") ->
     resolved_vendor = vendor or fallback
     resolved_vendor_id = vendor_id or fallback
     return f"{resolved_vendor}__{resolved_vendor_id}.json"
+
+
+
+def format_shortcode(vendor: str, shortcode: str):
+    """Attach vendor prefix to shortcode-like tokens for index stability."""
+    if not shortcode:
+        return None
+    token = str(shortcode).strip()
+    if not token:
+        return None
+    if vendor and token.startswith(f"{vendor}__"):
+        return token
+    return f"{vendor}__{token}" if vendor else token

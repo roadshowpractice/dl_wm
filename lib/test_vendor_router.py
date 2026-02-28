@@ -6,7 +6,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from vendor_router import detect_vendor, extract_vendor_id
+from vendor_router import detect_vendor, extract_vendor_id, format_shortcode
 
 
 class VendorRouterTests(unittest.TestCase):
@@ -23,6 +23,13 @@ class VendorRouterTests(unittest.TestCase):
             extract_vendor_id("instagram", "https://www.instagram.com/p/POSTCODE1/?img_index=1"),
             "POSTCODE1",
         )
+
+
+    def test_format_shortcode(self):
+        self.assertEqual(format_shortcode("instagram", "ABC123"), "instagram__ABC123")
+        self.assertEqual(format_shortcode("instagram", "instagram__ABC123"), "instagram__ABC123")
+        self.assertEqual(format_shortcode(None, "ABC123"), "ABC123")
+        self.assertIsNone(format_shortcode("instagram", None))
 
     def test_detect_youtube_vendor(self):
         self.assertEqual(detect_vendor("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "youtube")
