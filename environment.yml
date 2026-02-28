@@ -13,26 +13,31 @@ dependencies:
   - ffmpeg
   - opencv
 
-  # Keep conda's setuptools out of the equation; we pin pip setuptools below
+  # ✅ Force torch from conda (stable ABI)
+  - pytorch
+  - cpuonly
+
+  # ✅ Force numpy from conda (prevents pip/conda mismatch with torch)
+  - numpy=1.26.4
+
+  # pip-only packages (pure python)
   - pip:
-      # Critical compatibility: provides pkg_resources for imageio-ffmpeg==0.4.9
+      # keep pkg_resources available (whisper build metadata / older deps)
       - setuptools==68.2.2
 
-      # Core
+      # core
       - moviepy==1.0.3
       - requests==2.32.3
       - yt-dlp==2024.8.6
 
-      # MoviePy stack (critical pins)
       - Pillow==9.5.0
       - imageio==2.34.0
       - imageio-ffmpeg==0.4.9
-
-      # MoviePy dependencies
+      # moviepy deps
       - decorator==4.4.2
       - tqdm==4.66.1
       - proglog==0.1.10
 
-      # Optional helper
+      # optional helper
       - python-dotenv==1.0.1
-      
+
