@@ -36,6 +36,14 @@ def _run_and_validate(cmd: list[str], output_path: str) -> bool:
     return True
 
 
+def _ensure_no_legacy_flags(cmd: list[str]) -> None:
+    if "--input" in cmd or "--output" in cmd:
+        raise RuntimeError(
+            "transcribe_media.py does not support --input/--output; "
+            "use positional INPUT_MEDIA_PATH + --outdir"
+        )
+
+
 def _python_executable(app_config: dict) -> str:
     return (
         app_config.get("transcription", {}).get("python_path")
@@ -44,17 +52,27 @@ def _python_executable(app_config: dict) -> str:
     )
 
 
-def _help_text(script_path: str, python_bin: str) -> str:
-    try:
-        result = subprocess.run(
-            [python_bin, script_path, "--help"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return f"{result.stdout}\n{result.stderr}".lower()
-    except Exception:
-        return ""
+def _build_transcribe_media_command(
+    python_bin: str,
+    script_path: str,
+    input_path: str,
+    output_path: str,
+    output_format: str,
+) -> tuple[list[str], str]:
+    outdir = os.path.dirname(output_path) or "."
+    stem = os.path.splitext(os.path.basename(input_path))[0]
+    generated_output_path = os.path.join(outdir, f"{stem}.{output_format}")
+
+    cmd = [python_bin, script_path, input_path, "--outdir", outdir]
+    if output_format == "srt":
+        cmd.extend(["--srt", "--no-txt"])
+    elif output_format == "txt":
+        cmd.append("--txt")
+    elif output_format:
+        cmd.append(f"--{output_format}")
+
+    _ensure_no_legacy_flags(cmd)
+    return cmd, generated_output_path
 
 
 def _auto_transcribe_with_local_script(
@@ -63,70 +81,32 @@ def _auto_transcribe_with_local_script(
     output_format: str,
     app_config: dict,
 ) -> bool:
-    """Fallback: use bin/transcribe_media.py with inferred argument shape."""
+    """Fallback: use bin/transcribe_media.py with canonical argument shape."""
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     script_path = os.path.join(repo_root, "bin", "transcribe_media.py")
     if not os.path.isfile(script_path):
         return False
 
     py = _python_executable(app_config)
-    help_blob = _help_text(script_path, py)
-    cmd_candidates = []
-
-    has_input = "--input" in help_blob
-    has_output = "--output" in help_blob
-    has_format = "--format" in help_blob
-    has_outdir = "--outdir" in help_blob
-
-    output_dir = os.path.dirname(output_path) or "."
-
-    if has_input and has_output and has_format:
-        cmd_candidates.append(
-            [py, script_path, "--input", input_path, "--output", output_path, "--format", output_format]
-        )
-    if has_input and has_output:
-        cmd_candidates.append([py, script_path, "--input", input_path, "--output", output_path])
-    if "--srt" in help_blob and output_format == "srt":
-        cmd_candidates.append([py, script_path, "--input", input_path, "--output", output_path, "--srt"])
-    if "--txt" in help_blob and output_format == "txt":
-        cmd_candidates.append([py, script_path, "--input", input_path, "--output", output_path, "--txt"])
-
-    # transcribe_media.py style: positional input, optional --outdir, and format flags.
-    if has_outdir:
-        fmt_flag = f"--{output_format}" if f"--{output_format}" in help_blob else None
-        cmd = [py, script_path, input_path, "--outdir", output_dir]
-        if fmt_flag:
-            cmd.append(fmt_flag)
-        if output_format != "txt" and "--no-txt" in help_blob:
-            cmd.append("--no-txt")
-        cmd_candidates.append(cmd)
-
-        # If the CLI supports --outdir but not --input/--output, it expects positional input.
-        # Do not spam old argument styles that produce repeated usage errors.
-        if not has_input and not has_output:
-            for cmd in cmd_candidates:
-                if _run_and_validate(cmd, output_path):
-                    return True
-            return False
-
-    # Generic fallbacks for common script signatures.
-    cmd_candidates.extend(
-        [
-            [py, script_path, input_path, "--output", output_path, "--format", output_format],
-            [py, script_path, input_path, "--output", output_path],
-            [py, script_path, input_path, output_path, output_format],
-            [py, script_path, input_path, output_path],
-        ]
+    cmd, generated_output_path = _build_transcribe_media_command(
+        py,
+        script_path,
+        input_path,
+        output_path,
+        output_format,
     )
 
-    # Last-resort positional-only invocation can still succeed for txt output.
-    cmd_candidates.append([py, script_path, input_path])
+    if not _run_and_validate(cmd, generated_output_path):
+        return False
 
-    for cmd in cmd_candidates:
-        if _run_and_validate(cmd, output_path):
-            return True
+    if os.path.abspath(generated_output_path) != os.path.abspath(output_path):
+        logger.warning(
+            "Transcription output written to canonical path %s (requested path was %s)",
+            generated_output_path,
+            output_path,
+        )
 
-    return False
+    return True
 
 
 def run_transcription(input_path: str, output_path: str, output_format: str) -> bool:
