@@ -1,13 +1,15 @@
+# NOTE:
+# - numpy is installed via conda (see environment.yml); do NOT pip-install numpy here.
+# - openai-whisper is installed by setup_env.sh (default WHISPER_VERSION=20230314). See below.
+
 setuptools==68.2.2
 
 # Core
 moviepy==1.0.3
-requests==2.31.0
+requests==2.32.3
 yt-dlp==2024.8.6
 
-
-# MoviePy stack (critical pins)
-numpy==1.23.5
+# Imaging / MoviePy stack
 Pillow==9.5.0
 imageio==2.34.0
 imageio-ffmpeg==0.4.9
@@ -17,5 +19,8 @@ decorator==4.4.2
 tqdm==4.66.1
 proglog==0.1.10
 
-# Optional but commonly used helpers
+# Optional helpers
 python-dotenv==1.0.1
+
+# Whisper (setup_env.sh installs this; keeping it here documents the exact version)
+#openai-whisper==20230314

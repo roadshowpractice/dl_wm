@@ -7,20 +7,20 @@ channels:
 
 dependencies:
   - python=3.10
-  - numpy=1.23.5
-  - pytorch
+
+  # Core tooling / runtimes
   - pip
   - ffmpeg
   - opencv
 
-  # ✅ Force torch from conda (stable ABI)
+  # ✅ Torch stack from conda (stable ABI; avoids pip CUDA wheels)
   - pytorch
   - cpuonly
 
-  # ✅ Force numpy from conda (prevents pip/conda mismatch with torch)
+  # ✅ Numpy from conda (prevents pip/conda mismatch with torch)
   - numpy=1.26.4
 
-  # pip-only packages (pure python)
+  # pip-only packages (pure python / safe wheels)
   - pip:
       # keep pkg_resources available (whisper build metadata / older deps)
       - setuptools==68.2.2
@@ -30,14 +30,13 @@ dependencies:
       - requests==2.32.3
       - yt-dlp==2024.8.6
 
+      # imaging / moviepy stack
       - Pillow==9.5.0
       - imageio==2.34.0
       - imageio-ffmpeg==0.4.9
-      # moviepy deps
       - decorator==4.4.2
       - tqdm==4.66.1
       - proglog==0.1.10
 
       # optional helper
       - python-dotenv==1.0.1
-
