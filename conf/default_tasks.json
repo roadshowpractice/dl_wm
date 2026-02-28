@@ -2,9 +2,9 @@
   "default_tasks": {
     "perform_download": true,
     "apply_watermark": true,
-    "extract_audio": true,
+    "extract_audio": false,
     "generate_srt": true,
-    "burn_srt": false,
+    "burn_srt": true,
     "post_processed": false
   }
 }

@@ -1,6 +1,7 @@
 name: dl_wm
 
 channels:
+  - pytorch
   - conda-forge
   - defaults
 
@@ -33,3 +34,5 @@ dependencies:
 
       # Optional helper
       - python-dotenv==1.0.1
+      
+
