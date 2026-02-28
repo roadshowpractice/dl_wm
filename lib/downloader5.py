@@ -19,6 +19,7 @@ from vendor_router import (
     infer_kind,
     metadata_filename,
     VENDOR_INSTAGRAM,
+    format_shortcode,
 )
 
 ####################
@@ -142,11 +143,12 @@ def extract_metadata(params):
                 metadata_path = unique_output_path(metadata_dir, filename)
             params["metadata_path"] = metadata_path
 
-            shortcode = (
+            raw_shortcode = (
                 info_dict.get("display_id")
                 or info_dict.get("webpage_url_basename")
                 or (vendor_id if vendor == VENDOR_INSTAGRAM else None)
             )
+            shortcode = format_shortcode(vendor, raw_shortcode)
 
             index_record = {
                 "url": url,
