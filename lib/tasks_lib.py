@@ -171,7 +171,9 @@ def extend_metadata_with_task_output(params: dict) -> dict:
 
 def find_url_json(url, metadata_dir="./metadata"):
     """
-    Find metadata for a URL using the metadata index for O(1)-ish lookup.
+    Find metadata for a URL using metadata/index.jsonl when present.
+    If the index is missing or stale, fall back to scanning metadata files and
+    repair the index for future lookups.
     """
     logger.info(f"🔍 Searching for URL '{url}' in {metadata_dir}")
 
@@ -180,39 +182,67 @@ def find_url_json(url, metadata_dir="./metadata"):
         return None, None
 
     index_path = os.path.join(metadata_dir, "index.jsonl")
-    if not os.path.exists(index_path):
+    def _try_read_metadata(metadata_file_name):
+        json_path = os.path.join(metadata_dir, metadata_file_name)
+        if not os.path.exists(json_path):
+            return None, None
+        try:
+            with open(json_path, "r", encoding="utf-8") as file:
+                data = json.load(file)
+            return json_path, data
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Error reading {json_path}: {e}")
+            return None, None
+
+    if os.path.exists(index_path):
+        metadata_file = None
+        try:
+            with open(index_path, "r", encoding="utf-8") as index_file:
+                for line in index_file:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        record = json.loads(line)
+                    except json.JSONDecodeError:
+                        logger.warning("Skipping malformed index record.")
+                        continue
+
+                    if record.get("url") == url:
+                        metadata_file = record.get("metadata_file")
+        except OSError as e:
+            logger.error(f"Error reading metadata index: {e}")
+
+        if metadata_file:
+            found_path, found_data = _try_read_metadata(metadata_file)
+            if found_path and found_data:
+                logger.info(f"✅ URL found in: {found_path}")
+                return found_path, found_data
+            logger.warning("Index entry found but metadata file was unavailable; scanning metadata dir.")
+    else:
         logger.warning(f"Metadata index not found: {index_path}")
-        return None, None
 
-    metadata_file = None
+    # Fallback: scan metadata files when index doesn't exist or didn't resolve.
+    logger.info("🔎 Falling back to metadata directory scan for URL lookup.")
     try:
-        with open(index_path, "r", encoding="utf-8") as index_file:
-            for line in index_file:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    logger.warning("Skipping malformed index record.")
-                    continue
-
-                if record.get("url") == url:
-                    metadata_file = record.get("metadata_file")
-    except OSError as e:
-        logger.error(f"Error reading metadata index: {e}")
-        return None, None
-
-    if metadata_file:
-        json_path = os.path.join(metadata_dir, metadata_file)
-        if os.path.exists(json_path):
+        for entry in sorted(os.listdir(metadata_dir)):
+            if not entry.endswith(".json"):
+                continue
+            metadata_path = os.path.join(metadata_dir, entry)
+            if not os.path.isfile(metadata_path):
+                continue
             try:
-                with open(json_path, "r", encoding="utf-8") as file:
+                with open(metadata_path, "r", encoding="utf-8") as file:
                     data = json.load(file)
-                logger.info(f"✅ URL found in: {json_path}")
-                return json_path, data
-            except (json.JSONDecodeError, OSError) as e:
-                logger.error(f"Error reading {json_path}: {e}")
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            if data.get("url") == url:
+                upsert_metadata_index(metadata_path, data)
+                logger.info(f"✅ URL found during fallback scan: {metadata_path}")
+                return metadata_path, data
+    except OSError as e:
+        logger.error(f"Error scanning metadata directory '{metadata_dir}': {e}")
 
     logger.warning(f"⚠️ URL not found in metadata directory.")
     return None, None
