@@ -1,19 +1,48 @@
-import sys
+import json
 import os
+import sys
 import traceback
 from datetime import datetime
 
-# Ensure we can import shared utilities
 current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
 lib_path = os.path.join(root_dir, "lib")
+if root_dir not in sys.path:
+    sys.path.append(root_dir)
 if lib_path not in sys.path:
     sys.path.append(lib_path)
 
-from teton_utils import load_config, load_app_config, initialize_logging_from_config
-import downloader5
-import utilities1
-import tasks_lib
+from teton_utils import load_config, load_app_config, initialize_logging_from_config, resolve_repo_path
+from vendor_router import detect_vendor, VENDOR_INSTAGRAM, VENDOR_YOUTUBE, extract_vendor_id, metadata_filename
+from downloaders.instagram import download as download_instagram
+from downloaders.youtube import download as download_youtube
+
+
+def upsert_index_record(index_path, record):
+    os.makedirs(os.path.dirname(index_path), exist_ok=True)
+
+    rows = []
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                rows.append(json.loads(line))
+
+    updated = False
+    for i, row in enumerate(rows):
+        if row.get("vendor") == record.get("vendor") and row.get("vendor_id") == record.get("vendor_id"):
+            rows[i] = {**row, **record}
+            updated = True
+            break
+
+    if not updated:
+        rows.append(record)
+
+    with open(index_path, "w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 def main():
@@ -27,75 +56,62 @@ def main():
         }
         logger = initialize_logging_from_config(logging_config)
 
-        output_dir = platform_config.get("output_dir") or platform_config.get("target_usb")
-        if not output_dir:
-            logger.error("No output directory configured. Set 'output_dir' in conf/config.json.")
-            sys.exit(1)
-
-        download_date = datetime.now().strftime("%Y-%m-%d")
-        download_path = os.path.join(output_dir, download_date)
-
-        if not os.path.exists(output_dir):
-            logger.warning(f"Output directory {output_dir} does not exist. Creating it now.")
-            os.makedirs(output_dir, exist_ok=True)
-
-        if not os.path.exists(download_path):
-            logger.warning(f"Download path {download_path} does not exist. Creating it now.")
-            try:
-                os.makedirs(download_path, exist_ok=True)
-            except PermissionError:
-                logger.error(f"Permission denied: Unable to create {download_path}")
-                sys.exit(1)
-        elif not os.access(download_path, os.W_OK):
-            logger.error(f"Error: No write permission to {download_path}.")
-            sys.exit(1)
-
-        logger.info(f"Download directory confirmed: {download_path}")
-
-        params = {
-            "download_path": download_path,
-            "cookie_path": platform_config.get("cookie_path")
-            or app_config.get("video_download", {}).get("cookie_path"),
-            "video_download": app_config.get("video_download", {}),
-            "url": None,
-            **platform_config.get("watermark_config", {}),
-        }
-
         if len(sys.argv) < 2:
             logger.error("The URL is missing. Please provide a valid URL as a command-line argument.")
             sys.exit(1)
 
-        params["url"] = sys.argv[1].strip()
+        url = sys.argv[1].strip()
+        vendor = detect_vendor(url)
+        if vendor not in {VENDOR_INSTAGRAM, VENDOR_YOUTUBE}:
+            logger.error("Unsupported URL vendor. Supported vendors are Instagram and YouTube.")
+            sys.exit(1)
 
-        function_calls = [
-            downloader5.mask_metadata,
-            downloader5.create_original_filename,
-            downloader5.download_video,
-            utilities1.store_params_as_json,
-            tasks_lib.write_masked_metadata_with_tasks,
-        ]
+        output_root = platform_config.get("output_dir") or platform_config.get("target_usb")
+        if not output_root:
+            logger.error("No output directory configured. Set 'output_dir' in conf/config.json.")
+            sys.exit(1)
 
-        for func in function_calls:
-            logger.info(f"Entering function: {func.__name__}")
-            try:
-                result = func(params)
-                if result:
-                    params.update(result)
-            except Exception as e:
-                logger.error(f"Error executing {func.__name__}: {e}")
-                logger.debug(traceback.format_exc())
+        output_root = resolve_repo_path(output_root)
+        download_date = datetime.now().strftime("%Y-%m-%d")
+        download_path = os.path.join(output_root, download_date)
+        metadata_dir = resolve_repo_path(app_config.get("metadata_dir", "./metadata"))
+        os.makedirs(download_path, exist_ok=True)
+        os.makedirs(metadata_dir, exist_ok=True)
 
-        original_filename = params.get("original_filename", "")
-        if original_filename:
-            logger.info(f"Returning original filename: {original_filename}")
-            print(original_filename)
-            return original_filename
+        video_download_cfg = app_config.get("video_download", {}) if isinstance(app_config.get("video_download"), dict) else {}
+        registry_record = {
+            "url": url,
+            "vendor": vendor,
+            "vendor_id": extract_vendor_id(vendor, url),
+            "metadata_file": metadata_filename(vendor, extract_vendor_id(vendor, url)),
+        }
 
-        logger.warning("No original filename to return.")
-        return None
+        if vendor == VENDOR_YOUTUBE:
+            result = download_youtube(url, download_path, metadata_dir, registry_record)
+        else:
+            cookie_path = platform_config.get("cookie_path") or video_download_cfg.get("cookie_path")
+            cookie_path = resolve_repo_path(cookie_path) if cookie_path else None
+            if not cookie_path or not os.path.exists(cookie_path):
+                logger.error("Instagram downloader requires a valid cookie file path (e.g., conf/instagram.cookies.txt).")
+                sys.exit(1)
+            result = download_instagram(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
 
-    except Exception as e:
-        print(f"Unexpected error: {e}")
+        upsert_index_record(
+            os.path.join(metadata_dir, "index.jsonl"),
+            {
+                "url": url,
+                "vendor": result["vendor"],
+                "vendor_id": result["vendor_id"],
+                "metadata_file": result["metadata_file"],
+            },
+        )
+
+        logger.info("Download complete: %s", result["original_filename"])
+        print(result["original_filename"])
+        return result["original_filename"]
+
+    except Exception as exc:
+        print(f"Unexpected error: {exc}")
         print(traceback.format_exc())
         sys.exit(1)
 
