@@ -3,6 +3,8 @@ import os
 
 import yt_dlp
 
+from lib.metadata_compactor import build_compact_metadata, write_raw_metadata
+from lib.teton_utils import load_app_config
 from lib.vendor_router import VENDOR_INSTAGRAM, extract_vendor_id, metadata_filename
 
 
@@ -22,7 +24,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         "cookiefile": cookie_path,
         "format": (video_download or {}).get("format", "bestvideo[height<=?1080]+bestaudio/best"),
         "noplaylist": (video_download or {}).get("noplaylist", True),
-        "writeinfojson": True,
+        "writeinfojson": False,
     }
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -35,12 +37,28 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         if os.path.exists(candidate):
             downloaded_path = candidate
 
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(info, f, indent=2, ensure_ascii=False)
+    app_config = load_app_config()
+    compact = build_compact_metadata(
+        info,
+        url=url,
+        vendor=VENDOR_INSTAGRAM,
+        vendor_id=vendor_id,
+        downloaded_path=downloaded_path,
+    )
 
-    info_json_src = os.path.splitext(downloaded_path)[0] + ".info.json"
-    if os.path.exists(info_json_src) and os.path.abspath(info_json_src) != os.path.abspath(metadata_path):
-        os.replace(info_json_src, metadata_path)
+    raw_mode = (app_config or {}).get("raw_metadata_mode", "gzip")
+    raw_path = write_raw_metadata(
+        info,
+        metadata_dir=metadata_dir,
+        vendor=VENDOR_INSTAGRAM,
+        vendor_id=vendor_id,
+        mode=raw_mode,
+    )
+    if raw_path:
+        compact["raw_metadata_path"] = raw_path
+
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(compact, f, indent=2, ensure_ascii=False)
 
     record = {
         **(registry_record or {}),
