@@ -2,6 +2,8 @@ import json
 import os
 import subprocess
 
+from lib.metadata_compactor import build_compact_metadata, write_raw_metadata
+from lib.teton_utils import load_app_config
 from lib.vendor_router import VENDOR_YOUTUBE, extract_vendor_id, metadata_filename
 
 
@@ -22,7 +24,6 @@ def download(url, output_dir, metadata_dir, registry_record):
         "ejs:github",
         "--no-progress",
         "--print-json",
-        "--write-info-json",
         "--format",
         "bestvideo+bestaudio/best",
         "--merge-output-format",
@@ -64,12 +65,28 @@ def download(url, output_dir, metadata_dir, registry_record):
     if not downloaded_path:
         raise RuntimeError("Could not determine downloaded YouTube file path")
 
-    with open(metadata_path, "w", encoding="utf-8") as f:
-        json.dump(info, f, indent=2, ensure_ascii=False)
+    app_config = load_app_config()
+    compact = build_compact_metadata(
+        info,
+        url=url,
+        vendor=VENDOR_YOUTUBE,
+        vendor_id=vendor_id,
+        downloaded_path=downloaded_path,
+    )
 
-    info_json_src = os.path.splitext(downloaded_path)[0] + ".info.json"
-    if os.path.exists(info_json_src) and os.path.abspath(info_json_src) != os.path.abspath(metadata_path):
-        os.replace(info_json_src, metadata_path)
+    raw_mode = (app_config or {}).get("raw_metadata_mode", "gzip")
+    raw_path = write_raw_metadata(
+        info,
+        metadata_dir=metadata_dir,
+        vendor=VENDOR_YOUTUBE,
+        vendor_id=vendor_id,
+        mode=raw_mode,
+    )
+    if raw_path:
+        compact["raw_metadata_path"] = raw_path
+
+    with open(metadata_path, "w", encoding="utf-8") as f:
+        json.dump(compact, f, indent=2, ensure_ascii=False)
 
     record = {
         **(registry_record or {}),
