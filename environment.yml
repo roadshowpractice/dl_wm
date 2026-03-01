@@ -13,6 +13,9 @@ dependencies:
   - ffmpeg
   - opencv
 
+  # ✅ ADD THIS: JS runtime required for modern YouTube
+  - deno>=1.40
+
   # ✅ Torch stack from conda (stable ABI; avoids pip CUDA wheels)
   - pytorch
   - cpuonly
@@ -22,13 +25,14 @@ dependencies:
 
   # pip-only packages (pure python / safe wheels)
   - pip:
-      # keep pkg_resources available (whisper build metadata / older deps)
       - setuptools==68.2.2
 
       # core
       - moviepy==1.0.3
       - requests==2.32.3
-      - yt-dlp==2024.8.6
+
+      # ✅ CHANGE THIS: modern yt-dlp (remove exact pin)
+      - yt-dlp>=2026.2.21
 
       # imaging / moviepy stack
       - Pillow==9.5.0
