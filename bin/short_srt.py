@@ -25,7 +25,7 @@ for seg in data["segments"]:
     if "words" in seg:
 
         words = seg["words"]
-        for j in range(0, len(words), 2):
+        for j in range(0, len(words), 3):
 
             chunk = words[j:j+2]
 
