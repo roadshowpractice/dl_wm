@@ -1,0 +1,45 @@
+Source: /mnt/data/youtube__lJ_qhaEU8UA.whisper.json
+Window: 0.000–600.000s
+Question blocks: 14 | Clips: 14
+
+clip_001: 01:09.800 -> 01:25.000
+  Q: What, what would you tell him?
+
+clip_002: 01:25.200 -> 02:19.200
+  Q: Why?
+
+clip_003: 02:19.400 -> 02:48.400
+  Q: And why am I doing this on my channel?
+
+clip_004: 02:48.600 -> 03:06.400
+  Q: This is doing how much money does child trafficking make a year?
+
+clip_005: 03:06.600 -> 03:22.000
+  Q: What's the whole thing? What is that?
+
+clip_006: 03:22.200 -> 04:02.000
+  Q: Slavery is in what they build houses for them or what?
+
+clip_007: 04:02.200 -> 05:18.000
+  Q: So why doesn't just the blow the lid off this thing? Why doesn't the government just end this overnight? Why is this even a thing?
+
+clip_008: 05:18.200 -> 05:46.000
+  Q: are coming after you, are they still walking around? Like, can you name names or is that?
+
+clip_009: 05:46.200 -> 06:30.200
+  Q: How?
+
+clip_010: 06:30.400 -> 06:58.200
+  Q: why did Sound of Freedom Act get shut down?
+
+clip_011: 06:58.400 -> 07:10.400
+  Q: You said that they literally drink their blood, right?
+
+clip_012: 07:10.600 -> 08:06.200
+  Q: And kids, young, how young, are they being, you know, just raped? You're young, do you can imagine? One?
+
+clip_013: 08:06.400 -> 09:41.600
+  Q: their life's threatened, they're involved somehow?
+
+clip_014: 09:41.800 -> 09:59.800
+  Q: and I was a member, okay? hey, there's block arms and knock this out, right? I'm like, what? By who? By a leader in the church? But what are the top leaders, yeah?
