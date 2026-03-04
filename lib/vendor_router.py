@@ -84,6 +84,19 @@ def metadata_filename(vendor: str, vendor_id: str, fallback: str = "unknown") ->
     return f"{resolved_vendor}__{resolved_vendor_id}.json"
 
 
+def canonicalize_vendor_url(vendor: str, url: str):
+    """Return a normalized URL for known vendors when possible."""
+    if not vendor or not url:
+        return url
+
+    if vendor == VENDOR_YOUTUBE:
+        vendor_id = extract_vendor_id(vendor, url)
+        if vendor_id:
+            return f"https://www.youtube.com/watch?v={vendor_id}"
+
+    return url
+
+
 def format_shortcode(vendor: str, token: str):
     """Normalize shortcode/index token to include vendor context.
 

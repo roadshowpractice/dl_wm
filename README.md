@@ -73,6 +73,7 @@ Add a new URL (writes `vendor`, `vendor_id`, optional `kind`, and metadata file 
 ```bash
 python bin/call_download.py "https://www.instagram.com/reel/<CODE>/"
 python bin/call_download.py "https://www.youtube.com/watch?v=<ID>"
+python bin/call_download.py "https://www.youtube.com/shorts/<ID>"  # normalized to watch?v=<ID>
 ```
 
 
