@@ -9,11 +9,30 @@ import os
 import platform
 import re
 import shutil
+import subprocess
 import sys
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+
+def detect_repo_root() -> Path:
+    proc = shutil.which("git")
+    if not proc:
+        raise RuntimeError("git is required to detect repository root")
+    completed = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return Path(completed.stdout.strip()).resolve()
+
+
+def repo_relative(path: Path, repo_root: Path) -> str:
+    resolved = path.resolve()
+    return resolved.relative_to(repo_root).as_posix() if resolved.is_relative_to(repo_root) else resolved.as_posix()
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -207,14 +226,15 @@ def write_manifest(
     manifest_path: Path,
     input_path: Path,
     outdir: Path,
+    repo_root: Path,
     model_name: str,
     task: str,
     language: str | None,
     source_url: str | None,
 ) -> None:
     manifest = {
-        "input_path": str(input_path),
-        "outdir": str(outdir),
+        "input_path": repo_relative(input_path, repo_root),
+        "outdir": repo_relative(outdir, repo_root),
         "model": model_name,
         "task": task,
         "language": language,
@@ -231,13 +251,30 @@ def write_manifest(
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
-    input_path = Path(args.input_media_path).expanduser().resolve()
+    try:
+        repo_root = detect_repo_root()
+    except Exception as err:
+        print(f"Failed to detect repo root: {err}", file=sys.stderr)
+        return 1
+
+    input_path = (
+        Path(args.input_media_path).expanduser().resolve()
+        if Path(args.input_media_path).expanduser().is_absolute()
+        else (repo_root / Path(args.input_media_path).expanduser()).resolve()
+    )
     if not input_path.exists() or not input_path.is_file():
         print(f"Input media path does not exist or is not a file: {input_path}", file=sys.stderr)
         return 1
 
-    outdir = Path(args.outdir).expanduser().resolve() if args.outdir else input_path.parent
+    outdir = (
+        (Path(args.outdir).expanduser().resolve() if Path(args.outdir).expanduser().is_absolute() else (repo_root / Path(args.outdir).expanduser()).resolve())
+        if args.outdir
+        else input_path.parent
+    )
     outdir.mkdir(parents=True, exist_ok=True)
+    print(f"repo_root={repo_root}")
+    print(f"input_path={input_path}")
+    print(f"outdir={outdir}")
 
     try:
         ensure_ffmpeg_available()
@@ -279,6 +316,7 @@ def main(argv: list[str] | None = None) -> int:
         manifest_path=outdir / f"{stem}.manifest.json",
         input_path=input_path,
         outdir=outdir,
+        repo_root=repo_root,
         model_name=args.model,
         task=args.task,
         language=args.language,
