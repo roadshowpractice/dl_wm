@@ -10,8 +10,8 @@ set -euo pipefail
 #   MODE=accurate
 #   VCODEC=libx264
 #   ACODEC=aac
-#   PRESET=veryfast
-#   CRF=20
+#   PRESET=medium
+#   CRF=18
 #   FFMPEG_BIN=ffmpeg
 #
 # Examples:
@@ -26,8 +26,8 @@ Envelope values (env defaults):
   MODE=${MODE:-accurate}
   VCODEC=${VCODEC:-libx264}
   ACODEC=${ACODEC:-aac}
-  PRESET=${PRESET:-veryfast}
-  CRF=${CRF:-20}
+  PRESET=${PRESET:-medium}
+  CRF=${CRF:-18}
   FFMPEG_BIN=${FFMPEG_BIN:-ffmpeg}
 EOF
   exit 0
