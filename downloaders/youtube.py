@@ -22,7 +22,6 @@ def download(url, output_dir, metadata_dir, registry_record):
         "yt-dlp",
         "--remote-components",
         "ejs:github",
-        "--no-progress",
         "--print-json",
         "--format",
         "bestvideo+bestaudio/best",
