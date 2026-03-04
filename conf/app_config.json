@@ -28,7 +28,10 @@
       "bottom"
     ],
     "text_pad": 10,
-    "watermark_target_width": 0
+    "watermark_target_width": 0,
+    "ffmpeg_preset": "veryfast",
+    "ffmpeg_crf": 23,
+    "ffmpeg_threads": 2
   },
   "transcription": {
     "_comment": "Prefer caller_command or caller_module/caller_function; fallback auto-detects bin/transcribe_media.py when present.",
@@ -51,15 +54,12 @@
     "default": {
       "FontName": "Inter-Bold",
       "FontSize": 18,
-
       "PrimaryColour": "&H00FFFFFF",
       "OutlineColour": "&H00000000",
       "BackColour": "&H00000000",
-
       "BorderStyle": 1,
       "Outline": 3,
       "Shadow": 2,
-
       "Alignment": 2,
       "MarginV": 60,
       "MarginL": 40,

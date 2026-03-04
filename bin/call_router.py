@@ -65,17 +65,15 @@ def run_my_existing_downloader(url, logger):
     logger.info(f"📥 Initiating download for: {url}")
 
     script_path = os.path.join(root_dir, "bin/call_download.py")
-    result = subprocess.run(
-        [sys.executable, script_path, url],
-        capture_output=True,
-        text=True,
-        cwd=root_dir
-    )
+    logger.info("📡 Streaming downloader output...")
+    result = subprocess.run([sys.executable, script_path, url], cwd=root_dir)
 
     if result.returncode != 0:
-        logger.error(f"Download script failed:\n{result.stderr}")
-    else:
-        logger.info(f"Download stdout:\n{result.stdout}")
+        logger.error(f"Download script failed with exit code {result.returncode}.")
+        return False
+
+    logger.info("✅ Downloader completed successfully.")
+    return True
 
 
 def wait_for_download_file(to_process, logger, timeout_seconds=90, poll_interval=3):
@@ -140,7 +138,13 @@ def main():
 
         if not found_file or not perform_download_done:
             logger.info("📥 No completed download or metadata found — running downloader...")
-            run_my_existing_downloader(url, logger)
+            download_success = run_my_existing_downloader(url, logger)
+            if not download_success:
+                logger.error(
+                    "❌ Downloader failed before metadata was generated. "
+                    "Fix downloader errors above, then rerun call_router."
+                )
+                return
             found_file, found_data = find_url_json(url, metadata_dir=metadata_dir)
             perform_download_done = (
                 found_data.get("default_tasks", {}).get("perform_download")
