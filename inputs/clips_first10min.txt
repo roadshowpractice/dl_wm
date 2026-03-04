@@ -1,4 +1,4 @@
-Source: /mnt/data/youtube__lJ_qhaEU8UA.whisper.json
+Source: inputs/youtube__lJ_qhaEU8UA.whisper.json
 Window: 0.000–600.000s
 Question blocks: 14 | Clips: 14
 
