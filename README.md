@@ -74,3 +74,24 @@ Add a new URL (writes `vendor`, `vendor_id`, optional `kind`, and metadata file 
 python bin/call_download.py "https://www.instagram.com/reel/<CODE>/"
 python bin/call_download.py "https://www.youtube.com/watch?v=<ID>"
 ```
+
+
+## Clip pipeline (question-driven)
+
+Generate a clips manifest from Whisper JSON:
+
+```bash
+python bin/clip_from_whisper.py outputs/<run>/<file>.whisper.json
+```
+
+This writes `outputs/<run>/clips/clips.jsonl` by default, supports absolute or repo-relative input paths, and writes repo-root-relative paths into clip manifests.
+
+Render clips from the generated JSONL:
+
+```bash
+python bin/render_clips.py outputs/<run>/clips/clips.jsonl
+# or wrapper:
+bin/render_clips_from_jsonl.sh outputs/<run>/clips/clips.jsonl
+```
+
+If `clips.jsonl` is omitted, `bin/render_clips.py` auto-selects the most recent `outputs/*/clips/clips.jsonl`.
