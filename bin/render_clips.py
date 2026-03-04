@@ -29,8 +29,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--mode", choices=["accurate", "fast"], default=os.environ.get("MODE", "accurate"))
     p.add_argument("--vcodec", default=os.environ.get("VCODEC", "libx264"))
     p.add_argument("--acodec", default=os.environ.get("ACODEC", "aac"))
-    p.add_argument("--preset", default=os.environ.get("PRESET", "veryfast"))
-    p.add_argument("--crf", default=os.environ.get("CRF", "20"))
+    p.add_argument("--preset", default=os.environ.get("PRESET", "medium"))
+    p.add_argument("--crf", default=os.environ.get("CRF", "18"))
     p.add_argument("--ffmpeg-bin", default=os.environ.get("FFMPEG_BIN", "ffmpeg"))
     return p.parse_args(argv)
 
@@ -102,6 +102,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"# exists, skipping: {outpath}")
             continue
 
+        duration = end - start
+
         if args.mode == "fast":
             cmd = [args.ffmpeg_bin, "-hide_banner", "-y", "-ss", str(start), "-to", str(end), "-i", str(video), "-c", "copy", str(outpath)]
         else:
@@ -109,12 +111,12 @@ def main(argv: list[str] | None = None) -> int:
                 args.ffmpeg_bin,
                 "-hide_banner",
                 "-y",
-                "-ss",
-                str(start),
-                "-to",
-                str(end),
                 "-i",
                 str(video),
+                "-ss",
+                str(start),
+                "-t",
+                str(duration),
                 "-c:v",
                 args.vcodec,
                 "-preset",

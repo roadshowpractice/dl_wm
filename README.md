@@ -94,4 +94,6 @@ python bin/render_clips.py outputs/<run>/clips/clips.jsonl
 bin/render_clips_from_jsonl.sh outputs/<run>/clips/clips.jsonl
 ```
 
+Quality note: `accurate` mode now performs decode-first seeking (`-i ... -ss ... -t ...`) to avoid boundary frame drops, and default encode settings were raised to `PRESET=medium` and `CRF=18`.
+
 If `clips.jsonl` is omitted, `bin/render_clips.py` auto-selects the most recent `outputs/*/clips/clips.jsonl`.
