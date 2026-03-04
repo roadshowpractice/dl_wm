@@ -6,7 +6,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from vendor_router import detect_vendor, extract_vendor_id, format_shortcode
+from vendor_router import canonicalize_vendor_url, detect_vendor, extract_vendor_id, format_shortcode
 
 
 class VendorRouterTests(unittest.TestCase):
@@ -38,6 +38,13 @@ class VendorRouterTests(unittest.TestCase):
         self.assertEqual(detect_vendor("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "youtube")
         self.assertEqual(detect_vendor("https://youtu.be/dQw4w9WgXcQ"), "youtube")
         self.assertEqual(detect_vendor("https://www.youtube.com/shorts/dQw4w9WgXcQ"), "youtube")
+
+
+    def test_canonicalize_youtube_shorts_url(self):
+        self.assertEqual(
+            canonicalize_vendor_url("youtube", "https://www.youtube.com/shorts/dQw4w9WgXcQ?feature=share"),
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        )
 
     def test_extract_youtube_id(self):
         self.assertEqual(

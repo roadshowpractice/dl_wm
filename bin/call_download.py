@@ -13,7 +13,14 @@ if lib_path not in sys.path:
     sys.path.append(lib_path)
 
 from teton_utils import load_config, load_app_config, initialize_logging_from_config, resolve_repo_path
-from vendor_router import detect_vendor, VENDOR_INSTAGRAM, VENDOR_YOUTUBE, extract_vendor_id, metadata_filename
+from vendor_router import (
+    detect_vendor,
+    VENDOR_INSTAGRAM,
+    VENDOR_YOUTUBE,
+    extract_vendor_id,
+    metadata_filename,
+    canonicalize_vendor_url,
+)
 from downloaders.instagram import download as download_instagram
 from downloaders.youtube import download as download_youtube
 
@@ -65,6 +72,7 @@ def main():
         if vendor not in {VENDOR_INSTAGRAM, VENDOR_YOUTUBE}:
             logger.error("Unsupported URL vendor. Supported vendors are Instagram and YouTube.")
             sys.exit(1)
+        url = canonicalize_vendor_url(vendor, url)
 
         output_root = platform_config.get("output_dir") or platform_config.get("target_usb")
         if not output_root:
