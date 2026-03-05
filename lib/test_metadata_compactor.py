@@ -1,4 +1,5 @@
 import os
+import json
 import sys
 import tempfile
 import unittest
@@ -7,10 +8,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from metadata_compactor import build_compact_metadata
+from metadata_compactor import build_compact_metadata, write_raw_metadata
 
 
 class MetadataCompactorTests(unittest.TestCase):
+
+    class _NonSerializableObject:
+        def __str__(self):
+            return "non-serializable"
 
     def test_build_compact_metadata_sets_vendor_fields_and_tasks(self):
         with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
@@ -60,6 +65,22 @@ class MetadataCompactorTests(unittest.TestCase):
             downloaded_path="/tmp/does-not-exist.mp4",
         )
         self.assertEqual(compact["shortcode"], "ABC123")
+
+    def test_write_raw_metadata_handles_nonserializable_values(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            raw_path = write_raw_metadata(
+                {"postprocessors": [self._NonSerializableObject()]},
+                metadata_dir=tmpdir,
+                vendor="instagram",
+                vendor_id="ABC123",
+                mode="json",
+            )
+
+            self.assertTrue(os.path.exists(raw_path))
+            with open(raw_path, "r", encoding="utf-8") as fh:
+                payload = json.load(fh)
+
+            self.assertEqual(payload["postprocessors"], ["non-serializable"])
 
 
 if __name__ == "__main__":
