@@ -4,10 +4,8 @@
     "format": "bestvideo[height<=?1080]+bestaudio/best",
     "bitrate": "5000k",
     "noplaylist": true,
-    "cookie_paths": {
-      "instagram": "conf/instagram.cookies.txt",
-      "youtube": "conf/youtube.cookies.1.txt"
-    }
+    "instagram_cookie_path": "conf/instagram.cookies.txt",
+    "youtube_cookie_path": "conf/youtube.cookies.1.txt"
   },
   "metadata_dir": "./metadata/",
   "raw_metadata_mode": "gzip",
