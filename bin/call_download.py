@@ -29,10 +29,17 @@ def resolve_cookie_path(platform_config, video_download_cfg, vendor):
     if not isinstance(video_download_cfg, dict):
         video_download_cfg = {}
 
-    vendor_cookie_map = video_download_cfg.get("cookie_paths")
     cookie_path = None
-    if isinstance(vendor_cookie_map, dict):
-        cookie_path = vendor_cookie_map.get(vendor)
+    if vendor == VENDOR_INSTAGRAM:
+        cookie_path = video_download_cfg.get("instagram_cookie_path")
+    elif vendor == VENDOR_YOUTUBE:
+        cookie_path = video_download_cfg.get("youtube_cookie_path")
+
+    # Backward compatibility for old nested cookie mapping.
+    if not cookie_path:
+        vendor_cookie_map = video_download_cfg.get("cookie_paths")
+        if isinstance(vendor_cookie_map, dict):
+            cookie_path = vendor_cookie_map.get(vendor)
 
     cookie_path = cookie_path or platform_config.get("cookie_path") or video_download_cfg.get("cookie_path")
     return resolve_repo_path(cookie_path) if cookie_path else None
