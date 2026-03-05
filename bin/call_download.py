@@ -25,6 +25,19 @@ from downloaders.instagram import download as download_instagram
 from downloaders.youtube import download as download_youtube
 
 
+def resolve_cookie_path(platform_config, video_download_cfg, vendor):
+    if not isinstance(video_download_cfg, dict):
+        video_download_cfg = {}
+
+    vendor_cookie_map = video_download_cfg.get("cookie_paths")
+    cookie_path = None
+    if isinstance(vendor_cookie_map, dict):
+        cookie_path = vendor_cookie_map.get(vendor)
+
+    cookie_path = cookie_path or platform_config.get("cookie_path") or video_download_cfg.get("cookie_path")
+    return resolve_repo_path(cookie_path) if cookie_path else None
+
+
 def upsert_index_record(index_path, record):
     os.makedirs(os.path.dirname(index_path), exist_ok=True)
 
@@ -94,11 +107,11 @@ def main():
             "metadata_file": metadata_filename(vendor, extract_vendor_id(vendor, url)),
         }
 
+        cookie_path = resolve_cookie_path(platform_config, video_download_cfg, vendor)
+
         if vendor == VENDOR_YOUTUBE:
-            result = download_youtube(url, download_path, metadata_dir, registry_record)
+            result = download_youtube(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
         else:
-            cookie_path = platform_config.get("cookie_path") or video_download_cfg.get("cookie_path")
-            cookie_path = resolve_repo_path(cookie_path) if cookie_path else None
             if not cookie_path or not os.path.exists(cookie_path):
                 logger.error("Instagram downloader requires a valid cookie file path (e.g., conf/instagram.cookies.txt).")
                 sys.exit(1)

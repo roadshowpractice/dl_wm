@@ -7,7 +7,7 @@ from lib.teton_utils import load_app_config
 from lib.vendor_router import VENDOR_YOUTUBE, extract_vendor_id, metadata_filename
 
 
-def download(url, output_dir, metadata_dir, registry_record):
+def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, video_download=None):
     vendor_id = extract_vendor_id(VENDOR_YOUTUBE, url)
     if not vendor_id:
         raise ValueError("Could not extract YouTube video ID from URL")
@@ -24,7 +24,7 @@ def download(url, output_dir, metadata_dir, registry_record):
         "ejs:github",
         "--print-json",
         "--format",
-        "bestvideo+bestaudio/best",
+        (video_download or {}).get("format", "bestvideo+bestaudio/best"),
         "--merge-output-format",
         "mp4",
         "--no-playlist",
@@ -32,9 +32,8 @@ def download(url, output_dir, metadata_dir, registry_record):
         output_template,
     ]
 
-    cookies_path = os.path.join("conf", "youtube.cookies.txt")
-    if os.path.exists(cookies_path):
-        cmd.extend(["--cookies", cookies_path])
+    if cookie_path and os.path.exists(cookie_path):
+        cmd.extend(["--cookies", cookie_path])
 
     cmd.append(url)
 
