@@ -6,6 +6,11 @@ from datetime import datetime
 from lib.tasks_lib import load_default_tasks
 
 
+def _json_fallback(value):
+    """Best-effort fallback for values that are not natively JSON serializable."""
+    return str(value)
+
+
 def _normalize_video_date(info: dict):
     upload_date = info.get("upload_date")
     if upload_date:
@@ -72,10 +77,10 @@ def write_raw_metadata(info: dict, *, metadata_dir: str, vendor: str, vendor_id:
     if mode == "gzip":
         raw_path = os.path.join(raw_dir, f"{vendor}__{vendor_id}.raw.json.gz")
         with gzip.open(raw_path, "wt", encoding="utf-8") as fh:
-            json.dump(info, fh, ensure_ascii=False)
+            json.dump(info, fh, ensure_ascii=False, default=_json_fallback)
         return raw_path
 
     raw_path = os.path.join(raw_dir, f"{vendor}__{vendor_id}.raw.json")
     with open(raw_path, "w", encoding="utf-8") as fh:
-        json.dump(info, fh, ensure_ascii=False)
+        json.dump(info, fh, ensure_ascii=False, default=_json_fallback)
     return raw_path
