@@ -6,12 +6,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
-from vendor_router import canonicalize_vendor_url, detect_vendor, extract_vendor_id, format_shortcode
+from vendor_router import canonicalize_vendor_url, detect_vendor, extract_vendor_id, format_shortcode, infer_kind
 
 
 class VendorRouterTests(unittest.TestCase):
     def test_detect_instagram_vendor(self):
         self.assertEqual(detect_vendor("https://www.instagram.com/reel/ABC123/"), "instagram")
+        self.assertEqual(detect_vendor("https://www.instagram.com/reels/C_YIrCJJGJj/"), "instagram")
         self.assertEqual(detect_vendor("https://www.instagram.com/p/XYZ99/?utm_source=ig_web_copy_link"), "instagram")
 
     def test_extract_instagram_shortcode(self):
@@ -20,9 +21,16 @@ class VendorRouterTests(unittest.TestCase):
             "C8abcDEF12_",
         )
         self.assertEqual(
+            extract_vendor_id("instagram", "https://www.instagram.com/reels/C_YIrCJJGJj/"),
+            "C_YIrCJJGJj",
+        )
+        self.assertEqual(
             extract_vendor_id("instagram", "https://www.instagram.com/p/POSTCODE1/?img_index=1"),
             "POSTCODE1",
         )
+
+    def test_infer_kind_instagram_reels_alias(self):
+        self.assertEqual(infer_kind("instagram", "https://www.instagram.com/reels/C_YIrCJJGJj/"), "reel")
 
 
     def test_format_shortcode_prefixes_vendor(self):
