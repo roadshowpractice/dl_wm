@@ -18,7 +18,7 @@ def detect_vendor(url: str):
     path = (parsed.path or "").strip("/")
 
     if host in INSTAGRAM_HOSTS:
-        if path.startswith("reel/") or path.startswith("p/"):
+        if path.startswith("reel/") or path.startswith("reels/") or path.startswith("p/"):
             return VENDOR_INSTAGRAM
 
     if host in YOUTUBE_HOSTS:
@@ -39,7 +39,7 @@ def extract_vendor_id(vendor: str, url: str):
     path = (parsed.path or "").strip("/")
 
     if vendor == VENDOR_INSTAGRAM:
-        match = re.match(r"^(?:reel|p)/([^/?#]+)/?", path)
+        match = re.match(r"^(?:reel|reels|p)/([^/?#]+)/?", path)
         return match.group(1) if match else None
 
     if vendor == VENDOR_YOUTUBE:
@@ -64,7 +64,7 @@ def infer_kind(vendor: str, url: str):
     path = (parsed.path or "").strip("/")
 
     if vendor == VENDOR_INSTAGRAM:
-        if path.startswith("reel/"):
+        if path.startswith("reel/") or path.startswith("reels/"):
             return "reel"
         if path.startswith("p/"):
             return "post"
