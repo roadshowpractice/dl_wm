@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import traceback
+from glob import glob
 from datetime import datetime
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -25,24 +26,94 @@ from downloaders.instagram import download as download_instagram
 from downloaders.youtube import download as download_youtube
 
 
-def resolve_cookie_path(platform_config, video_download_cfg, vendor):
+def _normalize_cookie_list(value):
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str)]
+    return []
+
+
+def _cookie_discovery_patterns(vendor):
+    if vendor == VENDOR_INSTAGRAM:
+        return ["*instagram*cookie*.txt", "*insta*cookie*.txt", "*instagram*.txt", "*insta*.txt"]
+    if vendor == VENDOR_YOUTUBE:
+        return ["*youtube*cookie*.txt", "*yt*cookie*.txt", "*youtube*.txt", "*yt*.txt"]
+    return []
+
+
+def resolve_cookie_paths(platform_config, video_download_cfg, vendor):
     if not isinstance(video_download_cfg, dict):
         video_download_cfg = {}
+
+    candidates = []
+    cookie_hierarchy = video_download_cfg.get("cookie_hierarchy")
+    if isinstance(cookie_hierarchy, dict):
+        candidates.extend(_normalize_cookie_list(cookie_hierarchy.get(vendor)))
+
+    plural_key = f"{vendor}_cookie_paths"
+    candidates.extend(_normalize_cookie_list(video_download_cfg.get(plural_key)))
 
     cookie_path = None
     if vendor == VENDOR_INSTAGRAM:
         cookie_path = video_download_cfg.get("instagram_cookie_path")
     elif vendor == VENDOR_YOUTUBE:
         cookie_path = video_download_cfg.get("youtube_cookie_path")
+    if cookie_path:
+        candidates.append(cookie_path)
 
     # Backward compatibility for old nested cookie mapping.
-    if not cookie_path:
-        vendor_cookie_map = video_download_cfg.get("cookie_paths")
-        if isinstance(vendor_cookie_map, dict):
-            cookie_path = vendor_cookie_map.get(vendor)
+    vendor_cookie_map = video_download_cfg.get("cookie_paths")
+    if isinstance(vendor_cookie_map, dict):
+        candidates.extend(_normalize_cookie_list(vendor_cookie_map.get(vendor)))
 
-    cookie_path = cookie_path or platform_config.get("cookie_path") or video_download_cfg.get("cookie_path")
-    return resolve_repo_path(cookie_path) if cookie_path else None
+    fallback_cookie = platform_config.get("cookie_path") or video_download_cfg.get("cookie_path")
+    if fallback_cookie:
+        candidates.append(fallback_cookie)
+
+    conf_dir = resolve_repo_path("conf")
+    if os.path.isdir(conf_dir):
+        for pattern in _cookie_discovery_patterns(vendor):
+            candidates.extend(
+                os.path.relpath(path, root_dir)
+                for path in sorted(glob(os.path.join(conf_dir, pattern)))
+            )
+
+    resolved = []
+    seen = set()
+    for candidate in candidates:
+        path = resolve_repo_path(candidate) if candidate else None
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        if os.path.exists(path):
+            resolved.append(path)
+
+    return resolved
+
+
+def is_cookie_identity_blocked_error(exc):
+    message_parts = [str(exc)]
+
+    if hasattr(exc, "stderr") and exc.stderr:
+        message_parts.append(str(exc.stderr))
+
+    if hasattr(exc, "msg") and exc.msg:
+        message_parts.append(str(exc.msg))
+
+    text = "\n".join(message_parts).lower()
+    block_markers = [
+        "http error 429",
+        "too many requests",
+        "temporarily blocked",
+        "rate limit",
+        "rate-limit",
+        "challenge_required",
+        "checkpoint required",
+        "login required",
+        "sign in to",
+    ]
+    return any(marker in text for marker in block_markers)
 
 
 def upsert_index_record(index_path, record):
@@ -114,15 +185,39 @@ def main():
             "metadata_file": metadata_filename(vendor, extract_vendor_id(vendor, url)),
         }
 
-        cookie_path = resolve_cookie_path(platform_config, video_download_cfg, vendor)
+        cookie_paths = resolve_cookie_paths(platform_config, video_download_cfg, vendor)
 
-        if vendor == VENDOR_YOUTUBE:
-            result = download_youtube(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
+        if vendor == VENDOR_INSTAGRAM and not cookie_paths:
+            logger.error("Instagram downloader requires at least one valid cookie file in conf/ (e.g., conf/instagram.cookies.txt).")
+            sys.exit(1)
+
+        if vendor == VENDOR_YOUTUBE and not cookie_paths:
+            cookie_paths = [None]
+
+        last_error = None
+        for idx, cookie_path in enumerate(cookie_paths, start=1):
+            try:
+                if vendor == VENDOR_YOUTUBE:
+                    result = download_youtube(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                else:
+                    logger.info("Instagram download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
+                    result = download_instagram(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                break
+            except Exception as exc:
+                last_error = exc
+                has_more = idx < len(cookie_paths)
+                if has_more and is_cookie_identity_blocked_error(exc):
+                    logger.warning(
+                        "Download failed due to cookie/account block on %s. Rotating to next cookie (%s/%s).",
+                        cookie_path,
+                        idx + 1,
+                        len(cookie_paths),
+                    )
+                    continue
+                raise
         else:
-            if not cookie_path or not os.path.exists(cookie_path):
-                logger.error("Instagram downloader requires a valid cookie file path (e.g., conf/instagram.cookies.txt).")
-                sys.exit(1)
-            result = download_instagram(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
+            if last_error:
+                raise last_error
 
         upsert_index_record(
             os.path.join(metadata_dir, "index.jsonl"),
