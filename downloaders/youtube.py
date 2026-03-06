@@ -7,6 +7,61 @@ from lib.teton_utils import load_app_config
 from lib.vendor_router import VENDOR_YOUTUBE, extract_vendor_id, metadata_filename
 
 
+MIN_YT_DLP_VERSION = "2024.10.22"
+
+
+def _version_key(version_text):
+    pieces = []
+    for chunk in str(version_text).strip().split("."):
+        digits = ""
+        for ch in chunk:
+            if ch.isdigit():
+                digits += ch
+            else:
+                break
+        if not digits:
+            break
+        pieces.append(int(digits))
+    return tuple(pieces)
+
+
+def _ensure_supported_yt_dlp(min_version=MIN_YT_DLP_VERSION):
+    try:
+        result = subprocess.run(["yt-dlp", "--version"], capture_output=True, text=True, check=True)
+    except (FileNotFoundError, subprocess.CalledProcessError) as err:
+        raise RuntimeError(
+            "yt-dlp is missing or not executable. Install/repair yt-dlp before downloading."
+        ) from err
+
+    detected = (result.stdout or "").strip()
+    if not detected:
+        raise RuntimeError("Could not determine yt-dlp version from 'yt-dlp --version'.")
+
+    if _version_key(detected) < _version_key(min_version):
+        raise RuntimeError(
+            f"yt-dlp {detected} is too old. Minimum supported version is {min_version}. "
+            "Please update yt-dlp and rerun."
+        )
+
+
+def _run_yt_dlp(cmd):
+    """Run yt-dlp and gracefully fall back if remote components are unsupported."""
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as err:
+        stderr = (err.stderr or "").lower()
+        has_remote_components = "--remote-components" in cmd
+        unsupported = "no such option" in stderr or "unrecognized arguments" in stderr
+        if has_remote_components and unsupported and "--remote-components" in stderr:
+            fallback_cmd = [
+                part
+                for part in cmd
+                if part not in {"--remote-components", "ejs:github"}
+            ]
+            return subprocess.run(fallback_cmd, capture_output=True, text=True, check=True)
+        raise
+
+
 def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, video_download=None):
     vendor_id = extract_vendor_id(VENDOR_YOUTUBE, url)
     if not vendor_id:
@@ -14,6 +69,8 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
 
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(metadata_dir, exist_ok=True)
+
+    _ensure_supported_yt_dlp()
 
     output_template = os.path.join(output_dir, f"{VENDOR_YOUTUBE}__{vendor_id}.%(ext)s")
     metadata_path = os.path.join(metadata_dir, metadata_filename(VENDOR_YOUTUBE, vendor_id))
@@ -37,7 +94,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
 
     cmd.append(url)
 
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = _run_yt_dlp(cmd)
     info = None
     for line in reversed(result.stdout.splitlines()):
         line = line.strip()
