@@ -112,6 +112,8 @@ def is_cookie_identity_blocked_error(exc):
         "checkpoint required",
         "login required",
         "sign in to",
+        "instagram api is not granting access",
+        "instagram sent an empty media response",
     ]
     return any(marker in text for marker in block_markers)
 
