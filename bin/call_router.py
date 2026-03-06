@@ -16,6 +16,7 @@ sys.path.append(lib_path)
 # Import utilities
 from teton_utils import initialize_logging, load_config, load_app_config, resolve_repo_path
 from tasks_lib import find_url_json
+from vendor_router import detect_vendor, canonicalize_vendor_url
 
 # Map tasks to their respective scripts
 TASK_DISPATCH = {
@@ -118,10 +119,15 @@ def main():
             print("Usage: python call_router.py <url> [--dry-run]")
             sys.exit(1)
 
-        url = url_args[0].strip()
+        raw_url = url_args[0].strip()
+        vendor = detect_vendor(raw_url)
+        url = canonicalize_vendor_url(vendor, raw_url) if vendor else raw_url
 
         config = load_config()
         logger = initialize_logging()
+
+        if url != raw_url:
+            logger.info(f"🔗 Normalized URL for metadata matching: {raw_url} -> {url}")
         app_config = load_app_config()
         metadata_dir = resolve_repo_path(app_config.get("metadata_dir", "./metadata"))
         # Ensure metadata directory exists before searching index/files.
