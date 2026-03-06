@@ -47,6 +47,7 @@ call_download = _load_call_download_module()
 def test_cookie_block_error_detection_matches_common_markers():
     assert call_download.is_cookie_identity_blocked_error(RuntimeError("HTTP Error 429: Too Many Requests"))
     assert call_download.is_cookie_identity_blocked_error(RuntimeError("login required to view this content"))
+    assert call_download.is_cookie_identity_blocked_error(RuntimeError("Instagram sent an empty media response"))
     assert not call_download.is_cookie_identity_blocked_error(RuntimeError("network unavailable"))
 
 
