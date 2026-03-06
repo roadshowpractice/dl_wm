@@ -35,42 +35,50 @@ def execute_tasks(task_config, url, to_process, dry_run=False):
         script = TASK_DISPATCH.get(task)
 
         if not script:
-            logging.warning(f"No script defined for task: {task}")
+            logging.warning("No script defined for task: {}".format(task))
             continue
 
         # Use URL for download; use file path for all others
         task_input = url if task == "perform_download" else to_process
 
         if status is True:
-            logging.info(f"🚀 Running task: {task} -> {script}")
+            logging.info("🚀 Running task: {} -> {}".format(task, script))
             script_path = os.path.join(root_dir, script)
             if not os.path.isfile(script_path):
-                logging.warning(f"Skipping task {task}; script not found: {script_path}")
+                logging.warning(
+                    "Skipping task {}; script not found: {}".format(task, script_path)
+                )
                 continue
             if dry_run:
                 logging.info(
-                    f"[Dry Run] Would run: {sys.executable} {script_path} {task_input}"
+                    "[Dry Run] Would run: {} {} {}".format(
+                        sys.executable, script_path, task_input
+                    )
                 )
             else:
                 result = subprocess.run([sys.executable, script_path, task_input], cwd=root_dir)
                 if result.returncode != 0:
-                    logging.error(f"Task failed: {task} (exit code: {result.returncode})")
+                    logging.error(
+                        "Task failed: {} (exit code: {})".format(
+                            task, result.returncode
+                        )
+                    )
         elif isinstance(status, str):
-            logging.info(f"✅ Task already completed: {task} @ {status}")
+            logging.info("✅ Task already completed: {} @ {}".format(task, status))
         else:
-            logging.info(f"⏭️  Skipping task: {task}")
+            logging.info("⏭️  Skipping task: {}".format(task))
 
 
 def run_my_existing_downloader(url, logger):
     """Calls the known-good downloader script for the given URL."""
-    logger.info(f"📥 Initiating download for: {url}")
+    logger.info("📥 Initiating download for: {}".format(url))
 
     script_path = os.path.join(root_dir, "bin/call_download.py")
     logger.info("📡 Streaming downloader output...")
     result = subprocess.run([sys.executable, script_path, url], cwd=root_dir)
 
     if result.returncode != 0:
-        logger.error(f"Download script failed with exit code {result.returncode}.")
+        logger.error("Download script failed with exit code {}.".format(result.returncode))
         return False
 
     logger.info("✅ Downloader completed successfully.")
@@ -94,12 +102,14 @@ def wait_for_download_file(to_process, logger, timeout_seconds=90, poll_interval
         return False
 
     logger.info(
-        f"⏳ Found partial download(s) for {base_name}; waiting up to {timeout_seconds}s for final file..."
+        "⏳ Found partial download(s) for {}; waiting up to {}s for final file...".format(
+            base_name, timeout_seconds
+        )
     )
     deadline = time.time() + timeout_seconds
     while time.time() < deadline:
         if os.path.exists(to_process):
-            logger.info(f"✅ Finalized download detected: {to_process}")
+            logger.info("✅ Finalized download detected: {}".format(to_process))
             return True
         time.sleep(poll_interval)
 
@@ -127,7 +137,9 @@ def main():
         logger = initialize_logging()
 
         if url != raw_url:
-            logger.info(f"🔗 Normalized URL for metadata matching: {raw_url} -> {url}")
+            logger.info(
+                "🔗 Normalized URL for metadata matching: {} -> {}".format(raw_url, url)
+            )
         app_config = load_app_config()
         metadata_dir = resolve_repo_path(app_config.get("metadata_dir", "./metadata"))
         # Ensure metadata directory exists before searching index/files.
@@ -162,7 +174,7 @@ def main():
             logger.error("❌ No metadata found after attempted download.")
             return
 
-        print(f"Found in: {found_file}")
+        print("Found in: {}".format(found_file))
         visible_fields = {
             "video_title": found_data.get("video_title"),
             "video_date": found_data.get("video_date"),
@@ -179,7 +191,7 @@ def main():
             return
 
         if not wait_for_download_file(to_process, logger):
-            logger.error(f"Input file does not exist: {to_process}")
+            logger.error("Input file does not exist: {}".format(to_process))
             return
 
         default_tasks = found_data.get("default_tasks", {})
@@ -187,11 +199,11 @@ def main():
             logger.warning("No 'default_tasks' section found in metadata.")
             return
 
-        logger.info(f"🛠 Tasks to evaluate: {list(default_tasks.keys())}")
+        logger.info("🛠 Tasks to evaluate: {}".format(list(default_tasks.keys())))
         execute_tasks(default_tasks, url, to_process, dry_run)
 
     except Exception as e:
-        logging.error(f"Unexpected error in main(): {e}")
+        logging.error("Unexpected error in main(): {}".format(e))
         traceback.print_exc()
 
 
