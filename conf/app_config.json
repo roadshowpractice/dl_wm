@@ -41,7 +41,7 @@
     "text_pad": 10,
     "watermark_target_width": 0,
     "ffmpeg_preset": "veryfast",
-    "ffmpeg_crf": 23,
+    "ffmpeg_crf": 27,
     "ffmpeg_threads": 2
   },
   "transcription": {
