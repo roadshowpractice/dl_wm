@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+JSONL="${1:-clips_collated_renumbered.jsonl}"
+CLIP_DIR="${2:-clips}"
+
+# forensic metadata defaults
+URL="${3:-https://www.youtube.com/watch?v=Jw0Snx7x_jI}"
+UPLOAD_DATE="${4:-2026-01-07}"
+UPLOADER="${5:-We Are The People Utah}"
+
+FONT="${FONT:-$HOME/Desktop/dl_wm/fonts/Inter-Bold.otf}"
+WIDTH="${WIDTH:-1920}"
+HEIGHT="${HEIGHT:-1080}"
+FPS="${FPS:-30}"
+INTRO_SECONDS="${INTRO_SECONDS:-2}"
+
+if [[ ! -f "$JSONL" ]]; then
+  echo "ERROR: JSONL file not found: $JSONL" >&2
+  exit 1
+fi
+
+if [[ ! -f "$FONT" ]]; then
+  echo "ERROR: font not found: $FONT" >&2
+  exit 1
+fi
+
+mkdir -p "$CLIP_DIR"
+
+SRC="$(find . -maxdepth 1 -type f -name '*_watermarked.mp4' | sort | head -n1)"
+
+if [[ -z "${SRC:-}" ]]; then
+  echo "ERROR: no *_watermarked.mp4 found in $(pwd)" >&2
+  exit 1
+fi
+
+command -v jq >/dev/null 2>&1 || { echo "ERROR: jq not found"; exit 1; }
+command -v ffmpeg >/dev/null 2>&1 || { echo "ERROR: ffmpeg not found"; exit 1; }
+command -v ffprobe >/dev/null 2>&1 || { echo "ERROR: ffprobe not found"; exit 1; }
+
+echo "Source video:  $SRC"
+echo "Clip manifest: $JSONL"
+echo "Output dir:    $CLIP_DIR"
+echo "URL:           $URL"
+echo "Uploader:      $UPLOADER"
+echo "Upload date:   $UPLOAD_DATE"
+echo "Font:          $FONT"
+echo
+
+esc_drawtext() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//:/\\:}"
+  s="${s//\'/\\\'}"
+  s="${s//\[/\\[}"
+  s="${s//\]/\\]}"
+  s="${s//,/\\,}"
+  printf '%s' "$s"
+}
+
+count=0
+ok=0
+fail=0
+
+exec 3< "$JSONL"
+while IFS= read -r line <&3 || [[ -n "$line" ]]; do
+  [[ -z "${line//[[:space:]]/}" ]] && continue
+
+  if ! printf '%s\n' "$line" | jq . >/dev/null 2>&1; then
+    echo "[SKIP] invalid JSON: $line" >&2
+    fail=$((fail + 1))
+    continue
+  fi
+
+  count=$((count + 1))
+
+  id="$(printf '%s\n' "$line" | jq -r '.id // empty')"
+  start="$(printf '%s\n' "$line" | jq -r '.start // empty')"
+  end="$(printf '%s\n' "$line" | jq -r '.end // empty')"
+  caption="$(printf '%s\n' "$line" | jq -r '.caption // empty')"
+
+  if [[ -z "$id" || -z "$start" || -z "$end" ]]; then
+    echo "[$count] SKIP: missing id/start/end"
+    fail=$((fail + 1))
+    continue
+  fi
+
+  safe_id="$(printf '%s' "$id" | tr ' /' '__' | tr -cd '[:alnum:]_.-')"
+
+  clip_raw="$CLIP_DIR/${safe_id}__clip_raw.mp4"
+  intro_raw="$CLIP_DIR/${safe_id}__intro_raw.mp4"
+  clip_norm="$CLIP_DIR/${safe_id}__clip_norm.mp4"
+  intro_norm="$CLIP_DIR/${safe_id}__intro_norm.mp4"
+  concat_list="$CLIP_DIR/${safe_id}__concat.txt"
+  final="$CLIP_DIR/${safe_id}.mp4"
+
+  echo "[$count] Processing $safe_id"
+  echo "      start=$start end=$end"
+  [[ -n "$caption" ]] && echo "      caption=$caption"
+
+  if ! ffmpeg -nostdin -y \
+    -ss "$start" \
+    -to "$end" \
+    -i "$SRC" \
+    -c:v libx264 -preset slow -crf 18 \
+    -c:a aac -b:a 192k \
+    -movflags +faststart \
+    "$clip_raw" </dev/null
+  then
+    echo "[$count] FAILED during clip cut: $safe_id" >&2
+    fail=$((fail + 1))
+    echo
+    continue
+  fi
+
+  seg_text="$(esc_drawtext "SOURCE VIDEO SEGMENT")"
+  seg_val="$(esc_drawtext "$start - $end")"
+  url_text="$(esc_drawtext "SOURCE URL")"
+  url_val="$(esc_drawtext "$URL")"
+  up_text="$(esc_drawtext "UPLOADER")"
+  up_val="$(esc_drawtext "$UPLOADER")"
+  date_text="$(esc_drawtext "UPLOAD DATE")"
+  date_val="$(esc_drawtext "$UPLOAD_DATE")"
+  cap_text="$(esc_drawtext "CAPTION")"
+  cap_val="$(esc_drawtext "$caption")"
+
+  vf="drawtext=fontfile=${FONT}:text='${seg_text}':fontcolor=black:fontsize=42:x=(w-text_w)/2:y=120,\
+drawtext=fontfile=${FONT}:text='${seg_val}':fontcolor=black:fontsize=60:x=(w-text_w)/2:y=185,\
+drawtext=fontfile=${FONT}:text='${url_text}':fontcolor=black:fontsize=32:x=120:y=355,\
+drawtext=fontfile=${FONT}:text='${url_val}':fontcolor=black:fontsize=28:x=120:y=405,\
+drawtext=fontfile=${FONT}:text='${up_text}':fontcolor=black:fontsize=32:x=120:y=540,\
+drawtext=fontfile=${FONT}:text='${up_val}':fontcolor=black:fontsize=36:x=120:y=590,\
+drawtext=fontfile=${FONT}:text='${date_text}':fontcolor=black:fontsize=32:x=120:y=720,\
+drawtext=fontfile=${FONT}:text='${date_val}':fontcolor=black:fontsize=36:x=120:y=770"
+
+  if [[ -n "$caption" ]]; then
+    vf+=",drawtext=fontfile=${FONT}:text='${cap_text}':fontcolor=black:fontsize=32:x=120:y=900,\
+drawtext=fontfile=${FONT}:text='${cap_val}':fontcolor=black:fontsize=28:x=120:y=950"
+  fi
+
+  if ! ffmpeg -nostdin -y \
+    -f lavfi -i "color=c=white:s=${WIDTH}x${HEIGHT}:r=${FPS}:d=${INTRO_SECONDS}" \
+    -f lavfi -i "anullsrc=r=44100:cl=stereo" \
+    -vf "$vf" \
+    -c:v libx264 -pix_fmt yuv420p \
+    -c:a aac -b:a 192k \
+    -shortest \
+    "$intro_raw" </dev/null
+  then
+    echo "[$count] FAILED during intro card render: $safe_id" >&2
+    fail=$((fail + 1))
+    echo
+    continue
+  fi
+
+  if ! ffmpeg -nostdin -y \
+    -i "$intro_raw" \
+    -r "$FPS" \
+    -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
+    -c:a aac -b:a 192k \
+    -movflags +faststart \
+    "$intro_norm" </dev/null
+  then
+    echo "[$count] FAILED normalizing intro: $safe_id" >&2
+    fail=$((fail + 1))
+    echo
+    continue
+  fi
+
+  if ! ffmpeg -nostdin -y \
+    -i "$clip_raw" \
+    -r "$FPS" \
+    -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p \
+    -c:a aac -b:a 192k \
+    -movflags +faststart \
+    "$clip_norm" </dev/null
+  then
+    echo "[$count] FAILED normalizing clip: $safe_id" >&2
+    fail=$((fail + 1))
+    echo
+    continue
+  fi
+
+  printf "file '%s'\nfile '%s'\n" "${intro_norm##./}" "${clip_norm##./}" > "$concat_list"
+
+  if ffmpeg -nostdin -y \
+    -f concat -safe 0 \
+    -i "$concat_list" \
+    -c copy \
+    -movflags +faststart \
+    "$final" </dev/null
+  then
+    ok=$((ok + 1))
+    rm -f "$clip_raw" "$intro_raw" "$clip_norm" "$intro_norm" "$concat_list"
+    echo "      ✔ made $final"
+  else
+    echo "[$count] FAILED during concat: $safe_id" >&2
+    fail=$((fail + 1))
+  fi
+
+  echo
+done
+
+exec 3<&-
+
+echo "Done."
+echo "Total:   $count"
+echo "Success: $ok"
+echo "Failed:  $fail"
