@@ -17,6 +17,7 @@ set -euo pipefail
 # Examples:
 #   MODE=fast bin/render_clips_from_jsonl.sh outputs/2026-03-04/clips/clips.jsonl
 #   bin/render_clips_from_jsonl.sh outputs/2026-03-04/clips/clips.jsonl --video outputs/2026-03-04/input.mp4
+#   MODE=fast bin/render_clips_from_jsonl.sh outputs/2026-03-16/clips1.jsonl --video outputs/2026-03-16/youtube__9t4V6OfZO70_watermarked.mp4 --outdir outputs/2026-03-16/clips
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
   cat <<EOF
