@@ -13,6 +13,15 @@ from teton_utils import load_app_config
 logger = logging.getLogger(__name__)
 
 
+def _optional_int(value) -> Optional[int]:
+    try:
+        if value is None or value == "":
+            return None
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _format_command(template: str, input_path: str, output_path: str, output_format: str) -> list[str]:
     formatted = template.format(
         input=shlex.quote(input_path),
@@ -26,7 +35,18 @@ def _run_and_validate(cmd: list[str], output_path: str) -> bool:
     logger.warning("Running transcription command: %s", " ".join(cmd))
     result = subprocess.run(cmd, text=True)
     if result.returncode != 0:
-        logger.error("Transcription command failed with exit code %s", result.returncode)
+        if result.returncode < 0:
+            logger.error(
+                "Transcription command was terminated by signal %s.",
+                abs(result.returncode),
+            )
+            if abs(result.returncode) == 9:
+                logger.error(
+                    "Signal 9 usually indicates the OS killed the process (often out-of-memory). "
+                    "Try a shorter clip, a smaller Whisper model, or disable extract_audio/generate_srt for this run."
+                )
+        else:
+            logger.error("Transcription command failed with exit code %s", result.returncode)
         return False
 
     if not os.path.exists(output_path):
@@ -58,12 +78,19 @@ def _build_transcribe_media_command(
     input_path: str,
     output_path: str,
     output_format: str,
+    app_config: dict,
 ) -> tuple[list[str], str]:
     outdir = os.path.dirname(output_path) or "."
     stem = os.path.splitext(os.path.basename(input_path))[0]
     generated_output_path = os.path.join(outdir, f"{stem}.{output_format}")
 
     cmd = [python_bin, script_path, input_path, "--outdir", outdir]
+
+    tx_cfg = app_config.get("transcription", {}) if isinstance(app_config, dict) else {}
+    chunk_seconds = _optional_int(tx_cfg.get("chunk_seconds"))
+    if chunk_seconds is not None and chunk_seconds >= 0:
+        cmd.extend(["--chunk-seconds", str(chunk_seconds)])
+
     if output_format == "srt":
         cmd.extend(["--srt", "--no-txt"])
     elif output_format == "txt":
@@ -94,6 +121,7 @@ def _auto_transcribe_with_local_script(
         input_path,
         output_path,
         output_format,
+        app_config,
     )
 
     if not _run_and_validate(cmd, generated_output_path):
@@ -131,8 +159,20 @@ def run_transcription(input_path: str, output_path: str, output_format: str) -> 
             logger.error("Configured transcription module call failed: %s", exc)
             return False
 
-    if _auto_transcribe_with_local_script(input_path, output_path, output_format, app_config):
-        return True
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    local_script_path = os.path.join(repo_root, "bin", "transcribe_media.py")
+    local_script_exists = os.path.isfile(local_script_path)
+
+    if local_script_exists:
+        if _auto_transcribe_with_local_script(input_path, output_path, output_format, app_config):
+            return True
+
+        logger.error(
+            "Automatic transcription via %s failed. "
+            "Set transcription.caller_command/caller_module in conf/app_config.json to use a custom caller.",
+            local_script_path,
+        )
+        return False
 
     logger.error(
         "No transcription caller configured. Set transcription.caller_command or transcription.caller_module in conf/app_config.json, "

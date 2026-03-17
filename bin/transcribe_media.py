@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -83,6 +84,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="append",
         default=[],
         help="Path to index JSONL file (repeatable)",
+    )
+    parser.add_argument(
+        "--chunk-seconds",
+        type=int,
+        default=1200,
+        help="Chunk length in seconds for long-form transcription (default: 1200). Set 0 to disable chunking.",
     )
     return parser.parse_args(argv)
 
@@ -161,14 +168,120 @@ def resolve_source_url(input_path: Path, jsonl_paths: list[str]) -> str | None:
     return None
 
 
-def run_whisper(input_path: Path, model_name: str, language: str | None, task: str) -> dict[str, Any]:
+def media_duration_seconds(input_path: Path) -> float | None:
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(input_path),
+    ]
+    try:
+        completed = subprocess.run(cmd, check=True, capture_output=True, text=True)
+        raw = completed.stdout.strip()
+        if not raw:
+            return None
+        duration = float(raw)
+        return duration if duration > 0 else None
+    except Exception:
+        return None
+
+
+def _offset_segments(segments: list[dict[str, Any]], offset: float) -> list[dict[str, Any]]:
+    adjusted: list[dict[str, Any]] = []
+    for seg in segments:
+        copy_seg = dict(seg)
+        if "start" in copy_seg:
+            copy_seg["start"] = float(copy_seg["start"]) + offset
+        if "end" in copy_seg:
+            copy_seg["end"] = float(copy_seg["end"]) + offset
+        adjusted.append(copy_seg)
+    return adjusted
+
+
+def _extract_chunk_to_wav(input_path: Path, chunk_path: Path, start_seconds: float, duration_seconds: int) -> None:
+    cmd = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-ss",
+        str(start_seconds),
+        "-i",
+        str(input_path),
+        "-t",
+        str(duration_seconds),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        str(chunk_path),
+    ]
+    subprocess.run(cmd, check=True)
+
+
+def run_whisper(
+    input_path: Path,
+    model_name: str,
+    language: str | None,
+    task: str,
+    chunk_seconds: int,
+) -> dict[str, Any]:
     import whisper
 
     model = whisper.load_model(model_name)
     transcribe_kwargs: dict[str, Any] = {"task": task}
     if language:
         transcribe_kwargs["language"] = language
-    return model.transcribe(str(input_path), **transcribe_kwargs)
+
+    duration = media_duration_seconds(input_path)
+    if not duration or chunk_seconds <= 0 or duration <= chunk_seconds:
+        return model.transcribe(str(input_path), **transcribe_kwargs)
+
+    print(
+        f"Chunked transcription enabled: duration={duration:.1f}s, chunk_seconds={chunk_seconds}",
+        file=sys.stderr,
+    )
+
+    all_segments: list[dict[str, Any]] = []
+    text_parts: list[str] = []
+    language_detected: str | None = None
+
+    with tempfile.TemporaryDirectory(prefix="whisper_chunks_") as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        start = 0.0
+        chunk_index = 0
+
+        while start < duration:
+            chunk_path = tmpdir_path / f"chunk_{chunk_index:04d}.wav"
+            _extract_chunk_to_wav(input_path, chunk_path, start, chunk_seconds)
+
+            chunk_result = model.transcribe(str(chunk_path), **transcribe_kwargs)
+            chunk_segments = chunk_result.get("segments") or []
+            all_segments.extend(_offset_segments(chunk_segments, start))
+
+            chunk_text = str(chunk_result.get("text", "")).strip()
+            if chunk_text:
+                text_parts.append(chunk_text)
+
+            if not language_detected:
+                maybe_lang = chunk_result.get("language")
+                if isinstance(maybe_lang, str) and maybe_lang:
+                    language_detected = maybe_lang
+
+            start += chunk_seconds
+            chunk_index += 1
+
+    return {
+        "text": "\n".join(text_parts).strip(),
+        "segments": all_segments,
+        "language": language_detected,
+    }
 
 
 def format_timestamp(seconds: float, for_vtt: bool = False) -> str:
@@ -290,7 +403,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         source_url = resolve_source_url(input_path, args.jsonl)
 
-    result = run_whisper(input_path, args.model, args.language, args.task)
+    result = run_whisper(input_path, args.model, args.language, args.task, args.chunk_seconds)
     stem = input_path.stem
 
     if args.json:
