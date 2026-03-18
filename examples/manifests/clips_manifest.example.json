@@ -1,0 +1,19 @@
+{
+  "source_video": "outputs/run01/source_watermarked.mp4",
+  "clips": [
+    {
+      "clip_id": "clip01",
+      "start": 3599.0,
+      "end": 3730.0,
+      "path": "clips/clip01.mp4",
+      "comment": "Initial segment"
+    },
+    {
+      "clip_id": "clip02",
+      "start": 3732.0,
+      "end": 3790.0,
+      "path": "clips/clip02.mp4",
+      "comment": "Second segment"
+    }
+  ]
+}
