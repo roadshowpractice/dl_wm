@@ -1,0 +1,26 @@
+{
+  "title_image": "outputs/run01/monarch.png",
+  "title_seconds": 2.0,
+  "segments": [
+    {
+      "order": 1,
+      "clip_id": "clip01",
+      "path": "clips/clip01.mp4",
+      "comment": "Initial segment"
+    },
+    {
+      "order": 2,
+      "clip_id": "clip02",
+      "path": "clips/clip02.mp4",
+      "comment": "Second segment"
+    }
+  ],
+  "render": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "video_codec": "libx264",
+    "audio_codec": "aac",
+    "crf": 18
+  }
+}
