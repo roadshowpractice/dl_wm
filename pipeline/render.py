@@ -23,44 +23,45 @@ def main() -> None:
     work_dir = Path(args.work_dir)
     work_dir.mkdir(parents=True, exist_ok=True)
 
-    title_mp4 = work_dir / "title_card.mp4"
     black_mp4 = work_dir / "black_spacer.mp4"
     concat_txt = work_dir / "concat.txt"
+    concat_lines: list[str] = []
 
-    title_image = Path(manifest.title_image)
-    if not title_image.exists():
-        raise FileNotFoundError(f"title_image missing: {title_image}")
+    if manifest.title_image:
+        title_mp4 = work_dir / "title_card.mp4"
+        title_image = Path(manifest.title_image)
+        if not title_image.exists():
+            raise FileNotFoundError(f"title_image missing: {title_image}")
 
-    run_cmd(
-        [
-            "ffmpeg",
-            "-y",
-            "-loop",
-            "1",
-            "-i",
-            str(title_image),
-            "-f",
-            "lavfi",
-            "-i",
-            "anullsrc=r=44100:cl=stereo",
-            "-t",
-            str(manifest.title_seconds),
-            "-vf",
-            f"scale={manifest.render.width}:{manifest.render.height}:force_original_aspect_ratio=decrease,"
-            f"pad={manifest.render.width}:{manifest.render.height}:(ow-iw)/2:(oh-ih)/2:black,"
-            f"fps={manifest.render.fps},format=yuv420p",
-            "-c:v",
-            "libx264",
-            "-crf",
-            str(manifest.render.crf),
-            "-c:a",
-            "aac",
-            "-shortest",
-            str(title_mp4),
-        ]
-    )
-
-    concat_lines = [f"file '{title_mp4.resolve()}'"]
+        run_cmd(
+            [
+                "ffmpeg",
+                "-y",
+                "-loop",
+                "1",
+                "-i",
+                str(title_image),
+                "-f",
+                "lavfi",
+                "-i",
+                "anullsrc=r=44100:cl=stereo",
+                "-t",
+                str(manifest.title_seconds),
+                "-vf",
+                f"scale={manifest.render.width}:{manifest.render.height}:force_original_aspect_ratio=decrease,"
+                f"pad={manifest.render.width}:{manifest.render.height}:(ow-iw)/2:(oh-ih)/2:black,"
+                f"fps={manifest.render.fps},format=yuv420p",
+                "-c:v",
+                "libx264",
+                "-crf",
+                str(manifest.render.crf),
+                "-c:a",
+                "aac",
+                "-shortest",
+                str(title_mp4),
+            ]
+        )
+        concat_lines.append(f"file '{title_mp4.resolve()}'")
 
     if args.black_seconds > 0:
         run_cmd(

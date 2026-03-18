@@ -20,6 +20,9 @@ class ClipEntry:
 class ClipsManifest:
     source_video: str
     clips: list[ClipEntry]
+    title_image: str | None = None
+    title_seconds: float | None = None
+    render: RenderSettings | None = None
 
 
 @dataclass
@@ -42,8 +45,8 @@ class RenderSettings:
 
 @dataclass
 class FinalManifest:
-    title_image: str
-    title_seconds: float
+    title_image: str | None
+    title_seconds: float | None
     segments: list[FinalSegment]
     render: RenderSettings
 
@@ -111,43 +114,37 @@ def validate_clips_manifest(data: dict[str, Any]) -> ClipsManifest:
             raise ValueError(f"clips[{idx}] has end <= start")
         parsed.append(ClipEntry(clip_id=clip_id, start=start, end=end, path=path, comment=str(clip.get("comment", ""))))
 
-    return ClipsManifest(source_video=source_video, clips=parsed)
+    render_data = data.get("render")
+    render_settings: RenderSettings | None = None
+    if render_data is not None:
+        if not isinstance(render_data, dict):
+            raise ValueError("clips_manifest.render must be an object when provided")
+        render_settings = _parse_render_settings(render_data, "clips_manifest.render")
 
-
-def validate_final_manifest(data: dict[str, Any]) -> FinalManifest:
-    if not isinstance(data, dict):
-        raise ValueError("final_manifest must be a JSON object")
     title_image = data.get("title_image")
+    if title_image is not None and (not isinstance(title_image, str) or not title_image):
+        raise ValueError("clips_manifest.title_image must be a non-empty string when provided")
+
     title_seconds = data.get("title_seconds")
-    segments = data.get("segments")
-    render = data.get("render")
-    if not isinstance(title_image, str) or not title_image:
-        raise ValueError("final_manifest.title_image must be a non-empty string")
-    if not isinstance(title_seconds, (int, float)) or title_seconds <= 0:
-        raise ValueError("final_manifest.title_seconds must be positive")
-    if not isinstance(segments, list):
-        raise ValueError("final_manifest.segments must be a list")
-    if not isinstance(render, dict):
-        raise ValueError("final_manifest.render must be an object")
+    if title_seconds is not None:
+        if not isinstance(title_seconds, (int, float)) or title_seconds <= 0:
+            raise ValueError("clips_manifest.title_seconds must be positive when provided")
+        title_seconds = float(title_seconds)
+    elif title_image is not None:
+        title_seconds = 2.0
 
-    parsed_segments: list[FinalSegment] = []
-    for idx, seg in enumerate(segments, start=1):
-        if not isinstance(seg, dict):
-            raise ValueError(f"segments[{idx}] must be an object")
-        try:
-            parsed_segments.append(
-                FinalSegment(
-                    order=int(seg["order"]),
-                    clip_id=str(seg["clip_id"]),
-                    path=str(seg["path"]),
-                    comment=str(seg.get("comment", "")),
-                )
-            )
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ValueError(f"segments[{idx}] missing or invalid fields") from exc
+    return ClipsManifest(
+        source_video=source_video,
+        clips=parsed,
+        title_image=title_image,
+        title_seconds=title_seconds,
+        render=render_settings,
+    )
 
+
+def _parse_render_settings(render: dict[str, Any], label: str) -> RenderSettings:
     try:
-        render_settings = RenderSettings(
+        return RenderSettings(
             width=int(render["width"]),
             height=int(render["height"]),
             fps=int(render["fps"]),
@@ -156,13 +153,67 @@ def validate_final_manifest(data: dict[str, Any]) -> FinalManifest:
             crf=int(render["crf"]),
         )
     except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("render block has missing or invalid fields") from exc
+        raise ValueError(f"{label} has missing or invalid fields") from exc
 
+
+def validate_final_manifest(data: dict[str, Any]) -> FinalManifest:
+    if not isinstance(data, dict):
+        raise ValueError("final_manifest must be a JSON object")
+
+    if "segments" in data:
+        title_image = data.get("title_image")
+        if title_image is not None and (not isinstance(title_image, str) or not title_image):
+            raise ValueError("final_manifest.title_image must be a non-empty string when provided")
+
+        title_seconds = data.get("title_seconds")
+        if title_seconds is not None:
+            if not isinstance(title_seconds, (int, float)) or title_seconds <= 0:
+                raise ValueError("final_manifest.title_seconds must be positive when provided")
+            title_seconds = float(title_seconds)
+        elif title_image is not None:
+            title_seconds = 2.0
+
+        segments = data.get("segments")
+        render = data.get("render")
+        if not isinstance(segments, list):
+            raise ValueError("final_manifest.segments must be a list")
+        if not isinstance(render, dict):
+            raise ValueError("final_manifest.render must be an object")
+
+        parsed_segments: list[FinalSegment] = []
+        for idx, seg in enumerate(segments, start=1):
+            if not isinstance(seg, dict):
+                raise ValueError(f"segments[{idx}] must be an object")
+            try:
+                parsed_segments.append(
+                    FinalSegment(
+                        order=int(seg["order"]),
+                        clip_id=str(seg["clip_id"]),
+                        path=str(seg["path"]),
+                        comment=str(seg.get("comment", "")),
+                    )
+                )
+            except (KeyError, TypeError, ValueError) as exc:
+                raise ValueError(f"segments[{idx}] missing or invalid fields") from exc
+
+        render_settings = _parse_render_settings(render, "render block")
+        return FinalManifest(
+            title_image=title_image,
+            title_seconds=title_seconds,
+            segments=parsed_segments,
+            render=render_settings,
+        )
+
+    clips_manifest = validate_clips_manifest(data)
+    segments = [
+        FinalSegment(order=idx, clip_id=clip.clip_id, path=clip.path, comment=clip.comment)
+        for idx, clip in enumerate(clips_manifest.clips, start=1)
+    ]
     return FinalManifest(
-        title_image=title_image,
-        title_seconds=float(title_seconds),
-        segments=parsed_segments,
-        render=render_settings,
+        title_image=clips_manifest.title_image,
+        title_seconds=clips_manifest.title_seconds,
+        segments=segments,
+        render=clips_manifest.render or RenderSettings(),
     )
 
 
