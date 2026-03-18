@@ -24,6 +24,7 @@ class TranscriptionCallerTests(unittest.TestCase):
             input_path="/tmp/input/video.mp4",
             output_path="/tmp/output/requested.srt",
             output_format="srt",
+            app_config={},
         )
 
         self.assertEqual(
