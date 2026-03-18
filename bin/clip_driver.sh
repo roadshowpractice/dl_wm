@@ -8,10 +8,10 @@ BASE_DIR="$HOME/Desktop/dl_wm"
 WORK_DIR="$BASE_DIR/outputs/2026-03-16"
 
 VIDEO="youtube__9t4V6OfZO70_watermarked.mp4"
-JSONL="clips1_short.jsonl"
-FONT="/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
+JSONL="clips2.jsonl"
+FONT="./fonts/Inter-Bold.otf"
 
-RUN_NAME="redo_short"
+RUN_NAME="redo_short2"
 
 FPS=30
 CRF=18
