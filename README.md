@@ -127,3 +127,5 @@ Each stage is intentionally separate so you can inspect/edit outputs between ste
    ```
 
 Example manifests are in `examples/manifests/`.
+
+`bin/clip_driver.sh` now generates one `.srt` per extracted clip before burning those subtitles into each clip for the intro/render pipeline.
