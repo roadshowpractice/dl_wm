@@ -134,7 +134,13 @@ def main() -> None:
 
         updated.append(ClipEntry(clip_id=clip.clip_id, start=clip.start, end=clip.end, path=str(final_file), comment=clip.comment))
 
-    out_manifest = ClipsManifest(source_video=manifest.source_video, clips=updated)
+    out_manifest = ClipsManifest(
+        source_video=manifest.source_video,
+        clips=updated,
+        title_image=manifest.title_image,
+        title_seconds=manifest.title_seconds,
+        render=manifest.render,
+    )
     dump_json(Path(args.manifest_out), dataclass_to_dict(out_manifest))
 
     print("\nStage 2 complete (optional stage).")
