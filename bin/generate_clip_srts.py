@@ -3,16 +3,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
+
+SRT_TIMESTAMP_RE = re.compile(
+    r"^(?P<start>\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(?P<end>\d{2}:\d{2}:\d{2},\d{3})(?:\s+.*)?$"
+)
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate one clip-relative SRT per clip from clips JSONL and Whisper-like transcript JSON."
+        description="Generate one clip-relative SRT per clip from clips JSONL and either transcript JSON or a source SRT."
     )
     parser.add_argument("--clips-jsonl", required=True, help="Path to the clips JSONL file")
-    parser.add_argument("--transcript-json", required=True, help="Path to the Whisper-like transcript JSON file")
+    source_group = parser.add_mutually_exclusive_group(required=True)
+    source_group.add_argument("--transcript-json", help="Path to the Whisper-like transcript JSON file")
+    source_group.add_argument("--transcript-srt", help="Path to the source SRT subtitle file")
     parser.add_argument("--output-dir", required=True, help="Base output directory for subtitles/")
     return parser.parse_args()
 
@@ -53,7 +60,7 @@ def load_clips(jsonl_path: Path) -> list[dict[str, Any]]:
     return clips
 
 
-def load_transcript(transcript_path: Path) -> list[dict[str, Any]]:
+def load_transcript_json(transcript_path: Path) -> list[dict[str, Any]]:
     try:
         data = json.loads(transcript_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -77,6 +84,58 @@ def load_transcript(transcript_path: Path) -> list[dict[str, Any]]:
         text = str(segment.get("text", "")).strip()
         normalized.append({"start": start, "end": end, "text": text})
     return normalized
+
+
+def parse_srt_timestamp(raw: str) -> float:
+    hours_part, minutes_part, seconds_part = raw.split(":")
+    seconds_text, millis_text = seconds_part.split(",")
+    return (
+        int(hours_part) * 3600
+        + int(minutes_part) * 60
+        + int(seconds_text)
+        + int(millis_text) / 1000.0
+    )
+
+
+def load_transcript_srt(transcript_path: Path) -> list[dict[str, Any]]:
+    content = transcript_path.read_text(encoding="utf-8-sig")
+    blocks = re.split(r"\r?\n\s*\r?\n", content.strip())
+    normalized: list[dict[str, Any]] = []
+
+    for index, block in enumerate(blocks, start=1):
+        lines = [line.strip("\ufeff") for line in block.splitlines() if line.strip()]
+        if not lines:
+            continue
+
+        timestamp_index = 0
+        if len(lines) >= 2 and lines[0].isdigit():
+            timestamp_index = 1
+        if timestamp_index >= len(lines):
+            raise ValueError(f"SRT block {index} is missing a timestamp line")
+
+        timestamp_line = lines[timestamp_index]
+        match = SRT_TIMESTAMP_RE.match(timestamp_line)
+        if not match:
+            raise ValueError(f"SRT block {index} has an invalid timestamp line: {timestamp_line!r}")
+
+        start = parse_srt_timestamp(match.group("start"))
+        end = parse_srt_timestamp(match.group("end"))
+        if end <= start:
+            continue
+
+        text_lines = lines[timestamp_index + 1 :]
+        text = "\n".join(part.strip() for part in text_lines if part.strip())
+        normalized.append({"start": start, "end": end, "text": text})
+
+    return normalized
+
+
+def load_transcript(transcript_json: Path | None, transcript_srt: Path | None) -> list[dict[str, Any]]:
+    if transcript_json is not None:
+        return load_transcript_json(transcript_json)
+    if transcript_srt is not None:
+        return load_transcript_srt(transcript_srt)
+    raise ValueError("Either --transcript-json or --transcript-srt is required")
 
 
 def segments_for_clip(segments: list[dict[str, Any]], clip_start: float, clip_end: float) -> list[dict[str, Any]]:
@@ -128,16 +187,19 @@ def main() -> int:
     args = parse_args()
 
     clips_path = Path(args.clips_jsonl)
-    transcript_path = Path(args.transcript_json)
+    transcript_json = Path(args.transcript_json) if args.transcript_json else None
+    transcript_srt = Path(args.transcript_srt) if args.transcript_srt else None
     output_dir = Path(args.output_dir)
 
     if not clips_path.is_file():
         raise FileNotFoundError(f"Clips JSONL file not found: {clips_path}")
-    if not transcript_path.is_file():
-        raise FileNotFoundError(f"Transcript JSON file not found: {transcript_path}")
+    if transcript_json is not None and not transcript_json.is_file():
+        raise FileNotFoundError(f"Transcript JSON file not found: {transcript_json}")
+    if transcript_srt is not None and not transcript_srt.is_file():
+        raise FileNotFoundError(f"Transcript SRT file not found: {transcript_srt}")
 
     clips = load_clips(clips_path)
-    segments = load_transcript(transcript_path)
+    segments = load_transcript(transcript_json, transcript_srt)
 
     subtitles_dir = output_dir / "subtitles"
     subtitles_dir.mkdir(parents=True, exist_ok=True)
