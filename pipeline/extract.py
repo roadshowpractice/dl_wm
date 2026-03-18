@@ -29,6 +29,8 @@ def main() -> None:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    title_image: str | None = None
+    title_seconds: float | None = None
     manifest_clips: list[ClipEntry] = []
     for idx, row in enumerate(jobs, start=1):
         clip_id = str(row.get("clip_id") or row.get("id") or "").strip()
@@ -39,6 +41,23 @@ def main() -> None:
         if end <= start:
             raise ValueError(f"JSONL row {idx} has end <= start")
         comment = str(row.get("comment") or row.get("caption") or "")
+        row_title_image = row.get("title_image")
+        if row_title_image not in (None, ""):
+            row_title_image = str(row_title_image)
+            if title_image is None:
+                title_image = row_title_image
+            elif row_title_image != title_image:
+                raise ValueError("JSONL rows contain inconsistent title_image values")
+
+        row_title_seconds = row.get("title_seconds")
+        if row_title_seconds is not None:
+            row_title_seconds = float(row_title_seconds)
+            if row_title_seconds <= 0:
+                raise ValueError(f"JSONL row {idx} has non-positive title_seconds")
+            if title_seconds is None:
+                title_seconds = row_title_seconds
+            elif row_title_seconds != title_seconds:
+                raise ValueError("JSONL rows contain inconsistent title_seconds values")
 
         clip_path = output_dir / f"{clip_id}.mp4"
         run_cmd(
@@ -77,7 +96,12 @@ def main() -> None:
             )
         )
 
-    manifest = ClipsManifest(source_video=str(source_video), clips=manifest_clips)
+    manifest = ClipsManifest(
+        source_video=str(source_video),
+        clips=manifest_clips,
+        title_image=title_image,
+        title_seconds=title_seconds,
+    )
     dump_json(Path(args.manifest_out), dataclass_to_dict(manifest))
 
     print("\nStage 1 complete.")
