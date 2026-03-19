@@ -4,8 +4,24 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
+import sys
+import tempfile
 from pathlib import Path
 from typing import Any
+
+CURRENT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = CURRENT_DIR.parent
+LIB_DIR = ROOT_DIR / "lib"
+if str(LIB_DIR) not in sys.path:
+    sys.path.append(str(LIB_DIR))
+
+
+def run_transcription_for_clip(clip_path: Path, output_path: Path) -> bool:
+    from transcription_caller import run_transcription
+
+    return run_transcription(str(clip_path), str(output_path), "srt")
+
 
 SRT_TIMESTAMP_RE = re.compile(
     r"^(?P<start>\d{2}:\d{2}:\d{2},\d{3})\s*-->\s*(?P<end>\d{2}:\d{2}:\d{2},\d{3})(?:\s+.*)?$"
@@ -14,14 +30,39 @@ SRT_TIMESTAMP_RE = re.compile(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate one clip-relative SRT per clip from clips JSONL and either transcript JSON or a source SRT."
+        description="Generate clip-relative SRTs from clip metadata or generate a single SRT for one clip."
     )
-    parser.add_argument("--clips-jsonl", required=True, help="Path to the clips JSONL file")
-    source_group = parser.add_mutually_exclusive_group(required=True)
+    parser.add_argument("--clip-path", help="Path to a single extracted clip video")
+    parser.add_argument("--output", help="Output path for single-clip SRT generation")
+    parser.add_argument("--clips-jsonl", help="Path to the clips JSONL file")
+    source_group = parser.add_mutually_exclusive_group()
     source_group.add_argument("--transcript-json", help="Path to the Whisper-like transcript JSON file")
     source_group.add_argument("--transcript-srt", help="Path to the source SRT subtitle file")
-    parser.add_argument("--output-dir", required=True, help="Base output directory for subtitles/")
-    return parser.parse_args()
+    parser.add_argument("--output-dir", help="Base output directory for subtitles/")
+    args = parser.parse_args()
+
+    single_clip_mode = bool(args.clip_path or args.output)
+    batch_mode = bool(args.clips_jsonl or args.output_dir or args.transcript_json or args.transcript_srt)
+
+    if single_clip_mode:
+        if not args.clip_path or not args.output:
+            parser.error("--clip-path and --output are required together")
+        if args.clips_jsonl or args.output_dir or args.transcript_json or args.transcript_srt:
+            parser.error("single-clip mode does not accept batch transcript arguments")
+        return args
+
+    if batch_mode:
+        if not args.clips_jsonl:
+            parser.error("--clips-jsonl is required in batch mode")
+        if not args.output_dir:
+            parser.error("--output-dir is required in batch mode")
+        if not (args.transcript_json or args.transcript_srt):
+            parser.error("batch mode requires --transcript-json or --transcript-srt")
+        return args
+
+    parser.error(
+        "provide either --clip-path/--output for single-clip mode or --clips-jsonl with transcript source args for batch mode"
+    )
 
 
 def load_clips(jsonl_path: Path) -> list[dict[str, Any]]:
@@ -176,15 +217,42 @@ def write_srt(srt_path: Path, rows: list[dict[str, Any]]) -> None:
             if not text or end <= start:
                 continue
             handle.write(f"{written_index}\n")
-            handle.write(
-                f"{format_srt_timestamp(start)} --> {format_srt_timestamp(end)}\n"
-            )
+            handle.write(f"{format_srt_timestamp(start)} --> {format_srt_timestamp(end)}\n")
             handle.write(f"{text}\n\n")
             written_index += 1
 
 
+def generated_srt_path_for_clip(clip_path: Path, output_path: Path) -> Path:
+    return output_path.parent / f"{clip_path.stem}.srt"
+
+
+def generate_single_clip_srt(clip_path: Path, output_path: Path) -> Path:
+    if not clip_path.is_file():
+        raise FileNotFoundError(f"Clip file not found: {clip_path}")
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="clip_srt_") as tmpdir:
+        temp_output = Path(tmpdir) / output_path.name
+        if not run_transcription_for_clip(clip_path, temp_output):
+            raise RuntimeError(f"Failed to generate SRT for clip: {clip_path}")
+
+        candidate_paths = [temp_output, generated_srt_path_for_clip(clip_path, temp_output)]
+        actual_path = next((path for path in candidate_paths if path.is_file()), None)
+        if actual_path is None:
+            raise RuntimeError(f"Transcription completed without creating an SRT for clip: {clip_path}")
+
+        shutil.move(str(actual_path), str(output_path))
+
+    return output_path
+
+
 def main() -> int:
     args = parse_args()
+
+    if args.clip_path:
+        output_path = generate_single_clip_srt(Path(args.clip_path), Path(args.output))
+        print(f"wrote {output_path}")
+        return 0
 
     clips_path = Path(args.clips_jsonl)
     transcript_json = Path(args.transcript_json) if args.transcript_json else None
