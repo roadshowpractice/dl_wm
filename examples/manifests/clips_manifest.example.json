@@ -6,7 +6,8 @@
       "start": 3599.0,
       "end": 3730.0,
       "path": "clips/clip01.mp4",
-      "comment": "Initial segment"
+      "comment": "Initial segment",
+      "srt_path": "subtitles/clip01.srt"
     },
     {
       "clip_id": "clip02",

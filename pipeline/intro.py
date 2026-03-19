@@ -132,7 +132,16 @@ def main() -> None:
             ]
         )
 
-        updated.append(ClipEntry(clip_id=clip.clip_id, start=clip.start, end=clip.end, path=str(final_file), comment=clip.comment))
+        updated.append(
+            ClipEntry(
+                clip_id=clip.clip_id,
+                start=clip.start,
+                end=clip.end,
+                path=str(final_file),
+                comment=clip.comment,
+                srt_path=clip.srt_path,
+            )
+        )
 
     out_manifest = ClipsManifest(
         source_video=manifest.source_video,
