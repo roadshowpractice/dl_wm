@@ -6,14 +6,14 @@ set -euo pipefail
 ########################################
 
 BASE_DIR="${HOME}/Desktop/dl_wm"
-WORK_DIR="${BASE_DIR}/outputs/2026-03-16"
+WORK_DIR="${BASE_DIR}/outputs/2026-03-19"
 
-VIDEO_BASENAME="youtube__9t4V6OfZO70_watermarked.mp4"
-JSONL_BASENAME="clips2.jsonl"
+VIDEO_BASENAME="youtube__sIhu0UO99wQ_watermarked.mp4"
+JSONL_BASENAME="youtube__sIhu0UO99wQ_clips_version_b_longer_FINAL.jsonl"
 FONT_PATH="${BASE_DIR}/fonts/Inter-Bold.otf"
-TITLE_IMAGE_PATH="${TITLE_IMAGE_PATH:-${WORK_DIR}/monarch.png}"
+TITLE_IMAGE_PATH="${TITLE_IMAGE_PATH:-${WORK_DIR}/36.png}"
 
-RUN_NAME="redo_short3"
+RUN_NAME="redo_short4"
 
 ########################################
 # STAGE TOGGLES — OVERRIDABLE VIA ENV

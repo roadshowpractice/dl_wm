@@ -68,16 +68,18 @@ def _drawtext_filter(text, color, font, font_size, position, box=True):
 
 def _timestamp_filter(color, font, font_size, position, box=True):
     x_expr, y_expr = _position_to_expr(position)
+
     base = (
         f"drawtext=fontfile='{_ffmpeg_escape(font)}':"
-        "text='%{pts\\:gmtime\\:0\\:%H\\\\:%M\\\\:%S}':"
+        f"text='%{{pts\\:hms}}':"
         f"fontcolor={color}:fontsize={font_size}:"
         f"x={x_expr}:y={y_expr}"
     )
+
     if box:
         base += ":box=1:boxcolor=black@0.35:boxborderw=8"
-    return base
 
+    return base
 
 def add_watermark(params):
     """Add watermarks using ffmpeg drawtext for low-memory processing."""
