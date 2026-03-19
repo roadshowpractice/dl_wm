@@ -11,8 +11,9 @@ WORK_DIR="${BASE_DIR}/outputs/2026-03-16"
 VIDEO_BASENAME="youtube__9t4V6OfZO70_watermarked.mp4"
 JSONL_BASENAME="clips2.jsonl"
 FONT_PATH="${BASE_DIR}/fonts/Inter-Bold.otf"
+TITLE_IMAGE_PATH="${TITLE_IMAGE_PATH:-${WORK_DIR}/monarch.png}"
 
-RUN_NAME="redo_short2"
+RUN_NAME="redo_short3"
 
 ########################################
 # STAGE TOGGLES — OVERRIDABLE VIA ENV
@@ -20,6 +21,7 @@ RUN_NAME="redo_short2"
 
 DO_EXTRACT="${DO_EXTRACT:-1}"
 DO_SRT="${DO_SRT:-1}"
+DO_SHORT_SRT="${DO_SHORT_SRT:-1}"
 DO_BURN="${DO_BURN:-1}"
 DO_INTRO="${DO_INTRO:-0}"
 DO_RENDER="${DO_RENDER:-1}"
@@ -58,6 +60,11 @@ need_file() {
   [[ -f "$path" ]] || die "Missing file: $path"
 }
 
+need_dir() {
+  local path="$1"
+  [[ -d "$path" ]] || die "Missing directory: $path"
+}
+
 need_cmd() {
   local cmd="$1"
   command -v "$cmd" >/dev/null 2>&1 || die "Missing command: $cmd"
@@ -79,10 +86,12 @@ echo "BASE_DIR:       $BASE_DIR"
 echo "WORK_DIR:       $WORK_DIR"
 echo "VIDEO_PATH:     $VIDEO_PATH"
 echo "JSONL_PATH:     $JSONL_PATH"
+echo "TITLE_IMAGE:    $TITLE_IMAGE_PATH"
 echo "RUN_DIR:        $RUN_DIR"
 echo "CLIPS_DIR:      $CLIPS_DIR"
 echo "SUBTITLES_DIR:  $SUBTITLES_DIR"
 echo "SUBBED_DIR:     $SUBBED_DIR"
+echo "INTRO_DIR:      $INTRO_DIR"
 echo "MANIFEST_PATH:  $MANIFEST_PATH"
 echo "FINAL_VIDEO:    $FINAL_VIDEO_PATH"
 
@@ -116,7 +125,7 @@ if [[ "$DO_SRT" == "1" ]]; then
   rm -rf "$SUBTITLES_DIR"
   mkdir -p "$SUBTITLES_DIR"
 
-  python - <<'PY' "$MANIFEST_PATH" "$SUBTITLES_DIR"
+  python - <<'PY' "$MANIFEST_PATH" "$SUBTITLES_DIR" "$DO_SHORT_SRT"
 import json
 import subprocess
 import sys
@@ -124,6 +133,7 @@ from pathlib import Path
 
 manifest_path = Path(sys.argv[1])
 subtitles_dir = Path(sys.argv[2])
+do_short_srt = sys.argv[3] == "1"
 
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 clips = manifest.get("clips", [])
@@ -150,6 +160,18 @@ for clip in clips:
     ]
     print(" ".join(cmd))
     subprocess.run(cmd, check=True)
+
+    if do_short_srt:
+        tmp_srt = subtitles_dir / f"{clip_id}.short.srt"
+        short_cmd = [
+            sys.executable,
+            "bin/short_srt.py",
+            str(out_srt),
+            str(tmp_srt),
+        ]
+        print(" ".join(short_cmd))
+        subprocess.run(short_cmd, check=True)
+        tmp_srt.replace(out_srt)
 
     updated = dict(clip)
     updated["srt_path"] = str(out_srt)
@@ -215,8 +237,7 @@ for clip in clips:
 
     subtitle_filter = f"subtitles={shlex.quote(str(subtitle_path))}"
     if font_path.exists():
-        # Keep this conservative; exact styling can be tuned later.
-        subtitle_filter += f":force_style='FontName=Inter,FontSize=22'"
+        subtitle_filter += ":force_style='FontName=Inter,FontSize=22'"
 
     cmd = [
         "ffmpeg",
@@ -246,64 +267,61 @@ fi
 
 ########################################
 # STAGE 2 — INTRO
+# Placeholder for future per-clip forensic intro slates
 ########################################
 
 if [[ "$DO_INTRO" == "1" ]]; then
   log "STAGE 2 — INTRO"
-  echo "⚠️ Intro stage not implemented yet."
+  echo "⚠️ Per-clip intro stage not implemented yet."
 fi
 
 ########################################
 # STAGE 3 — RENDER FINAL
+# Uses old final-film flow so monarch.png returns
 ########################################
 
 if [[ "$DO_RENDER" == "1" ]]; then
   log "STAGE 3 — RENDER FINAL"
 
   need_file "$MANIFEST_PATH"
+  need_file "$TITLE_IMAGE_PATH"
+  need_dir "$SUBBED_DIR"
+  need_cmd jq
+  need_cmd readlink
 
-  python - <<'PY' "$MANIFEST_PATH" "$RUN_DIR" "$FINAL_VIDEO_PATH"
+  CLIPS_JSONL_FOR_FILM="${RUN_DIR}/clips_for_film.jsonl"
+
+  python - <<'PY' "$MANIFEST_PATH" "$CLIPS_JSONL_FOR_FILM"
 import json
-import subprocess
 import sys
 from pathlib import Path
 
 manifest_path = Path(sys.argv[1])
-run_dir = Path(sys.argv[2])
-final_video_path = Path(sys.argv[3])
+jsonl_path = Path(sys.argv[2])
 
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 clips = manifest.get("clips", [])
 if not isinstance(clips, list) or not clips:
     raise SystemExit("Manifest has no clips to render")
 
-concat_list_path = run_dir / "concat_list.txt"
 lines = []
 for clip in clips:
-    clip_path = Path(str(clip["path"]))
-    if not clip_path.exists():
-        raise SystemExit(f"Clip missing for final render: {clip_path}")
-    lines.append(f"file '{clip_path}'")
+    clip_id = clip.get("clip_id")
+    if not clip_id:
+        raise SystemExit(f"Clip missing clip_id: {clip}")
+    lines.append(json.dumps({"clip_id": clip_id}, ensure_ascii=False))
 
-concat_list_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-cmd = [
-    "ffmpeg",
-    "-y",
-    "-f",
-    "concat",
-    "-safe",
-    "0",
-    "-i",
-    str(concat_list_path),
-    "-c",
-    "copy",
-    str(final_video_path),
-]
-print(" ".join(cmd))
-subprocess.run(cmd, check=True)
-print(f"Final video written: {final_video_path}")
+jsonl_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+print(f"Wrote film JSONL: {jsonl_path}")
 PY
+
+  need_file "$CLIPS_JSONL_FOR_FILM"
+
+  bash bin/make_final_film.sh \
+    "$CLIPS_JSONL_FOR_FILM" \
+    "$SUBBED_DIR" \
+    "$FINAL_VIDEO_PATH" \
+    "$TITLE_IMAGE_PATH"
 
   need_file "$FINAL_VIDEO_PATH"
 fi
