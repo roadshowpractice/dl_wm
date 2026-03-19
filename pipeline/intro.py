@@ -3,7 +3,16 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .utils import ClipEntry, ClipsManifest, dataclass_to_dict, dump_json, ensure_ffmpeg, load_json, run_cmd, validate_clips_manifest
+from .utils import (
+    ClipEntry,
+    ClipsManifest,
+    dataclass_to_dict,
+    dump_json,
+    ensure_ffmpeg,
+    load_json,
+    run_cmd,
+    validate_clips_manifest,
+)
 
 
 def escape_drawtext(text: str) -> str:
@@ -32,17 +41,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
-    args = build_parser().parse_args()
-    ensure_ffmpeg()
-
-    font = Path(args.font)
-    if not font.exists():
-        raise FileNotFoundError(f"Font not found: {font}")
-
-    manifest = validate_clips_manifest(load_json(Path(args.manifest)))
-    out_dir = Path(args.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
+def render_intro_manifest(
+    manifest: ClipsManifest,
+    *,
+    output_dir: Path,
+    font: Path,
+    width: int = 1920,
+    height: int = 1080,
+    fps: int = 30,
+    intro_seconds: float = 2.0,
+    black_seconds: float = 0.0,
+) -> ClipsManifest:
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     updated: list[ClipEntry] = []
     for clip in manifest.clips:
@@ -50,10 +60,10 @@ def main() -> None:
         if not clip_src.exists():
             raise FileNotFoundError(f"Missing clip referenced by manifest: {clip_src}")
 
-        intro_file = out_dir / f"{clip.clip_id}__intro.mp4"
-        black_file = out_dir / f"{clip.clip_id}__black.mp4"
-        final_file = out_dir / f"{clip.clip_id}.mp4"
-        concat_file = out_dir / f"{clip.clip_id}__concat.txt"
+        intro_card_path = output_dir / f"{clip.clip_id}.card.mp4"
+        black_file = output_dir / f"{clip.clip_id}__black.mp4"
+        final_file = output_dir / f"{clip.clip_id}.mp4"
+        concat_file = output_dir / f"{clip.clip_id}__concat.txt"
 
         drawtext = (
             f"drawtext=fontfile={font}:text='{escape_drawtext(clip.comment or clip.clip_id)}':"
@@ -68,7 +78,7 @@ def main() -> None:
                 "-f",
                 "lavfi",
                 "-i",
-                f"color=c=white:s={args.width}x{args.height}:r={args.fps}:d={args.intro_seconds}",
+                f"color=c=white:s={width}x{height}:r={fps}:d={intro_seconds}",
                 "-f",
                 "lavfi",
                 "-i",
@@ -80,13 +90,13 @@ def main() -> None:
                 "-c:a",
                 "aac",
                 "-shortest",
-                str(intro_file),
+                str(intro_card_path),
             ]
         )
 
-        concat_lines = [f"file '{intro_file.name}'"]
+        concat_lines = [f"file '{intro_card_path.name}'"]
 
-        if args.black_seconds > 0:
+        if black_seconds > 0:
             run_cmd(
                 [
                     "ffmpeg",
@@ -94,7 +104,7 @@ def main() -> None:
                     "-f",
                     "lavfi",
                     "-i",
-                    f"color=c=black:s={args.width}x{args.height}:r={args.fps}:d={args.black_seconds}",
+                    f"color=c=black:s={width}x{height}:r={fps}:d={black_seconds}",
                     "-f",
                     "lavfi",
                     "-i",
@@ -143,18 +153,39 @@ def main() -> None:
             )
         )
 
-    out_manifest = ClipsManifest(
+    return ClipsManifest(
         source_video=manifest.source_video,
         clips=updated,
         title_image=manifest.title_image,
         title_seconds=manifest.title_seconds,
         render=manifest.render,
     )
+
+
+def main() -> None:
+    args = build_parser().parse_args()
+    ensure_ffmpeg()
+
+    font = Path(args.font)
+    if not font.exists():
+        raise FileNotFoundError(f"Font not found: {font}")
+
+    manifest = validate_clips_manifest(load_json(Path(args.manifest)))
+    out_manifest = render_intro_manifest(
+        manifest,
+        output_dir=Path(args.output_dir),
+        font=font,
+        width=args.width,
+        height=args.height,
+        fps=args.fps,
+        intro_seconds=args.intro_seconds,
+        black_seconds=args.black_seconds,
+    )
     dump_json(Path(args.manifest_out), dataclass_to_dict(out_manifest))
 
     print("\nStage 2 complete (optional stage).")
-    print(f"Rendered intro clips: {len(updated)}")
-    print(f"Output directory:     {out_dir}")
+    print(f"Rendered intro clips: {len(out_manifest.clips)}")
+    print(f"Output directory:     {args.output_dir}")
     print(f"Updated manifest:     {args.manifest_out}")
     print("Next: run Stage 3 when ready.")
 
