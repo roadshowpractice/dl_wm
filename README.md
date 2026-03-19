@@ -109,6 +109,12 @@ Each stage is intentionally separate so you can inspect/edit outputs between ste
    ```bash
    python -m pipeline.extract      --source-video outputs/<run>/<file>_watermarked.mp4      --clips-jsonl inputs/clips_first10min.jsonl      --output-dir clips      --manifest-out clips_manifest.json
    ```
+   `clips_manifest.json` keeps `path` as the active clip video path and may optionally include `srt_path` when later stages generate per-clip subtitles.
+
+   To generate a subtitle for a single extracted clip, use:
+   ```bash
+   python bin/generate_clip_srts.py --clip-path clips/clip01.mp4 --output subtitles/clip01.srt
+   ```
 
 2. **Stage 2 — Optional intro/cards**
    ```bash

@@ -14,6 +14,7 @@ class ClipEntry:
     end: float
     path: str
     comment: str = ""
+    srt_path: str | None = None
 
 
 @dataclass
@@ -112,7 +113,21 @@ def validate_clips_manifest(data: dict[str, Any]) -> ClipsManifest:
             raise ValueError(f"clips[{idx}] missing or invalid required fields") from exc
         if end <= start:
             raise ValueError(f"clips[{idx}] has end <= start")
-        parsed.append(ClipEntry(clip_id=clip_id, start=start, end=end, path=path, comment=str(clip.get("comment", ""))))
+        srt_path = clip.get("srt_path")
+        if srt_path is not None:
+            if not isinstance(srt_path, str) or not srt_path:
+                raise ValueError(f"clips[{idx}] has invalid srt_path")
+            srt_path = str(srt_path)
+        parsed.append(
+            ClipEntry(
+                clip_id=clip_id,
+                start=start,
+                end=end,
+                path=path,
+                comment=str(clip.get("comment", "")),
+                srt_path=srt_path,
+            )
+        )
 
     render_data = data.get("render")
     render_settings: RenderSettings | None = None
@@ -218,4 +233,16 @@ def validate_final_manifest(data: dict[str, Any]) -> FinalManifest:
 
 
 def dataclass_to_dict(value: Any) -> dict[str, Any]:
-    return asdict(value)
+    def _strip_optional_srt_path(item: Any) -> Any:
+        if isinstance(item, dict):
+            cleaned: dict[str, Any] = {}
+            for key, nested in item.items():
+                if key == "srt_path" and nested is None:
+                    continue
+                cleaned[key] = _strip_optional_srt_path(nested)
+            return cleaned
+        if isinstance(item, list):
+            return [_strip_optional_srt_path(nested) for nested in item]
+        return item
+
+    return _strip_optional_srt_path(asdict(value))
