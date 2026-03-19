@@ -13,7 +13,7 @@ JSONL_BASENAME="clips2.jsonl"
 FONT_PATH="${BASE_DIR}/fonts/Inter-Bold.otf"
 TITLE_IMAGE_PATH="${TITLE_IMAGE_PATH:-${WORK_DIR}/monarch.png}"
 
-RUN_NAME="redo_short3"
+RUN_NAME="redo_short4"
 
 ########################################
 # STAGE TOGGLES — OVERRIDABLE VIA ENV
