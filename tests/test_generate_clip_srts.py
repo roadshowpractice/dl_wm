@@ -3,6 +3,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 
 SPEC = importlib.util.spec_from_file_location("generate_clip_srts", Path("bin/generate_clip_srts.py"))
@@ -90,6 +91,35 @@ class GenerateClipSrtsTests(unittest.TestCase):
 
                     """
                 ).lstrip(),
+            )
+
+    def test_parse_args_accepts_single_clip_interface(self):
+        with patch("sys.argv", ["generate_clip_srts.py", "--clip-path", "clip.mp4", "--output", "clip.srt"]):
+            args = MODULE.parse_args()
+
+        self.assertEqual(args.clip_path, "clip.mp4")
+        self.assertEqual(args.output, "clip.srt")
+
+    def test_generate_single_clip_srt_supports_clip_path_and_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            clip_path = Path(tmp) / "clip01.mp4"
+            clip_path.write_bytes(b"video")
+            output_path = Path(tmp) / "nested" / "custom-name.srt"
+
+            def fake_run_transcription(input_path: str, requested_output_path: str, output_format: str) -> bool:
+                self.assertEqual(input_path, str(clip_path))
+                self.assertEqual(output_format, "srt")
+                generated = Path(requested_output_path).parent / f"{clip_path.stem}.srt"
+                generated.write_text("1\n00:00:00,000 --> 00:00:01,000\nhello\n", encoding="utf-8")
+                return True
+
+            with patch.object(MODULE, "run_transcription_for_clip", side_effect=lambda clip, output: fake_run_transcription(str(clip), str(output), "srt")):
+                written_path = MODULE.generate_single_clip_srt(clip_path, output_path)
+
+            self.assertEqual(written_path, output_path)
+            self.assertEqual(
+                output_path.read_text(encoding="utf-8"),
+                "1\n00:00:00,000 --> 00:00:01,000\nhello\n",
             )
 
 
