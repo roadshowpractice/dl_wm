@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+import json
+import os
 from pathlib import Path
 
 from .utils import ensure_ffmpeg, load_json, run_cmd, validate_final_manifest
@@ -13,6 +15,29 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--black-seconds", type=float, default=0.0, help="Optional black spacer between segments")
     parser.add_argument("--work-dir", default=".pipeline_tmp")
     return parser
+
+
+def prepare_make_final_film_inputs(manifest_path: Path, jsonl_path: Path, clip_dir: Path) -> tuple[Path, Path]:
+    manifest = validate_final_manifest(load_json(manifest_path))
+    clip_dir.mkdir(parents=True, exist_ok=True)
+
+    jsonl_lines: list[str] = []
+    ordered_segments = sorted(manifest.segments, key=lambda s: s.order)
+    for segment in ordered_segments:
+        src = Path(segment.path)
+        if not src.exists():
+            raise FileNotFoundError(f"Missing segment file: {src}")
+
+        dst = clip_dir / f"{segment.clip_id}.mp4"
+        if dst.exists() or dst.is_symlink():
+            dst.unlink()
+
+        os.symlink(src.resolve(), dst)
+        jsonl_lines.append(json.dumps({"clip_id": segment.clip_id}, ensure_ascii=False))
+
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    jsonl_path.write_text("\n".join(jsonl_lines) + "\n", encoding="utf-8")
+    return jsonl_path, clip_dir
 
 
 def main() -> None:
