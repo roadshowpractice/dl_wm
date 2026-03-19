@@ -13,7 +13,7 @@ JSONL_BASENAME="clips2.jsonl"
 FONT_PATH="${BASE_DIR}/fonts/Inter-Bold.otf"
 TITLE_IMAGE_PATH="${TITLE_IMAGE_PATH:-${WORK_DIR}/monarch.png}"
 
-RUN_NAME="redo_short4"
+RUN_NAME="redo_short3"
 
 ########################################
 # STAGE TOGGLES — OVERRIDABLE VIA ENV
@@ -21,9 +21,9 @@ RUN_NAME="redo_short4"
 
 DO_EXTRACT="${DO_EXTRACT:-1}"
 DO_SRT="${DO_SRT:-1}"
-DO_SHORT_SRT="${DO_SHORT_SRT:-1}"
+DO_SHORT_SRT="${DO_SHORT_SRT:-0}"
 DO_BURN="${DO_BURN:-1}"
-DO_INTRO="${DO_INTRO:-0}"
+DO_INTRO="${DO_INTRO:-1}"
 DO_RENDER="${DO_RENDER:-1}"
 
 ########################################
@@ -267,17 +267,136 @@ fi
 
 ########################################
 # STAGE 2 — INTRO
-# Placeholder for future per-clip forensic intro slates
+# Build per-clip break cards using each clip's "comment",
+# prepend the card to the current clip, and advance path.
 ########################################
 
 if [[ "$DO_INTRO" == "1" ]]; then
   log "STAGE 2 — INTRO"
-  echo "⚠️ Per-clip intro stage not implemented yet."
+
+  need_file "$MANIFEST_PATH"
+  rm -rf "$INTRO_DIR"
+  mkdir -p "$INTRO_DIR"
+
+  python - <<'PY' "$MANIFEST_PATH" "$INTRO_DIR" "$FONT_PATH"
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+intro_dir = Path(sys.argv[2])
+font_path = Path(sys.argv[3])
+
+WIDTH = 1920
+HEIGHT = 1080
+FPS = 30
+CARD_SECONDS = 2
+
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+clips = manifest.get("clips", [])
+if not isinstance(clips, list):
+    raise SystemExit("Manifest missing 'clips' list")
+
+updated_clips = []
+
+def escape_drawtext(text: str) -> str:
+    return (
+        text.replace("\\", "\\\\")
+            .replace(":", "\\:")
+            .replace("'", r"\'")
+            .replace("%", r"\%")
+            .replace(",", r"\,")
+            .replace("[", r"\[")
+            .replace("]", r"\]")
+    )
+
+for clip in clips:
+    clip_id = str(clip["clip_id"])
+    clip_path = Path(str(clip["path"]))
+    if not clip_path.exists():
+        raise SystemExit(f"Clip missing for intro stage: {clip_path}")
+
+    comment = str(clip.get("comment", "")).strip()
+    if not comment:
+        comment = clip_id
+
+    comment_escaped = escape_drawtext(comment)
+
+    card_mp4 = intro_dir / f"{clip_id}.card.mp4"
+    out_path = intro_dir / f"{clip_id}.mp4"
+
+    vf = (
+        f"color=c=white:s={WIDTH}x{HEIGHT}:r={FPS},"
+        f"drawtext="
+        f"fontfile='{font_path}':"
+        f"text='{comment_escaped}':"
+        f"fontcolor=black:"
+        f"fontsize=54:"
+        f"line_spacing=12:"
+        f"box=0:"
+        f"x=(w-text_w)/2:"
+        f"y=(h-text_h)/2,"
+        f"format=yuv420p"
+    )
+
+    cmd_card = [
+        "ffmpeg",
+        "-y",
+        "-f", "lavfi",
+        "-i", vf,
+        "-f", "lavfi",
+        "-i", "anullsrc=r=44100:cl=stereo",
+        "-t", str(CARD_SECONDS),
+        "-c:v", "libx264",
+        "-preset", "medium",
+        "-crf", "18",
+        "-c:a", "aac",
+        "-b:a", "192k",
+        "-shortest",
+        "-movflags", "+faststart",
+        str(card_mp4),
+    ]
+    print(" ".join(cmd_card))
+    subprocess.run(cmd_card, check=True)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        concat_list = Path(tmpdir) / "concat.txt"
+        concat_list.write_text(
+            f"file '{card_mp4.resolve()}'\n"
+            f"file '{clip_path.resolve()}'\n",
+            encoding="utf-8",
+        )
+
+        cmd_concat = [
+            "ffmpeg",
+            "-y",
+            "-f", "concat",
+            "-safe", "0",
+            "-i", str(concat_list),
+            "-c", "copy",
+            "-movflags", "+faststart",
+            str(out_path),
+        ]
+        print(" ".join(cmd_concat))
+        subprocess.run(cmd_concat, check=True)
+
+    updated = dict(clip)
+    updated["path"] = str(out_path)
+    updated_clips.append(updated)
+
+manifest["clips"] = updated_clips
+manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+print(f"Wrote updated manifest after intro stage: {manifest_path}")
+PY
+
+  need_file "$MANIFEST_PATH"
 fi
 
 ########################################
 # STAGE 3 — RENDER FINAL
-# Uses old final-film flow so monarch.png returns
+# Keep monarch.png front intro, then render current manifest paths
 ########################################
 
 if [[ "$DO_RENDER" == "1" ]]; then
@@ -285,41 +404,62 @@ if [[ "$DO_RENDER" == "1" ]]; then
 
   need_file "$MANIFEST_PATH"
   need_file "$TITLE_IMAGE_PATH"
-  need_dir "$SUBBED_DIR"
   need_cmd jq
   need_cmd readlink
 
   CLIPS_JSONL_FOR_FILM="${RUN_DIR}/clips_for_film.jsonl"
+  FILM_CLIP_DIR="${RUN_DIR}/film_clips"
 
-  python - <<'PY' "$MANIFEST_PATH" "$CLIPS_JSONL_FOR_FILM"
+  rm -rf "$FILM_CLIP_DIR"
+  mkdir -p "$FILM_CLIP_DIR"
+
+  python - <<'PY' "$MANIFEST_PATH" "$CLIPS_JSONL_FOR_FILM" "$FILM_CLIP_DIR"
 import json
+import os
 import sys
 from pathlib import Path
 
 manifest_path = Path(sys.argv[1])
 jsonl_path = Path(sys.argv[2])
+film_clip_dir = Path(sys.argv[3])
 
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 clips = manifest.get("clips", [])
 if not isinstance(clips, list) or not clips:
     raise SystemExit("Manifest has no clips to render")
 
-lines = []
+jsonl_lines = []
+
 for clip in clips:
     clip_id = clip.get("clip_id")
+    clip_path = clip.get("path")
     if not clip_id:
         raise SystemExit(f"Clip missing clip_id: {clip}")
-    lines.append(json.dumps({"clip_id": clip_id}, ensure_ascii=False))
+    if not clip_path:
+        raise SystemExit(f"Clip missing path: {clip}")
 
-jsonl_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    src = Path(str(clip_path))
+    if not src.exists():
+        raise SystemExit(f"Clip path missing for final render: {src}")
+
+    dst = film_clip_dir / f"{clip_id}.mp4"
+    if dst.exists() or dst.is_symlink():
+        dst.unlink()
+
+    os.symlink(src.resolve(), dst)
+    jsonl_lines.append(json.dumps({"clip_id": clip_id}, ensure_ascii=False))
+
+jsonl_path.write_text("\n".join(jsonl_lines) + "\n", encoding="utf-8")
 print(f"Wrote film JSONL: {jsonl_path}")
+print(f"Prepared film clip dir: {film_clip_dir}")
 PY
 
   need_file "$CLIPS_JSONL_FOR_FILM"
+  need_dir "$FILM_CLIP_DIR"
 
   bash bin/make_final_film.sh \
     "$CLIPS_JSONL_FOR_FILM" \
-    "$SUBBED_DIR" \
+    "$FILM_CLIP_DIR" \
     "$FINAL_VIDEO_PATH" \
     "$TITLE_IMAGE_PATH"
 
