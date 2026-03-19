@@ -109,7 +109,7 @@ Each stage is intentionally separate so you can inspect/edit outputs between ste
    ```bash
    python -m pipeline.extract      --source-video outputs/<run>/<file>_watermarked.mp4      --clips-jsonl inputs/clips_first10min.jsonl      --output-dir clips      --manifest-out clips_manifest.json
    ```
-   `clips_manifest.json` keeps `path` as the active clip video path and may optionally include `srt_path` when later stages generate per-clip subtitles.
+   `clips_manifest.json` keeps `path` as the active clip video path and may optionally include `srt_path` when later stages generate per-clip subtitles. After subtitle burn, `path` should point at the burned clip while `srt_path` remains optional/backward-compatible.
 
    To generate a subtitle for a single extracted clip, use:
    ```bash
@@ -118,14 +118,15 @@ Each stage is intentionally separate so you can inspect/edit outputs between ste
 
 2. **Stage 2 — Optional intro/cards**
    ```bash
-   python -m pipeline.intro      --manifest clips_manifest.json      --output-dir clips_with_intro      --manifest-out clips_with_intro_manifest.json      --font fonts/Inter-Bold.otf      --black-seconds 0.5
+   python -m pipeline.intro      --manifest clips_manifest.json      --output-dir clips_with_intro      --manifest-out clips_with_intro_manifest.json      --font fonts/Inter-Bold.otf      --intro-seconds 2.0
    ```
+   This stage builds a 2-second per-clip break card from each clip's `comment`, prepends that card to the clip currently referenced by `path`, and then advances `path` to the new intro+clip output.
 
 3. **Stage 3 — Build final manifest (critical checkpoint)**
    ```bash
    python -m pipeline.build_manifest      --clips-manifest clips_manifest.json      --title-image outputs/<run>/monarch.png      --output final_manifest.json
    ```
-   Review and manually edit `final_manifest.json` before render.
+   Review and manually edit `final_manifest.json` before render. The opening `monarch.png` title card still stays at the front of the finished film.
 
 4. **Stage 4 — Final render**
    ```bash
@@ -134,4 +135,4 @@ Each stage is intentionally separate so you can inspect/edit outputs between ste
 
 Example manifests are in `examples/manifests/`.
 
-`bin/clip_driver.sh` now generates one `.srt` per extracted clip before burning those subtitles into each clip for the intro/render pipeline.
+`bin/clip_driver.sh` now generates one `.srt` per extracted clip before burning those subtitles into each clip, then creates per-clip break cards from `comment`, and finally stages the manifest's current `path` outputs for `bin/make_final_film.sh` so the opening `monarch.png` title card remains intact without assuming clips live in `py_clips_subbed`.
