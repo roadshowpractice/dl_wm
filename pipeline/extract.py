@@ -17,6 +17,30 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def parse_timecode(value: object) -> float:
+    if isinstance(value, (int, float)):
+        return float(value)
+
+    s = str(value).strip()
+    if not s:
+        raise ValueError("empty time value")
+
+    try:
+        return float(s)
+    except ValueError:
+        pass
+
+    parts = s.split(":")
+    if len(parts) == 2:
+        mm, ss = parts
+        return int(mm) * 60 + float(ss)
+    if len(parts) == 3:
+        hh, mm, ss = parts
+        return int(hh) * 3600 + int(mm) * 60 + float(ss)
+
+    raise ValueError(f"invalid time value: {value!r}")
+
+
 def main() -> None:
     args = build_parser().parse_args()
     ensure_ffmpeg()
@@ -36,10 +60,24 @@ def main() -> None:
         clip_id = str(row.get("clip_id") or row.get("id") or "").strip()
         if not clip_id:
             raise ValueError(f"JSONL row {idx} missing clip_id/id")
-        start = float(row["start"])
-        end = float(row["end"])
+
+        try:
+            start = parse_timecode(row["start"])
+        except KeyError:
+            raise ValueError(f"JSONL row {idx} missing start") from None
+        except ValueError as exc:
+            raise ValueError(f"JSONL row {idx} has invalid start: {row.get('start')!r}") from exc
+
+        try:
+            end = parse_timecode(row["end"])
+        except KeyError:
+            raise ValueError(f"JSONL row {idx} missing end") from None
+        except ValueError as exc:
+            raise ValueError(f"JSONL row {idx} has invalid end: {row.get('end')!r}") from exc
+
         if end <= start:
             raise ValueError(f"JSONL row {idx} has end <= start")
+
         comment = str(row.get("comment") or row.get("caption") or "")
         row_title_image = row.get("title_image")
         if row_title_image not in (None, ""):

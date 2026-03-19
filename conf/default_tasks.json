@@ -3,8 +3,8 @@
     "perform_download": true,
     "apply_watermark": true,
     "extract_audio": false,
-    "generate_srt": true,
-    "burn_srt": true,
+    "generate_srt": false,
+    "burn_srt": false,
     "post_processed": false
   }
 }
