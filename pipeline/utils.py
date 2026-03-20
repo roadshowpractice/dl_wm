@@ -6,6 +6,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+AUDIO_SAMPLE_RATE = 48000
+AUDIO_CHANNEL_LAYOUT = "stereo"
+AUDIO_CHANNEL_COUNT = 2
+VIDEO_PIXEL_FORMAT = "yuv420p"
+VIDEO_CODEC = "libx264"
+AUDIO_CODEC = "aac"
+
 
 @dataclass
 class ClipEntry:
@@ -39,8 +46,8 @@ class RenderSettings:
     width: int = 1920
     height: int = 1080
     fps: int = 30
-    video_codec: str = "libx264"
-    audio_codec: str = "aac"
+    video_codec: str = VIDEO_CODEC
+    audio_codec: str = AUDIO_CODEC
     crf: int = 18
 
 
@@ -50,6 +57,28 @@ class FinalManifest:
     title_seconds: float | None
     segments: list[FinalSegment]
     render: RenderSettings
+
+
+def normalized_anullsrc() -> str:
+    return f"anullsrc=r={AUDIO_SAMPLE_RATE}:cl={AUDIO_CHANNEL_LAYOUT}"
+
+
+def normalized_audio_codec_args() -> list[str]:
+    return ["-c:a", AUDIO_CODEC, "-ar", str(AUDIO_SAMPLE_RATE), "-ac", str(AUDIO_CHANNEL_COUNT)]
+
+
+def normalized_video_codec_args(*, fps: int, crf: int | None = None, preset: str | None = None) -> list[str]:
+    args = ["-c:v", VIDEO_CODEC]
+    if preset is not None:
+        args.extend(["-preset", preset])
+    if crf is not None:
+        args.extend(["-crf", str(crf)])
+    args.extend(["-pix_fmt", VIDEO_PIXEL_FORMAT, "-r", str(fps)])
+    return args
+
+
+def normalized_concat_audio_filter() -> str:
+    return f"aresample={AUDIO_SAMPLE_RATE},aresample=async=1"
 
 
 def run_cmd(cmd: list[str]) -> None:

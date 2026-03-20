@@ -5,7 +5,16 @@ import json
 import os
 from pathlib import Path
 
-from .utils import ensure_ffmpeg, load_json, run_cmd, validate_final_manifest
+from .utils import (
+    ensure_ffmpeg,
+    load_json,
+    normalized_anullsrc,
+    normalized_audio_codec_args,
+    normalized_concat_audio_filter,
+    normalized_video_codec_args,
+    run_cmd,
+    validate_final_manifest,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -69,19 +78,15 @@ def main() -> None:
                 "-f",
                 "lavfi",
                 "-i",
-                "anullsrc=r=44100:cl=stereo",
+                normalized_anullsrc(),
                 "-t",
                 str(manifest.title_seconds),
                 "-vf",
                 f"scale={manifest.render.width}:{manifest.render.height}:force_original_aspect_ratio=decrease,"
                 f"pad={manifest.render.width}:{manifest.render.height}:(ow-iw)/2:(oh-ih)/2:black,"
                 f"fps={manifest.render.fps},format=yuv420p",
-                "-c:v",
-                "libx264",
-                "-crf",
-                str(manifest.render.crf),
-                "-c:a",
-                "aac",
+                *normalized_video_codec_args(fps=manifest.render.fps, crf=manifest.render.crf),
+                *normalized_audio_codec_args(),
                 "-shortest",
                 str(title_mp4),
             ]
@@ -100,11 +105,9 @@ def main() -> None:
                 "-f",
                 "lavfi",
                 "-i",
-                "anullsrc=r=44100:cl=stereo",
-                "-c:v",
-                "libx264",
-                "-c:a",
-                "aac",
+                normalized_anullsrc(),
+                *normalized_video_codec_args(fps=manifest.render.fps),
+                *normalized_audio_codec_args(),
                 "-shortest",
                 str(black_mp4),
             ]
@@ -131,16 +134,10 @@ def main() -> None:
             "0",
             "-i",
             str(concat_txt),
-            "-r",
-            str(manifest.render.fps),
-            "-c:v",
-            "libx264",
-            "-crf",
-            str(manifest.render.crf),
-            "-c:a",
-            "aac",
+            *normalized_video_codec_args(fps=manifest.render.fps, crf=manifest.render.crf),
+            *normalized_audio_codec_args(),
             "-af",
-            "aresample=async=1",
+            normalized_concat_audio_filter(),
             str(args.output),
         ]
     )

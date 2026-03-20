@@ -109,7 +109,11 @@ def _burn_subtitles(video_path: str, srt_path: str, app_config: dict) -> str:
         "-preset",
         preset,
         "-c:a",
-        "copy",
+        "aac",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
         output_video,
     ]
     result = subprocess.run(cmd)

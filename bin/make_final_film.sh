@@ -10,6 +10,9 @@ WIDTH="${WIDTH:-1920}"
 HEIGHT="${HEIGHT:-1080}"
 FPS="${FPS:-30}"
 TITLE_SECONDS="${TITLE_SECONDS:-2}"
+AUDIO_RATE="${AUDIO_RATE:-48000}"
+AUDIO_CHANNELS="${AUDIO_CHANNELS:-2}"
+AUDIO_LAYOUT="${AUDIO_LAYOUT:-stereo}"
 
 [[ -f "$JSONL" ]] || { echo "ERROR: JSONL not found: $JSONL" >&2; exit 1; }
 [[ -d "$CLIP_DIR" ]] || { echo "ERROR: clip dir not found: $CLIP_DIR" >&2; exit 1; }
@@ -40,11 +43,11 @@ echo
 # build the front title card
 ffmpeg -nostdin -y \
   -loop 1 -i "$TITLE_IMAGE" \
-  -f lavfi -i anullsrc=r=44100:cl=stereo \
+  -f lavfi -i "anullsrc=r=${AUDIO_RATE}:cl=${AUDIO_LAYOUT}" \
   -t "$TITLE_SECONDS" \
   -vf "scale=${WIDTH}:${HEIGHT}:force_original_aspect_ratio=decrease,pad=${WIDTH}:${HEIGHT}:(ow-iw)/2:(oh-ih)/2:black,fps=${FPS},format=yuv420p" \
-  -c:v libx264 -preset medium -crf 18 \
-  -c:a aac -b:a 192k \
+  -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -r "$FPS" \
+  -c:a aac -ar "$AUDIO_RATE" -ac "$AUDIO_CHANNELS" -b:a 192k \
   -shortest \
   -movflags +faststart \
   "$TITLE_MP4"
@@ -106,7 +109,9 @@ fi
 ffmpeg -nostdin -y \
   -f concat -safe 0 \
   -i "$TMP_LIST" \
-  -c copy \
+  -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -r "$FPS" \
+  -c:a aac -ar "$AUDIO_RATE" -ac "$AUDIO_CHANNELS" \
+  -af "aresample=${AUDIO_RATE},aresample=async=1" \
   -movflags +faststart \
   "$OUT"
 
