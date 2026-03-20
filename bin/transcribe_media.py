@@ -8,6 +8,7 @@ import json
 import os
 import platform
 import re
+import inspect
 import shutil
 import subprocess
 import sys
@@ -198,6 +199,19 @@ def _offset_segments(segments: list[dict[str, Any]], offset: float) -> list[dict
             copy_seg["start"] = float(copy_seg["start"]) + offset
         if "end" in copy_seg:
             copy_seg["end"] = float(copy_seg["end"]) + offset
+        words = copy_seg.get("words")
+        if isinstance(words, list):
+            adjusted_words: list[dict[str, Any]] = []
+            for word in words:
+                if not isinstance(word, dict):
+                    continue
+                copy_word = dict(word)
+                if "start" in copy_word:
+                    copy_word["start"] = float(copy_word["start"]) + offset
+                if "end" in copy_word:
+                    copy_word["end"] = float(copy_word["end"]) + offset
+                adjusted_words.append(copy_word)
+            copy_seg["words"] = adjusted_words
         adjusted.append(copy_seg)
     return adjusted
 
@@ -238,6 +252,18 @@ def run_whisper(
     transcribe_kwargs: dict[str, Any] = {"task": task}
     if language:
         transcribe_kwargs["language"] = language
+    try:
+        signature = inspect.signature(model.transcribe)
+    except (TypeError, ValueError):
+        signature = None
+    if signature and "word_timestamps" in signature.parameters:
+        transcribe_kwargs["word_timestamps"] = True
+        print("Whisper word_timestamps enabled for fine-grained subtitle timing.", file=sys.stderr)
+    else:
+        print(
+            "Whisper word_timestamps not supported by the installed transcription stack; using native segment timings.",
+            file=sys.stderr,
+        )
 
     duration = media_duration_seconds(input_path)
     if not duration or chunk_seconds <= 0 or duration <= chunk_seconds:
@@ -295,7 +321,7 @@ def format_timestamp(seconds: float, for_vtt: bool = False) -> str:
 
 def write_srt(segments: list[dict[str, Any]], output_path: Path) -> None:
     with output_path.open("w", encoding="utf-8") as handle:
-        for index, seg in enumerate(segments, start=1):
+        for index, seg in enumerate(srt_rows_from_segments(segments), start=1):
             start = format_timestamp(float(seg.get("start", 0.0)))
             end = format_timestamp(float(seg.get("end", 0.0)))
             text = str(seg.get("text", "")).strip()
@@ -310,6 +336,95 @@ def write_vtt(segments: list[dict[str, Any]], output_path: Path) -> None:
             end = format_timestamp(float(seg.get("end", 0.0)), for_vtt=True)
             text = str(seg.get("text", "")).strip()
             handle.write(f"{start} --> {end}\n{text}\n\n")
+
+
+def _normalize_word(word: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        start = float(word["start"])
+        end = float(word["end"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if end <= start:
+        return None
+    text = str(word.get("word", ""))
+    if not text.strip():
+        return None
+    return {"start": start, "end": end, "text": text}
+
+
+def _words_from_segments(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    words: list[dict[str, Any]] = []
+    for seg in segments:
+        raw_words = seg.get("words")
+        if not isinstance(raw_words, list):
+            continue
+        for word in raw_words:
+            if not isinstance(word, dict):
+                continue
+            normalized = _normalize_word(word)
+            if normalized is not None:
+                words.append(normalized)
+    return words
+
+
+def _join_word_texts(words: list[dict[str, Any]]) -> str:
+    return "".join(str(word["text"]) for word in words).strip()
+
+
+def srt_rows_from_segments(
+    segments: list[dict[str, Any]],
+    *,
+    max_words_per_caption: int = 3,
+    max_gap_seconds: float = 0.5,
+) -> list[dict[str, Any]]:
+    words = _words_from_segments(segments)
+    if not words:
+        rows: list[dict[str, Any]] = []
+        for seg in segments:
+            try:
+                start = float(seg["start"])
+                end = float(seg["end"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            text = str(seg.get("text", "")).strip()
+            if end <= start or not text:
+                continue
+            rows.append({"start": start, "end": end, "text": text})
+        return rows
+
+    rows: list[dict[str, Any]] = []
+    current: list[dict[str, Any]] = []
+
+    for word in words:
+        if current:
+            prev = current[-1]
+            gap = float(word["start"]) - float(prev["end"])
+            boundary_text = str(prev["text"]).strip()
+            if (
+                len(current) >= max_words_per_caption
+                or gap > max_gap_seconds
+                or boundary_text.endswith((".", "!", "?", ",", ";", ":"))
+            ):
+                rows.append(
+                    {
+                        "start": round(float(current[0]["start"]), 3),
+                        "end": round(float(current[-1]["end"]), 3),
+                        "text": _join_word_texts(current),
+                    }
+                )
+                current = []
+        current.append(word)
+
+    if current:
+        rows.append(
+            {
+                "start": round(float(current[0]["start"]), 3),
+                "end": round(float(current[-1]["end"]), 3),
+                "text": _join_word_texts(current),
+            }
+        )
+
+    return rows
 
 
 def build_minute_summary(segments: list[dict[str, Any]]) -> list[dict[str, Any]]:

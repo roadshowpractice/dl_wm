@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import tempfile
 import textwrap
 import unittest
@@ -13,6 +14,39 @@ SPEC.loader.exec_module(MODULE)
 
 
 class GenerateClipSrtsTests(unittest.TestCase):
+    def test_build_timing_entries_from_json_prefers_word_timestamps(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            transcript_path = Path(tmp) / "input.whisper.json"
+            transcript_path.write_text(
+                json.dumps(
+                    {
+                        "segments": [
+                            {
+                                "start": 1.0,
+                                "end": 2.0,
+                                "text": " Hello world",
+                                "words": [
+                                    {"word": " Hello", "start": 1.0, "end": 1.4},
+                                    {"word": " world", "start": 1.45, "end": 2.0},
+                                ],
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            source, entries = MODULE.build_timing_entries_from_json(transcript_path)
+
+            self.assertEqual(source, "word_timestamps")
+            self.assertEqual(
+                entries,
+                [
+                    {"start": 1.0, "end": 1.4, "text": " Hello"},
+                    {"start": 1.45, "end": 2.0, "text": " world"},
+                ],
+            )
+
     def test_load_transcript_srt_parses_multiline_blocks(self):
         with tempfile.TemporaryDirectory() as tmp:
             srt_path = Path(tmp) / "input.srt"
@@ -64,6 +98,23 @@ class GenerateClipSrtsTests(unittest.TestCase):
             clip_two,
             [
                 {"start": 1.0, "end": 2.5, "text": "Clip two only"},
+            ],
+        )
+
+    def test_word_rows_for_clip_keep_native_word_timing(self):
+        words = [
+            {"start": 10.0, "end": 10.3, "text": " Hello"},
+            {"start": 10.35, "end": 10.8, "text": " there"},
+            {"start": 11.7, "end": 12.0, "text": " friend"},
+        ]
+
+        rows = MODULE.word_rows_for_clip(words, 10.0, 12.0)
+
+        self.assertEqual(
+            rows,
+            [
+                {"start": 0.0, "end": 0.8, "text": "Hello there"},
+                {"start": 1.7, "end": 2.0, "text": "friend"},
             ],
         )
 
