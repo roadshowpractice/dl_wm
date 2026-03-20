@@ -21,7 +21,7 @@ RUN_NAME="redo_short7"
 
 DO_EXTRACT="${DO_EXTRACT:-1}"
 DO_SRT="${DO_SRT:-1}"
-DO_SHORT_SRT="${DO_SHORT_SRT:-1}"
+DO_SHORT_SRT="${DO_SHORT_SRT:-0}"
 DO_BURN="${DO_BURN:-1}"
 DO_INTRO="${DO_INTRO:-1}"
 DO_RENDER="${DO_RENDER:-1}"
@@ -125,7 +125,7 @@ if [[ "$DO_SRT" == "1" ]]; then
   rm -rf "$SUBTITLES_DIR"
   mkdir -p "$SUBTITLES_DIR"
 
-  python - <<'PY' "$MANIFEST_PATH" "$SUBTITLES_DIR" "$DO_SHORT_SRT"
+  python - <<'PY' "$MANIFEST_PATH" "$SUBTITLES_DIR" "$DO_SHORT_SRT" "$JSONL_PATH" "$RUN_DIR" "$CLIPS_DIR"
 import json
 import subprocess
 import sys
@@ -134,6 +134,9 @@ from pathlib import Path
 manifest_path = Path(sys.argv[1])
 subtitles_dir = Path(sys.argv[2])
 do_short_srt = sys.argv[3] == "1"
+clips_jsonl = Path(sys.argv[4])
+run_dir = Path(sys.argv[5])
+clips_dir = Path(sys.argv[6])
 
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 clips = manifest.get("clips", [])
@@ -141,6 +144,46 @@ if not isinstance(clips, list):
     raise SystemExit("Manifest missing 'clips' list")
 
 updated_clips = []
+
+transcript_json_path = None
+if clips_jsonl.exists():
+    transcript_candidates = []
+    with clips_jsonl.open("r", encoding="utf-8") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            candidate = row.get("source_whisper_json")
+            if isinstance(candidate, str) and candidate.strip():
+                transcript_candidates.append(candidate.strip())
+    unique_candidates = sorted(set(transcript_candidates))
+    if len(unique_candidates) == 1:
+        candidate_path = Path(unique_candidates[0]).expanduser()
+        if not candidate_path.is_absolute():
+            candidate_path = Path.cwd() / candidate_path
+        if candidate_path.exists():
+            transcript_json_path = candidate_path.resolve()
+            cmd = [
+                sys.executable,
+                "bin/generate_clip_srts.py",
+                "--clips-jsonl",
+                str(clips_jsonl),
+                "--transcript-json",
+                str(transcript_json_path),
+                "--output-dir",
+                str(run_dir),
+            ]
+            print(" ".join(cmd))
+            subprocess.run(cmd, check=True)
+            print(f"Subtitle generation source: transcript_json={transcript_json_path}")
+        else:
+            print(f"WARNING: source_whisper_json not found, falling back to per-clip transcription: {candidate_path}")
+    elif len(unique_candidates) > 1:
+        print("WARNING: multiple source_whisper_json values detected; falling back to per-clip transcription.")
+
+if do_short_srt:
+    print("WARNING: DO_SHORT_SRT=1 ignored because equal-time SRT slicing was removed to preserve true timing.")
 
 for clip in clips:
     clip_id = str(clip["clip_id"])
@@ -150,28 +193,20 @@ for clip in clips:
 
     out_srt = subtitles_dir / f"{clip_id}.srt"
 
-    cmd = [
-        sys.executable,
-        "bin/generate_clip_srts.py",
-        "--clip-path",
-        str(clip_path),
-        "--output",
-        str(out_srt),
-    ]
-    print(" ".join(cmd))
-    subprocess.run(cmd, check=True)
-
-    if do_short_srt:
-        tmp_srt = subtitles_dir / f"{clip_id}.short.srt"
-        short_cmd = [
+    if transcript_json_path is None:
+        cmd = [
             sys.executable,
-            "bin/short_srt.py",
+            "bin/generate_clip_srts.py",
+            "--clip-path",
+            str(clip_path),
+            "--output",
             str(out_srt),
-            str(tmp_srt),
         ]
-        print(" ".join(short_cmd))
-        subprocess.run(short_cmd, check=True)
-        tmp_srt.replace(out_srt)
+        print(" ".join(cmd))
+        subprocess.run(cmd, check=True)
+        print(f"Subtitle generation source for {clip_id}: fresh_clip_transcription")
+    elif not out_srt.exists():
+        raise SystemExit(f"Expected batch-generated subtitle missing for {clip_id}: {out_srt}")
 
     updated = dict(clip)
     updated["srt_path"] = str(out_srt)
@@ -197,7 +232,7 @@ if [[ "$DO_BURN" == "1" ]]; then
   rm -rf "$SUBBED_DIR"
   mkdir -p "$SUBBED_DIR"
 
-  python - <<'PY' "$MANIFEST_PATH" "$SUBTITLES_DIR" "$SUBBED_DIR" "$FONT_PATH"
+  python - <<'PY' "$MANIFEST_PATH" "$SUBTITLES_DIR" "$SUBBED_DIR" "$FONT_PATH" "$CLIPS_DIR"
 import json
 import shlex
 import subprocess
@@ -208,6 +243,7 @@ manifest_path = Path(sys.argv[1])
 subtitles_dir = Path(sys.argv[2])
 subbed_dir = Path(sys.argv[3])
 font_path = Path(sys.argv[4])
+clips_dir = Path(sys.argv[5])
 
 manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 clips = manifest.get("clips", [])
@@ -218,7 +254,8 @@ updated_clips = []
 
 for clip in clips:
     clip_id = str(clip["clip_id"])
-    clip_path = Path(str(clip["path"]))
+    canonical_clip_path = clips_dir / f"{clip_id}.mp4"
+    clip_path = canonical_clip_path if canonical_clip_path.exists() else Path(str(clip["path"]))
     if not clip_path.exists():
         raise SystemExit(f"Clip missing for burn stage: {clip_path}")
 
