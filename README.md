@@ -115,6 +115,7 @@ Each stage is intentionally separate so you can inspect/edit outputs between ste
    ```bash
    python bin/generate_clip_srts.py --clip-path clips/clip01.mp4 --output subtitles/clip01.srt
    ```
+   When a source Whisper JSON with word timestamps is available, `bin/generate_clip_srts.py` now slices clip-local subtitles directly from that fine-grained timing data. The old equal-time `short_srt.py` shortening path has been disabled because it produced synthetic timings that could lead the audio.
 
 2. **Stage 2 — Optional intro/cards**
    ```bash
@@ -135,4 +136,4 @@ Each stage is intentionally separate so you can inspect/edit outputs between ste
 
 Example manifests are in `examples/manifests/`.
 
-`bin/clip_driver.sh` now generates one `.srt` per extracted clip before burning those subtitles into each clip, then creates per-clip break cards from `comment`, and finally stages the manifest's current `path` outputs for `bin/make_final_film.sh` so the opening `monarch.png` title card remains intact without assuming clips live in `py_clips_subbed`.
+`bin/clip_driver.sh` now prefers the shared Whisper JSON referenced by `source_whisper_json` in the clip JSONL so each clip subtitle can be rebuilt from word timestamps (or native transcript segments when word timing is unavailable). On reruns, the burn stage reuses the canonical extracted clip in `py_clips/` to avoid stacking subtitle burns onto previously subbed outputs.

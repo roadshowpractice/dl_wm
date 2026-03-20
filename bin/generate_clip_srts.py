@@ -16,7 +16,6 @@ LIB_DIR = ROOT_DIR / "lib"
 if str(LIB_DIR) not in sys.path:
     sys.path.append(str(LIB_DIR))
 
-
 def run_transcription_for_clip(clip_path: Path, output_path: Path) -> bool:
     from transcription_caller import run_transcription
 
@@ -30,7 +29,7 @@ SRT_TIMESTAMP_RE = re.compile(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate clip-relative SRTs from clip metadata or generate a single SRT for one clip."
+        description="Generate clip-relative SRTs from transcript timing data or generate a single SRT for one clip."
     )
     parser.add_argument("--clip-path", help="Path to a single extracted clip video")
     parser.add_argument("--output", help="Output path for single-clip SRT generation")
@@ -101,7 +100,21 @@ def load_clips(jsonl_path: Path) -> list[dict[str, Any]]:
     return clips
 
 
-def load_transcript_json(transcript_path: Path) -> list[dict[str, Any]]:
+def _normalize_word(word: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        start = float(word["start"])
+        end = float(word["end"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if end <= start:
+        return None
+    text = str(word.get("word", ""))
+    if not text.strip():
+        return None
+    return {"start": start, "end": end, "text": text}
+
+
+def build_timing_entries_from_json(transcript_path: Path) -> tuple[str, list[dict[str, Any]]]:
     try:
         data = json.loads(transcript_path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -111,7 +124,8 @@ def load_transcript_json(transcript_path: Path) -> list[dict[str, Any]]:
     if not isinstance(segments, list):
         raise ValueError("Transcript JSON must contain a list at key 'segments'")
 
-    normalized: list[dict[str, Any]] = []
+    words: list[dict[str, Any]] = []
+    normalized_segments: list[dict[str, Any]] = []
     for index, segment in enumerate(segments, start=1):
         if not isinstance(segment, dict):
             raise ValueError(f"Transcript segment {index} must be a JSON object")
@@ -123,8 +137,20 @@ def load_transcript_json(transcript_path: Path) -> list[dict[str, Any]]:
         if end <= start:
             continue
         text = str(segment.get("text", "")).strip()
-        normalized.append({"start": start, "end": end, "text": text})
-    return normalized
+        if text:
+            normalized_segments.append({"start": start, "end": end, "text": text})
+        raw_words = segment.get("words")
+        if isinstance(raw_words, list):
+            for word in raw_words:
+                if not isinstance(word, dict):
+                    continue
+                normalized = _normalize_word(word)
+                if normalized is not None:
+                    words.append(normalized)
+
+    if words:
+        return "word_timestamps", words
+    return "native_segments", normalized_segments
 
 
 def parse_srt_timestamp(raw: str) -> float:
@@ -171,12 +197,74 @@ def load_transcript_srt(transcript_path: Path) -> list[dict[str, Any]]:
     return normalized
 
 
-def load_transcript(transcript_json: Path | None, transcript_srt: Path | None) -> list[dict[str, Any]]:
+def load_transcript(transcript_json: Path | None, transcript_srt: Path | None) -> tuple[str, list[dict[str, Any]]]:
     if transcript_json is not None:
-        return load_transcript_json(transcript_json)
+        return build_timing_entries_from_json(transcript_json)
     if transcript_srt is not None:
-        return load_transcript_srt(transcript_srt)
+        return "srt_segments", load_transcript_srt(transcript_srt)
     raise ValueError("Either --transcript-json or --transcript-srt is required")
+
+
+def _join_word_texts(words: list[dict[str, Any]]) -> str:
+    return "".join(str(word["text"]) for word in words).strip()
+
+
+def word_rows_for_clip(
+    words: list[dict[str, Any]],
+    clip_start: float,
+    clip_end: float,
+    *,
+    max_words_per_caption: int = 3,
+    max_gap_seconds: float = 0.5,
+) -> list[dict[str, Any]]:
+    clipped_words: list[dict[str, Any]] = []
+    for word in words:
+        word_start = float(word["start"])
+        word_end = float(word["end"])
+        if word_end <= clip_start or word_start >= clip_end:
+            continue
+        start = max(word_start, clip_start) - clip_start
+        end = min(word_end, clip_end) - clip_start
+        if end <= start:
+            continue
+        clipped_words.append({"start": round(start, 3), "end": round(end, 3), "text": str(word["text"])})
+
+    if not clipped_words:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    current: list[dict[str, Any]] = []
+
+    for word in clipped_words:
+        if current:
+            prev = current[-1]
+            gap = float(word["start"]) - float(prev["end"])
+            boundary_text = str(prev["text"]).strip()
+            if (
+                len(current) >= max_words_per_caption
+                or gap > max_gap_seconds
+                or boundary_text.endswith((".", "!", "?", ",", ";", ":"))
+            ):
+                rows.append(
+                    {
+                        "start": round(float(current[0]["start"]), 3),
+                        "end": round(float(current[-1]["end"]), 3),
+                        "text": _join_word_texts(current),
+                    }
+                )
+                current = []
+        current.append(word)
+
+    if current:
+        rows.append(
+            {
+                "start": round(float(current[0]["start"]), 3),
+                "end": round(float(current[-1]["end"]), 3),
+                "text": _join_word_texts(current),
+            }
+        )
+
+    return rows
 
 
 def segments_for_clip(segments: list[dict[str, Any]], clip_start: float, clip_end: float) -> list[dict[str, Any]]:
@@ -196,6 +284,17 @@ def segments_for_clip(segments: list[dict[str, Any]], clip_start: float, clip_en
 
         rows.append({"start": row_start, "end": row_end, "text": text})
     return rows
+
+
+def rows_for_clip(
+    timing_source: str,
+    entries: list[dict[str, Any]],
+    clip_start: float,
+    clip_end: float,
+) -> list[dict[str, Any]]:
+    if timing_source == "word_timestamps":
+        return word_rows_for_clip(entries, clip_start, clip_end)
+    return segments_for_clip(entries, clip_start, clip_end)
 
 
 def format_srt_timestamp(seconds: float) -> str:
@@ -267,17 +366,17 @@ def main() -> int:
         raise FileNotFoundError(f"Transcript SRT file not found: {transcript_srt}")
 
     clips = load_clips(clips_path)
-    segments = load_transcript(transcript_json, transcript_srt)
+    timing_source, entries = load_transcript(transcript_json, transcript_srt)
 
     subtitles_dir = output_dir / "subtitles"
     subtitles_dir.mkdir(parents=True, exist_ok=True)
 
     for clip in clips:
         clip_id = clip["clip_id"]
-        rows = segments_for_clip(segments, clip["start"], clip["end"])
+        rows = rows_for_clip(timing_source, entries, clip["start"], clip["end"])
         srt_path = subtitles_dir / f"{clip_id}.srt"
         write_srt(srt_path, rows)
-        print(f"wrote {srt_path}")
+        print(f"wrote {srt_path} (subtitle_source={timing_source}, rows={len(rows)})")
 
     return 0
 
