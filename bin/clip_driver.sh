@@ -9,11 +9,11 @@ BASE_DIR="${HOME}/Desktop/dl_wm"
 WORK_DIR="${BASE_DIR}/outputs/2026-03-19"
 
 VIDEO_BASENAME="youtube__sIhu0UO99wQ_watermarked.mp4"
-JSONL_BASENAME="youtube__sIhu0UO99wQ_clips_version_b_longer_FINAL.jsonl"
+JSONL_BASENAME="absurd.jsonl"
 FONT_PATH="${BASE_DIR}/fonts/Inter-Bold.otf"
-TITLE_IMAGE_PATH="${TITLE_IMAGE_PATH:-${WORK_DIR}/36.png}"
+TITLE_IMAGE_PATH="${TITLE_IMAGE_PATH:-${WORK_DIR}/child.png}"
 
-RUN_NAME="redo_short4"
+RUN_NAME="redo_short7"
 
 ########################################
 # STAGE TOGGLES — OVERRIDABLE VIA ENV
@@ -21,7 +21,7 @@ RUN_NAME="redo_short4"
 
 DO_EXTRACT="${DO_EXTRACT:-1}"
 DO_SRT="${DO_SRT:-1}"
-DO_SHORT_SRT="${DO_SHORT_SRT:-0}"
+DO_SHORT_SRT="${DO_SHORT_SRT:-1}"
 DO_BURN="${DO_BURN:-1}"
 DO_INTRO="${DO_INTRO:-1}"
 DO_RENDER="${DO_RENDER:-1}"
