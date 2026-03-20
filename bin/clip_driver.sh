@@ -284,7 +284,11 @@ for clip in clips:
         "-vf",
         subtitle_filter,
         "-c:a",
-        "copy",
+        "aac",
+        "-ar",
+        "48000",
+        "-ac",
+        "2",
         str(out_path),
     ]
     print(" ".join(cmd))

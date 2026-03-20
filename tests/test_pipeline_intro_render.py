@@ -4,9 +4,26 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from pipeline import render as render_module
 from pipeline.intro import render_intro_manifest
 from pipeline.render import prepare_make_final_film_inputs
-from pipeline.utils import ClipEntry, ClipsManifest, RenderSettings, dataclass_to_dict
+from pipeline.utils import (
+    ClipEntry,
+    ClipsManifest,
+    RenderSettings,
+    dataclass_to_dict,
+    normalized_anullsrc,
+    normalized_audio_codec_args,
+    normalized_concat_audio_filter,
+    normalized_video_codec_args,
+)
+
+
+def assert_has_subsequence(testcase: unittest.TestCase, cmd: list[str], expected: list[str]) -> None:
+    for idx in range(0, len(cmd) - len(expected) + 1):
+        if cmd[idx : idx + len(expected)] == expected:
+            return
+    testcase.fail(f"Expected subsequence {expected!r} in command {cmd!r}")
 
 
 class IntroStageTests(unittest.TestCase):
@@ -57,6 +74,48 @@ class IntroStageTests(unittest.TestCase):
                 f"file '{source_clip.resolve()}'",
                 (tmpdir / "intro" / "clip01__concat.txt").read_text(encoding="utf-8"),
             )
+
+    def test_render_intro_manifest_normalizes_audio_for_card_black_and_concat(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            source_clip = tmpdir / "subbed" / "clip01.mp4"
+            source_clip.parent.mkdir(parents=True, exist_ok=True)
+            source_clip.write_bytes(b"clip")
+
+            font_path = tmpdir / "font.ttf"
+            font_path.write_bytes(b"font")
+
+            manifest = ClipsManifest(
+                source_video="source.mp4",
+                clips=[ClipEntry(clip_id="clip01", start=0.0, end=5.0, path=str(source_clip), comment="Break")],
+            )
+
+            commands: list[list[str]] = []
+
+            def fake_run(cmd: list[str]) -> None:
+                commands.append(cmd)
+                Path(cmd[-1]).write_bytes(b"video")
+
+            with patch("pipeline.intro.run_cmd", side_effect=fake_run):
+                render_intro_manifest(
+                    manifest,
+                    output_dir=tmpdir / "intro",
+                    font=font_path,
+                    intro_seconds=2.0,
+                    black_seconds=1.0,
+                )
+
+            self.assertEqual(len(commands), 3)
+            card_cmd, black_cmd, concat_cmd = commands
+            self.assertIn(normalized_anullsrc(), card_cmd)
+            self.assertIn(normalized_anullsrc(), black_cmd)
+            assert_has_subsequence(self, card_cmd, normalized_video_codec_args(fps=30))
+            assert_has_subsequence(self, card_cmd, normalized_audio_codec_args())
+            assert_has_subsequence(self, black_cmd, normalized_video_codec_args(fps=30))
+            assert_has_subsequence(self, black_cmd, normalized_audio_codec_args())
+            assert_has_subsequence(self, concat_cmd, normalized_video_codec_args(fps=30))
+            assert_has_subsequence(self, concat_cmd, normalized_audio_codec_args())
+            assert_has_subsequence(self, concat_cmd, ["-af", normalized_concat_audio_filter()])
 
 
 class FinalRenderPrepTests(unittest.TestCase):
@@ -114,6 +173,76 @@ class FinalRenderPrepTests(unittest.TestCase):
             self.assertTrue((clip_dir / "clip-a.mp4").is_symlink())
             self.assertEqual((clip_dir / "clip-b.mp4").resolve(), first_clip.resolve())
             self.assertEqual((clip_dir / "clip-a.mp4").resolve(), second_clip.resolve())
+
+    def test_render_main_normalizes_title_clip_and_final_concat_audio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            title_image = tmpdir / "monarch.png"
+            title_image.write_bytes(b"image")
+            segment = tmpdir / "intro" / "clip01.mp4"
+            segment.parent.mkdir(parents=True, exist_ok=True)
+            segment.write_bytes(b"clip")
+            manifest_path = tmpdir / "final_manifest.json"
+            manifest_path.write_text(
+                json.dumps(
+                    {
+                        "title_image": str(title_image),
+                        "title_seconds": 2.0,
+                        "segments": [{"order": 1, "clip_id": "clip01", "path": str(segment), "comment": "first"}],
+                        "render": dataclass_to_dict(RenderSettings()),
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            commands: list[list[str]] = []
+
+            def fake_run(cmd: list[str]) -> None:
+                commands.append(cmd)
+                Path(cmd[-1]).parent.mkdir(parents=True, exist_ok=True)
+                Path(cmd[-1]).write_bytes(b"video")
+
+            argv = [
+                "pipeline.render",
+                "--manifest",
+                str(manifest_path),
+                "--output",
+                str(tmpdir / "final.mp4"),
+                "--black-seconds",
+                "1.0",
+                "--work-dir",
+                str(tmpdir / ".tmp"),
+            ]
+
+            with patch("pipeline.render.ensure_ffmpeg"), patch("pipeline.render.run_cmd", side_effect=fake_run), patch(
+                "sys.argv", argv
+            ):
+                render_module.main()
+
+            self.assertEqual(len(commands), 3)
+            title_cmd, black_cmd, concat_cmd = commands
+            self.assertIn(normalized_anullsrc(), title_cmd)
+            self.assertIn(normalized_anullsrc(), black_cmd)
+            assert_has_subsequence(self, title_cmd, normalized_video_codec_args(fps=30, crf=18))
+            assert_has_subsequence(self, title_cmd, normalized_audio_codec_args())
+            assert_has_subsequence(self, black_cmd, normalized_video_codec_args(fps=30))
+            assert_has_subsequence(self, black_cmd, normalized_audio_codec_args())
+            assert_has_subsequence(self, concat_cmd, normalized_video_codec_args(fps=30, crf=18))
+            assert_has_subsequence(self, concat_cmd, normalized_audio_codec_args())
+            assert_has_subsequence(self, concat_cmd, ["-af", normalized_concat_audio_filter()])
+
+
+class FfmpegNormalizationHelperTests(unittest.TestCase):
+    def test_normalization_helpers_lock_required_audio_video_invariants(self):
+        self.assertEqual(normalized_anullsrc(), "anullsrc=r=48000:cl=stereo")
+        self.assertEqual(normalized_audio_codec_args(), ["-c:a", "aac", "-ar", "48000", "-ac", "2"])
+        self.assertEqual(
+            normalized_video_codec_args(fps=30, crf=18),
+            ["-c:v", "libx264", "-crf", "18", "-pix_fmt", "yuv420p", "-r", "30"],
+        )
+        self.assertEqual(normalized_concat_audio_filter(), "aresample=48000,aresample=async=1")
 
 
 if __name__ == "__main__":

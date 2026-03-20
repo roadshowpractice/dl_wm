@@ -7,6 +7,9 @@ WIDTH="${3:-1920}"
 HEIGHT="${4:-1080}"
 FPS="${5:-30}"
 FONT="${6:-/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf}"
+AUDIO_RATE="${AUDIO_RATE:-48000}"
+AUDIO_CHANNELS="${AUDIO_CHANNELS:-2}"
+AUDIO_LAYOUT="${AUDIO_LAYOUT:-stereo}"
 
 if [[ ! -f "$JSONL" ]]; then
   echo "ERROR: JSONL not found: $JSONL" >&2
@@ -52,12 +55,15 @@ while IFS= read -r line || [[ -n "$line" ]]; do
 
   ffmpeg -nostdin -y \
     -f lavfi -i "color=c=white:s=${WIDTH}x${HEIGHT}:d=2:r=${FPS}" \
+    -f lavfi -i "anullsrc=r=${AUDIO_RATE}:cl=${AUDIO_LAYOUT}" \
     -vf "drawtext=fontfile=${FONT}:text='${line1}':fontcolor=black:fontsize=34:x=80:y=180,\
 drawtext=fontfile=${FONT}:text='${line2}':fontcolor=black:fontsize=34:x=80:y=280,\
 drawtext=fontfile=${FONT}:text='${line3}':fontcolor=black:fontsize=34:x=80:y=380,\
 drawtext=fontfile=${FONT}:text='${line4}':fontcolor=black:fontsize=40:x=80:y=500,\
 drawtext=fontfile=${FONT}:text='${line5}':fontcolor=black:fontsize=30:x=80:y=640" \
-    -c:v libx264 -pix_fmt yuv420p -t "$dur" \
+    -c:v libx264 -pix_fmt yuv420p -r "$FPS" -t "$dur" \
+    -c:a aac -ar "$AUDIO_RATE" -ac "$AUDIO_CHANNELS" \
+    -shortest \
     "$outfile"
 
   echo "Made $outfile"
