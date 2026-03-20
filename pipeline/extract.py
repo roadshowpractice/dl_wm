@@ -3,7 +3,18 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from .utils import ClipEntry, ClipsManifest, dataclass_to_dict, dump_json, ensure_ffmpeg, load_jsonl, run_cmd
+from .utils import (
+    ClipEntry,
+    ClipsManifest,
+    dataclass_to_dict,
+    dump_json,
+    ensure_ffmpeg,
+    load_jsonl,
+    normalized_audio_codec_args,
+    normalized_concat_audio_filter,
+    normalized_video_codec_args,
+    run_cmd,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -108,16 +119,10 @@ def main() -> None:
                 str(end),
                 "-i",
                 str(source_video),
-                "-r",
-                str(args.fps),
-                "-c:v",
-                "libx264",
-                "-crf",
-                str(args.crf),
-                "-c:a",
-                "aac",
+                *normalized_video_codec_args(fps=args.fps, crf=args.crf),
+                *normalized_audio_codec_args(),
                 "-af",
-                "aresample=async=1",
+                normalized_concat_audio_filter(),
                 "-movflags",
                 "+faststart",
                 str(clip_path),
