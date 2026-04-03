@@ -13,7 +13,7 @@ JSONL_BASENAME="absurd.jsonl"
 FONT_PATH="${BASE_DIR}/fonts/Inter-Bold.otf"
 TITLE_IMAGE_PATH="${TITLE_IMAGE_PATH:-${WORK_DIR}/child.png}"
 
-RUN_NAME="redo_short7"
+RUN_NAME="redo_short9"
 
 ########################################
 # STAGE TOGGLES — OVERRIDABLE VIA ENV
