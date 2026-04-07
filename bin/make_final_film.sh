@@ -2,9 +2,9 @@
 set -euo pipefail
 
 JSONL="${1:-clips1.jsonl}"
-CLIP_DIR="${2:-clips}"
+CLIP_DIR="${2:-short1}"
 OUT="${3:-final_film.mp4}"
-TITLE_IMAGE="${4:-monarch.png}"
+TITLE_IMAGE="${4:-jane.png}"
 
 WIDTH="${WIDTH:-1920}"
 HEIGHT="${HEIGHT:-1080}"
