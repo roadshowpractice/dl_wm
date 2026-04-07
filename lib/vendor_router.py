@@ -3,8 +3,10 @@ from urllib.parse import parse_qs, urlparse
 
 
 INSTAGRAM_HOSTS = {"instagram.com", "www.instagram.com"}
+FACEBOOK_HOSTS = {"facebook.com", "www.facebook.com", "m.facebook.com", "fb.watch"}
 YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}
 VENDOR_INSTAGRAM = "instagram"
+VENDOR_FACEBOOK = "facebook"
 VENDOR_YOUTUBE = "youtube"
 
 
@@ -20,6 +22,16 @@ def detect_vendor(url: str):
     if host in INSTAGRAM_HOSTS:
         if path.startswith("reel/") or path.startswith("reels/") or path.startswith("p/"):
             return VENDOR_INSTAGRAM
+
+    if host in FACEBOOK_HOSTS:
+        if (
+            host == "fb.watch"
+            or path.startswith("watch/")
+            or path.startswith("reel/")
+            or path.startswith("share/v/")
+            or "/videos/" in path
+        ):
+            return VENDOR_FACEBOOK
 
     if host in YOUTUBE_HOSTS:
         if host == "youtu.be":
@@ -41,6 +53,28 @@ def extract_vendor_id(vendor: str, url: str):
     if vendor == VENDOR_INSTAGRAM:
         match = re.match(r"^(?:reel|reels|p)/([^/?#]+)/?", path)
         return match.group(1) if match else None
+
+    if vendor == VENDOR_FACEBOOK:
+        host = (parsed.hostname or "").lower()
+        if host == "fb.watch":
+            token = path.split("/")[0] if path else ""
+            return token or None
+
+        for pattern in [
+            r"^reel/([^/?#]+)/?",
+            r"^watch/\?v=([^/?#&]+)",
+            r"^share/v/([^/?#]+)/?",
+            r"^.+/videos/([^/?#]+)/?",
+            r"^videos/([^/?#]+)/?",
+        ]:
+            if pattern.startswith("^watch/"):
+                video_id = parse_qs(parsed.query).get("v", [None])[0]
+                if video_id:
+                    return video_id
+                continue
+            match = re.match(pattern, path)
+            if match:
+                return match.group(1)
 
     if vendor == VENDOR_YOUTUBE:
         host = (parsed.hostname or "").lower()
@@ -68,6 +102,12 @@ def infer_kind(vendor: str, url: str):
             return "reel"
         if path.startswith("p/"):
             return "post"
+
+    if vendor == VENDOR_FACEBOOK:
+        if path.startswith("reel/"):
+            return "reel"
+        if path.startswith("watch") or "/videos/" in path or path.startswith("share/v/"):
+            return "video"
 
     if vendor == VENDOR_YOUTUBE:
         if path.startswith("shorts/"):

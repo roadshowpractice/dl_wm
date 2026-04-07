@@ -18,7 +18,9 @@ from vendor_router import (
     extract_vendor_id,
     infer_kind,
     metadata_filename,
+    VENDOR_FACEBOOK,
     VENDOR_INSTAGRAM,
+    VENDOR_YOUTUBE,
     format_shortcode,
 )
 
@@ -91,11 +93,15 @@ def extract_metadata(params):
     metadata_dir = resolve_repo_path(app_config.get("metadata_dir", "./metadata"))
     os.makedirs(metadata_dir, exist_ok=True)
 
-    app_cookie_path = (
-        app_config.get("video_download", {}).get("cookie_path")
-        if isinstance(app_config.get("video_download"), dict)
-        else None
-    )
+    vendor = detect_vendor(url)
+    video_download_cfg = app_config.get("video_download", {}) if isinstance(app_config.get("video_download"), dict) else {}
+    app_cookie_path = video_download_cfg.get("cookie_path")
+    if vendor == VENDOR_INSTAGRAM:
+        app_cookie_path = video_download_cfg.get("instagram_cookie_path") or app_cookie_path
+    elif vendor == VENDOR_FACEBOOK:
+        app_cookie_path = video_download_cfg.get("facebook_cookie_path") or app_cookie_path
+    elif vendor == VENDOR_YOUTUBE:
+        app_cookie_path = video_download_cfg.get("youtube_cookie_path") or app_cookie_path
     resolved_cookie_path = cookie_path or app_cookie_path
     if resolved_cookie_path:
         resolved_cookie_path = resolve_repo_path(resolved_cookie_path)
@@ -124,7 +130,7 @@ def extract_metadata(params):
                 url, download=False
             )  # Extract metadata without downloading
 
-            vendor = detect_vendor(url)
+            vendor = vendor or detect_vendor(url)
             vendor_id = (
                 extract_vendor_id(vendor, url)
                 or info_dict.get("id")
