@@ -3,7 +3,7 @@ import json
 import os
 from datetime import datetime
 
-from lib.tasks_lib import load_default_tasks
+from tasks_lib import load_default_tasks
 
 
 def _json_fallback(value):
