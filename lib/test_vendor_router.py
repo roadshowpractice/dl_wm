@@ -47,6 +47,29 @@ class VendorRouterTests(unittest.TestCase):
         self.assertEqual(detect_vendor("https://youtu.be/dQw4w9WgXcQ"), "youtube")
         self.assertEqual(detect_vendor("https://www.youtube.com/shorts/dQw4w9WgXcQ"), "youtube")
 
+    def test_detect_facebook_vendor(self):
+        self.assertEqual(detect_vendor("https://www.facebook.com/reel/123456789012345/"), "facebook")
+        self.assertEqual(detect_vendor("https://www.facebook.com/share/v/19G7Jx2x2n/"), "facebook")
+        self.assertEqual(detect_vendor("https://fb.watch/xyzAbcD/"), "facebook")
+
+    def test_extract_facebook_id(self):
+        self.assertEqual(
+            extract_vendor_id("facebook", "https://www.facebook.com/reel/123456789012345/"),
+            "123456789012345",
+        )
+        self.assertEqual(
+            extract_vendor_id("facebook", "https://www.facebook.com/watch/?v=998877665544332"),
+            "998877665544332",
+        )
+        self.assertEqual(
+            extract_vendor_id("facebook", "https://www.facebook.com/share/v/19G7Jx2x2n/"),
+            "19G7Jx2x2n",
+        )
+
+    def test_infer_kind_facebook(self):
+        self.assertEqual(infer_kind("facebook", "https://www.facebook.com/reel/123456789012345/"), "reel")
+        self.assertEqual(infer_kind("facebook", "https://www.facebook.com/watch/?v=998877665544332"), "video")
+
 
     def test_canonicalize_youtube_shorts_url(self):
         self.assertEqual(

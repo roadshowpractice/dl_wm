@@ -14,6 +14,7 @@ def _load_call_download_module():
 
     vendor_router = types.ModuleType("vendor_router")
     vendor_router.detect_vendor = lambda *_args, **_kwargs: "instagram"
+    vendor_router.VENDOR_FACEBOOK = "facebook"
     vendor_router.VENDOR_INSTAGRAM = "instagram"
     vendor_router.VENDOR_YOUTUBE = "youtube"
     vendor_router.extract_vendor_id = lambda *_args, **_kwargs: "id"
@@ -32,6 +33,10 @@ def _load_call_download_module():
     yt = types.ModuleType("downloaders.youtube")
     yt.download = lambda *_args, **_kwargs: {}
     sys.modules["downloaders.youtube"] = yt
+
+    fb = types.ModuleType("downloaders.facebook")
+    fb.download = lambda *_args, **_kwargs: {}
+    sys.modules["downloaders.facebook"] = fb
 
     module_path = pathlib.Path(__file__).resolve().parents[1] / "bin" / "call_download.py"
     spec = importlib.util.spec_from_file_location("call_download_module", module_path)
@@ -82,3 +87,26 @@ def test_resolve_cookie_paths_prefers_hierarchy_then_discovers_conf_files(tmp_pa
     assert resolved[0] == str(first)
     assert resolved[1] == str(second)
     assert str(discovered) in resolved
+
+
+def test_resolve_cookie_paths_uses_vendor_specific_facebook_cookie_path(tmp_path, monkeypatch):
+    conf_dir = tmp_path / "conf"
+    conf_dir.mkdir(parents=True)
+    fb_cookie = conf_dir / "facebook.cookies.txt"
+    fb_cookie.write_text("cookie")
+
+    def fake_resolve_repo_path(path):
+        if path == "conf":
+            return str(conf_dir)
+        return str(tmp_path / path)
+
+    monkeypatch.setattr(call_download, "resolve_repo_path", fake_resolve_repo_path)
+    monkeypatch.setattr(call_download, "root_dir", str(tmp_path))
+
+    resolved = call_download.resolve_cookie_paths(
+        {},
+        {"facebook_cookie_path": "conf/facebook.cookies.txt"},
+        "facebook",
+    )
+
+    assert resolved[0] == str(fb_cookie)
