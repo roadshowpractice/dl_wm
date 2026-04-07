@@ -5,12 +5,16 @@
     "bitrate": "5000k",
     "noplaylist": true,
     "instagram_cookie_path": "conf/instagram.cookies.txt",
+    "facebook_cookie_path": "conf/facebook.cookies.txt",
     "youtube_cookie_path": "conf/youtube.cookies.1.txt",
     "cookie_hierarchy": {
       "instagram": [
         "conf/instagram.cookies.txt",
         "conf/instagram.cookies.2.txt",
         "conf/insta.justin.txt"
+      ],
+      "facebook": [
+        "conf/facebook.cookies.txt"
       ],
       "youtube": [
         "conf/youtube.cookies.1.txt"

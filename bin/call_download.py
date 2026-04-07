@@ -16,6 +16,7 @@ if lib_path not in sys.path:
 from teton_utils import load_config, load_app_config, initialize_logging_from_config, resolve_repo_path
 from vendor_router import (
     detect_vendor,
+    VENDOR_FACEBOOK,
     VENDOR_INSTAGRAM,
     VENDOR_YOUTUBE,
     extract_vendor_id,
@@ -23,6 +24,7 @@ from vendor_router import (
     canonicalize_vendor_url,
 )
 from downloaders.instagram import download as download_instagram
+from downloaders.facebook import download as download_facebook
 from downloaders.youtube import download as download_youtube
 
 
@@ -37,6 +39,8 @@ def _normalize_cookie_list(value):
 def _cookie_discovery_patterns(vendor):
     if vendor == VENDOR_INSTAGRAM:
         return ["*instagram*cookie*.txt", "*insta*cookie*.txt", "*instagram*.txt", "*insta*.txt"]
+    if vendor == VENDOR_FACEBOOK:
+        return ["*facebook*cookie*.txt", "*fb*cookie*.txt", "*facebook*.txt", "*fb*.txt"]
     if vendor == VENDOR_YOUTUBE:
         return ["*youtube*cookie*.txt", "*yt*cookie*.txt", "*youtube*.txt", "*yt*.txt"]
     return []
@@ -57,6 +61,8 @@ def resolve_cookie_paths(platform_config, video_download_cfg, vendor):
     cookie_path = None
     if vendor == VENDOR_INSTAGRAM:
         cookie_path = video_download_cfg.get("instagram_cookie_path")
+    elif vendor == VENDOR_FACEBOOK:
+        cookie_path = video_download_cfg.get("facebook_cookie_path")
     elif vendor == VENDOR_YOUTUBE:
         cookie_path = video_download_cfg.get("youtube_cookie_path")
     if cookie_path:
@@ -162,8 +168,8 @@ def main():
 
         url = sys.argv[1].strip()
         vendor = detect_vendor(url)
-        if vendor not in {VENDOR_INSTAGRAM, VENDOR_YOUTUBE}:
-            logger.error("Unsupported URL vendor. Supported vendors are Instagram and YouTube.")
+        if vendor not in {VENDOR_INSTAGRAM, VENDOR_FACEBOOK, VENDOR_YOUTUBE}:
+            logger.error("Unsupported URL vendor. Supported vendors are Instagram, Facebook, and YouTube.")
             sys.exit(1)
         url = canonicalize_vendor_url(vendor, url)
 
@@ -189,8 +195,11 @@ def main():
 
         cookie_paths = resolve_cookie_paths(platform_config, video_download_cfg, vendor)
 
-        if vendor == VENDOR_INSTAGRAM and not cookie_paths:
-            logger.error("Instagram downloader requires at least one valid cookie file in conf/ (e.g., conf/instagram.cookies.txt).")
+        if vendor in {VENDOR_INSTAGRAM, VENDOR_FACEBOOK} and not cookie_paths:
+            logger.error(
+                "%s downloader requires at least one valid cookie file in conf/.",
+                vendor.capitalize(),
+            )
             sys.exit(1)
 
         if vendor == VENDOR_YOUTUBE and not cookie_paths:
@@ -201,6 +210,9 @@ def main():
             try:
                 if vendor == VENDOR_YOUTUBE:
                     result = download_youtube(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                elif vendor == VENDOR_FACEBOOK:
+                    logger.info("Facebook download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
+                    result = download_facebook(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
                 else:
                     logger.info("Instagram download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
                     result = download_instagram(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
