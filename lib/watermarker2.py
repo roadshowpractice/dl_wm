@@ -71,7 +71,7 @@ def _timestamp_filter(color, font, font_size, position, box=True):
 
     base = (
         f"drawtext=fontfile='{_ffmpeg_escape(font)}':"
-        f"text='%{{pts\\:hms}}':"
+        f"text='%{{pts\\:gmtime\\:0\\:%H\\\\:%M\\\\:%S}}':"
         f"fontcolor={color}:fontsize={font_size}:"
         f"x={x_expr}:y={y_expr}"
     )
