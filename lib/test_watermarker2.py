@@ -19,7 +19,7 @@ class WatermarkerTests(unittest.TestCase):
             position=["right", "bottom"],
         )
 
-        self.assertIn("%H\\\\:%M\\\\:%S", filt)
+        self.assertIn("%H\\:%M\\:%S", filt)
         self.assertNotIn("%{pts\\:hms}", filt)
 
 
