@@ -69,9 +69,15 @@ def _drawtext_filter(text, color, font, font_size, position, box=True):
 def _timestamp_filter(color, font, font_size, position, box=True):
     x_expr, y_expr = _position_to_expr(position)
 
+    elapsed_hms = (
+        "%{eif\\:trunc(t/3600)\\:d\\:2}"
+        "\\:%{eif\\:trunc(mod(t\\,3600)/60)\\:d\\:2}"
+        "\\:%{eif\\:trunc(mod(t\\,60))\\:d\\:2}"
+    )
+
     base = (
         f"drawtext=fontfile='{_ffmpeg_escape(font)}':"
-        f"text='%{{pts\\:gmtime\\:0\\:%H\\:%M\\:%S}}':"
+        f"text='{elapsed_hms}':"
         f"fontcolor={color}:fontsize={font_size}:"
         f"x={x_expr}:y={y_expr}"
     )
