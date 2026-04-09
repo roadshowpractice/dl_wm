@@ -28,6 +28,7 @@ def detect_vendor(url: str):
             host == "fb.watch"
             or path.startswith("watch/")
             or path.startswith("reel/")
+            or path.startswith("share/r/")
             or path.startswith("share/v/")
             or "/videos/" in path
         ):
@@ -63,6 +64,7 @@ def extract_vendor_id(vendor: str, url: str):
         for pattern in [
             r"^reel/([^/?#]+)/?",
             r"^watch/\?v=([^/?#&]+)",
+            r"^share/r/([^/?#]+)/?",
             r"^share/v/([^/?#]+)/?",
             r"^.+/videos/([^/?#]+)/?",
             r"^videos/([^/?#]+)/?",
@@ -104,7 +106,7 @@ def infer_kind(vendor: str, url: str):
             return "post"
 
     if vendor == VENDOR_FACEBOOK:
-        if path.startswith("reel/"):
+        if path.startswith("reel/") or path.startswith("share/r/"):
             return "reel"
         if path.startswith("watch") or "/videos/" in path or path.startswith("share/v/"):
             return "video"
