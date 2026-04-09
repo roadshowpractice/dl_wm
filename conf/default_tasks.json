@@ -3,7 +3,7 @@
     "perform_download": true,
     "apply_watermark": true,
     "extract_audio": false,
-    "generate_srt": false,
+    "generate_srt": true,
     "burn_srt": false,
     "post_processed": false
   }
