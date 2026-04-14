@@ -210,6 +210,13 @@ def main():
             try:
                 if vendor == VENDOR_YOUTUBE:
                     result = download_youtube(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                    if not result.get("success", False):
+                        raise RuntimeError(
+                            "YouTube download failed"
+                            f" (strategy={result.get('strategy')}, error={result.get('error')})\n"
+                            f"stdout:\n{result.get('stdout', '')}\n"
+                            f"stderr:\n{result.get('stderr', '')}"
+                        )
                 elif vendor == VENDOR_FACEBOOK:
                     logger.info("Facebook download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
                     result = download_facebook(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
