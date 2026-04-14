@@ -81,5 +81,35 @@
       "MarginL": 60,
       "MarginR": 60
     }
+  },
+  "youtube_download": {
+    "strategies": [
+      {
+        "name": "web_cookie_file",
+        "use_remote_components": true,
+        "cookies_mode": "file",
+        "format": "bestvideo[height<=?1080]+bestaudio/best"
+      },
+      {
+        "name": "web_browser_firefox",
+        "use_remote_components": true,
+        "cookies_mode": "browser",
+        "browser": "firefox",
+        "format": "bestvideo[height<=?1080]+bestaudio/best"
+      },
+      {
+        "name": "android_fallback",
+        "use_remote_components": false,
+        "cookies_mode": "none",
+        "extractor_arg": "youtube:player_client=android",
+        "format": "best"
+      }
+    ],
+    "browser_cookie_order": [
+      "firefox",
+      "chrome",
+      "chromium",
+      "brave"
+    ]
   }
 }

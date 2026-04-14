@@ -10,7 +10,18 @@
       "log_filename": "./logs/dl.log",
       "log_to_console": true,
       "console_level": "INFO"
-    }
+    },
+    "metadata_dir": "$HOME/Desktop/dl_wm/metadata",
+    "youtube_cookie_files": [
+      "$HOME/.config/dl_wm/cookies/youtube.cookies.txt",
+      "$HOME/Desktop/dl_wm/conf/youtube.cookies.1.txt"
+    ],
+    "browser_cookie_order": [
+      "firefox",
+      "chrome",
+      "chromium",
+      "brave"
+    ]
   },
   "Linux": {
     "python_path": "$HOME/miniconda3/envs/dl_wm/bin/python",
@@ -22,6 +33,30 @@
       "log_filename": "./logs/dl.log",
       "log_to_console": true,
       "console_level": "INFO"
-    }
+    },
+    "metadata_dir": "$HOME/Desktop/dl_wm/metadata",
+    "youtube_cookie_files": [
+      "$HOME/.config/dl_wm/cookies/youtube.cookies.txt",
+      "$HOME/Desktop/dl_wm/conf/youtube.cookies.1.txt"
+    ],
+    "browser_cookie_order": [
+      "firefox",
+      "chrome",
+      "chromium",
+      "brave"
+    ]
+  },
+  "default": {
+    "output_dir": "$HOME/Desktop/dl_wm/outputs",
+    "metadata_dir": "$HOME/Desktop/dl_wm/metadata",
+    "youtube_cookie_files": [
+      "$HOME/.config/dl_wm/cookies/youtube.cookies.txt"
+    ],
+    "browser_cookie_order": [
+      "firefox",
+      "chrome",
+      "chromium",
+      "brave"
+    ]
   }
 }
