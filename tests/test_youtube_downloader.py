@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import pathlib
 import subprocess
 import sys
@@ -11,12 +12,31 @@ def _load_youtube_module():
     sys.modules.setdefault("lib", lib_pkg)
 
     metadata_compactor = types.ModuleType("lib.metadata_compactor")
-    metadata_compactor.build_compact_metadata = lambda *args, **kwargs: {}
+    metadata_compactor.build_compact_metadata = lambda *args, **kwargs: {"ok": True}
     metadata_compactor.write_raw_metadata = lambda *args, **kwargs: None
     sys.modules["lib.metadata_compactor"] = metadata_compactor
 
     teton_utils = types.ModuleType("lib.teton_utils")
-    teton_utils.load_app_config = lambda: {}
+    teton_utils.load_app_config = lambda: {
+        "youtube_download": {
+            "strategies": [
+                {
+                    "name": "web_cookie_file",
+                    "use_remote_components": True,
+                    "cookies_mode": "file",
+                    "format": "bestvideo+bestaudio/best",
+                },
+                {
+                    "name": "android_fallback",
+                    "use_remote_components": False,
+                    "cookies_mode": "none",
+                    "extractor_arg": "youtube:player_client=android",
+                    "format": "best",
+                },
+            ],
+            "browser_cookie_order": ["firefox"],
+        }
+    }
     sys.modules["lib.teton_utils"] = teton_utils
 
     vendor_router = types.ModuleType("lib.vendor_router")
@@ -37,8 +57,10 @@ youtube_module = _load_youtube_module()
 
 
 class _Result:
-    def __init__(self, stdout="{}"):
+    def __init__(self, stdout="", stderr="", returncode=0):
         self.stdout = stdout
+        self.stderr = stderr
+        self.returncode = returncode
 
 
 def test_version_key_parses_standard_versions():
@@ -60,48 +82,48 @@ def test_ensure_supported_yt_dlp_rejects_old_versions(monkeypatch):
         raise AssertionError("Expected RuntimeError")
 
 
-def test_ensure_supported_yt_dlp_accepts_newer_versions(monkeypatch):
-    def fake_run(cmd, capture_output, text, check):
-        return _Result(stdout="2025.02.19\n")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    youtube_module._ensure_supported_yt_dlp("2024.10.22")
+def test_contains_retryable_marker_detects_known_messages():
+    assert youtube_module._contains_retryable_marker("", "Only images are available for download")
+    assert youtube_module._contains_retryable_marker("n challenge solving failed", "")
+    assert not youtube_module._contains_retryable_marker("ok", "different error")
 
 
-def test_run_yt_dlp_falls_back_when_remote_components_unsupported(monkeypatch):
+def test_download_falls_through_to_android_strategy(monkeypatch, tmp_path):
+    download_dir = tmp_path / "out"
+    metadata_dir = tmp_path / "meta"
+    video_file = download_dir / "youtube__abc123.mp4"
+
     calls = []
 
     def fake_run(cmd, capture_output, text, check):
         calls.append(cmd)
-        if len(calls) == 1:
-            raise subprocess.CalledProcessError(
-                2,
-                cmd,
-                stderr="yt-dlp: error: no such option: --remote-components",
-            )
-        return _Result(stdout='{"id":"abc"}')
+        if cmd[:2] == ["yt-dlp", "--version"]:
+            return _Result(stdout="2025.02.19\n")
+        if "--extractor-args" in cmd:
+            video_file.parent.mkdir(parents=True, exist_ok=True)
+            video_file.write_text("x")
+            payload = json.dumps({"id": "abc123", "ext": "mp4", "_filename": str(video_file)})
+            return _Result(stdout=payload + "\n", stderr="", returncode=0)
+        return _Result(
+            stdout="",
+            stderr="Only images are available for download",
+            returncode=1,
+        )
 
     monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(youtube_module, "_load_platform_config", lambda: {})
 
-    cmd = ["yt-dlp", "--remote-components", "ejs:github", "--print-json", "https://example.com"]
-    result = youtube_module._run_yt_dlp(cmd)
+    result = youtube_module.download(
+        "https://www.youtube.com/watch?v=abc123",
+        str(download_dir),
+        str(metadata_dir),
+        registry_record={},
+        cookie_path=None,
+        video_download={"youtube_cookie_files": []},
+    )
 
-    assert result.stdout == '{"id":"abc"}'
-    assert calls[1] == ["yt-dlp", "--print-json", "https://example.com"]
-
-
-def test_run_yt_dlp_raises_for_other_errors(monkeypatch):
-    def fake_run(cmd, capture_output, text, check):
-        raise subprocess.CalledProcessError(1, cmd, stderr="network unavailable")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
-    cmd = ["yt-dlp", "--remote-components", "ejs:github", "--print-json", "https://example.com"]
-
-    try:
-        youtube_module._run_yt_dlp(cmd)
-    except subprocess.CalledProcessError as err:
-        assert err.returncode == 1
-    else:
-        raise AssertionError("Expected CalledProcessError")
+    assert result["success"] is True
+    assert result["strategy"] == "android_fallback"
+    assert len(result["attempts"]) == 2
+    assert result["attempts"][0]["retryable"] is True
+    assert any("--extractor-args" in c for c in calls)
