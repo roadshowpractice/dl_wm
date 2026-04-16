@@ -17,6 +17,17 @@ RETRYABLE_FAILURE_MARKERS = [
     "error solving n challenge request",
     "sign in to confirm you are not a bot",
 ]
+COOKIE_SOURCE_UNAVAILABLE_MARKERS = [
+    "could not find firefox cookies database",
+    "could not find chrome cookies database",
+    "could not find chromium cookies database",
+    "could not find brave cookies database",
+    "could not copy chrome cookie database",
+    "could not copy chromium cookie database",
+    "could not decrypt chrome cookies",
+    "could not decrypt chromium cookies",
+    "unsupported browser",
+]
 DEFAULT_YT_FORMAT = "bestvideo[height<=?1080]+bestaudio/best"
 _REMOTE_COMPONENTS_SUPPORTED: Optional[bool] = None
 
@@ -127,6 +138,11 @@ def _parse_last_json_line(stdout_text: str) -> Optional[Dict]:
 def _contains_retryable_marker(stdout_text: str, stderr_text: str) -> bool:
     combined = f"{stdout_text or ''}\n{stderr_text or ''}".lower()
     return any(marker in combined for marker in RETRYABLE_FAILURE_MARKERS)
+
+
+def _cookie_source_unavailable(stdout_text: str, stderr_text: str) -> bool:
+    combined = f"{stdout_text or ''}\n{stderr_text or ''}".lower()
+    return any(marker in combined for marker in COOKIE_SOURCE_UNAVAILABLE_MARKERS)
 
 
 def _resolve_cookie_candidates(
@@ -268,8 +284,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
         command = _build_command(url=url, output_template=output_template, fmt=fmt, strategy=strategy)
 
         cookies_mode = (strategy.get("cookies_mode") or "none").lower()
-        credential_source = "none"
-
+        credential_attempts = [("none", [])]
         if cookies_mode == "file":
             cookie_files = _resolve_cookie_candidates(cookie_path, strategy, platform_section, video_download_cfg)
             if not cookie_files:
@@ -284,9 +299,9 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
                 })
                 print(f"[youtube] strategy={strategy_name} no valid cookie file found; trying next strategy")
                 continue
-            selected_cookie = cookie_files[0]
-            credential_source = f"file:{selected_cookie}"
-            command.extend(["--cookies", selected_cookie])
+            credential_attempts = [
+                (f"file:{selected_cookie}", ["--cookies", selected_cookie]) for selected_cookie in cookie_files
+            ]
         elif cookies_mode == "browser":
             browser_order = _resolve_browser_order(strategy, platform_section, youtube_cfg)
             if not browser_order:
@@ -301,122 +316,139 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
                 })
                 print(f"[youtube] strategy={strategy_name} no browser configured; trying next strategy")
                 continue
-            selected_browser = browser_order[0]
-            credential_source = f"browser:{selected_browser}"
-            command.extend(["--cookies-from-browser", selected_browser])
+            credential_attempts = [
+                (f"browser:{selected_browser}", ["--cookies-from-browser", selected_browser])
+                for selected_browser in browser_order
+            ]
 
-        command.append(url)
+        attempted_unavailable_source = False
 
-        print(f"[youtube] attempting strategy={strategy_name} cookies_mode={cookies_mode} credential={credential_source}")
-        rc, stdout_text, stderr_text = _run_yt_dlp(command)
-        if stdout_text.strip():
-            print(f"[youtube][{strategy_name}] yt-dlp stdout:\n{stdout_text}")
-        if stderr_text.strip():
-            print(f"[youtube][{strategy_name}] yt-dlp stderr:\n{stderr_text}")
+        for credential_source, credential_args in credential_attempts:
+            attempt_command = command + credential_args + [url]
+            print(
+                f"[youtube] attempting strategy={strategy_name} "
+                f"cookies_mode={cookies_mode} credential={credential_source}"
+            )
+            rc, stdout_text, stderr_text = _run_yt_dlp(attempt_command)
+            if stdout_text.strip():
+                print(f"[youtube][{strategy_name}] yt-dlp stdout:\n{stdout_text}")
+            if stderr_text.strip():
+                print(f"[youtube][{strategy_name}] yt-dlp stderr:\n{stderr_text}")
 
-        info = _parse_last_json_line(stdout_text)
-        retryable = rc != 0 and _contains_retryable_marker(stdout_text, stderr_text)
+            info = _parse_last_json_line(stdout_text)
+            source_unavailable = rc != 0 and _cookie_source_unavailable(stdout_text, stderr_text)
+            retryable = rc != 0 and (_contains_retryable_marker(stdout_text, stderr_text) or source_unavailable)
 
-        attempt_result = {
-            "strategy": strategy_name,
-            "success": rc == 0 and isinstance(info, dict),
-            "retryable": retryable,
-            "stdout": stdout_text,
-            "stderr": stderr_text,
-            "credential_source": credential_source,
-            "command": command,
-        }
-        attempts.append(attempt_result)
-
-        if rc != 0:
-            if retryable:
-                print(f"[youtube] strategy={strategy_name} failed with retryable marker; continuing")
-                continue
-            return {
-                "success": False,
+            attempt_result = {
                 "strategy": strategy_name,
-                "vendor": VENDOR_YOUTUBE,
-                "vendor_id": vendor_id,
+                "success": rc == 0 and isinstance(info, dict),
+                "retryable": retryable,
                 "stdout": stdout_text,
                 "stderr": stderr_text,
-                "error": "yt-dlp failed with a non-retryable error",
-                "retryable": False,
-                "attempts": attempts,
+                "credential_source": credential_source,
+                "command": attempt_command,
             }
+            attempts.append(attempt_result)
 
-        if not info:
-            return {
-                "success": False,
+            if rc != 0:
+                if source_unavailable:
+                    attempted_unavailable_source = True
+                    print(
+                        f"[youtube] strategy={strategy_name} credential={credential_source} "
+                        "cookie source unavailable; trying next credential"
+                    )
+                    continue
+                if retryable:
+                    print(f"[youtube] strategy={strategy_name} failed with retryable marker; continuing")
+                    continue
+                return {
+                    "success": False,
+                    "strategy": strategy_name,
+                    "vendor": VENDOR_YOUTUBE,
+                    "vendor_id": vendor_id,
+                    "stdout": stdout_text,
+                    "stderr": stderr_text,
+                    "error": "yt-dlp failed with a non-retryable error",
+                    "retryable": False,
+                    "attempts": attempts,
+                }
+
+            if not info:
+                return {
+                    "success": False,
+                    "strategy": strategy_name,
+                    "vendor": VENDOR_YOUTUBE,
+                    "vendor_id": vendor_id,
+                    "stdout": stdout_text,
+                    "stderr": stderr_text,
+                    "error": "yt-dlp succeeded but did not emit JSON metadata",
+                    "retryable": False,
+                    "attempts": attempts,
+                }
+
+            downloaded_path = info.get("_filename")
+            ext = info.get("ext")
+            if ext:
+                candidate = os.path.join(output_dir, f"{VENDOR_YOUTUBE}__{vendor_id}.{ext}")
+                if os.path.exists(candidate):
+                    downloaded_path = candidate
+
+            if not downloaded_path:
+                return {
+                    "success": False,
+                    "strategy": strategy_name,
+                    "vendor": VENDOR_YOUTUBE,
+                    "vendor_id": vendor_id,
+                    "stdout": stdout_text,
+                    "stderr": stderr_text,
+                    "error": "Could not determine downloaded YouTube file path",
+                    "retryable": False,
+                    "attempts": attempts,
+                }
+
+            compact = build_compact_metadata(
+                info,
+                url=url,
+                vendor=VENDOR_YOUTUBE,
+                vendor_id=vendor_id,
+                downloaded_path=downloaded_path,
+            )
+
+            raw_mode = (app_config or {}).get("raw_metadata_mode", "gzip")
+            raw_path = write_raw_metadata(
+                info,
+                metadata_dir=metadata_dir,
+                vendor=VENDOR_YOUTUBE,
+                vendor_id=vendor_id,
+                mode=raw_mode,
+            )
+            if raw_path:
+                compact["raw_metadata_path"] = raw_path
+
+            with open(metadata_path, "w", encoding="utf-8") as f:
+                json.dump(compact, f, indent=2, ensure_ascii=False)
+
+            record = {
+                **(registry_record or {}),
+                "success": True,
                 "strategy": strategy_name,
-                "vendor": VENDOR_YOUTUBE,
-                "vendor_id": vendor_id,
+                "output_path": downloaded_path,
+                "metadata": info,
                 "stdout": stdout_text,
                 "stderr": stderr_text,
-                "error": "yt-dlp succeeded but did not emit JSON metadata",
-                "retryable": False,
                 "attempts": attempts,
-            }
-
-        downloaded_path = info.get("_filename")
-        ext = info.get("ext")
-        if ext:
-            candidate = os.path.join(output_dir, f"{VENDOR_YOUTUBE}__{vendor_id}.{ext}")
-            if os.path.exists(candidate):
-                downloaded_path = candidate
-
-        if not downloaded_path:
-            return {
-                "success": False,
-                "strategy": strategy_name,
                 "vendor": VENDOR_YOUTUBE,
                 "vendor_id": vendor_id,
-                "stdout": stdout_text,
-                "stderr": stderr_text,
-                "error": "Could not determine downloaded YouTube file path",
-                "retryable": False,
-                "attempts": attempts,
+                "metadata_file": os.path.basename(metadata_path),
+                "metadata_path": metadata_path,
+                "original_filename": downloaded_path,
+                "to_process": downloaded_path,
             }
 
-        compact = build_compact_metadata(
-            info,
-            url=url,
-            vendor=VENDOR_YOUTUBE,
-            vendor_id=vendor_id,
-            downloaded_path=downloaded_path,
-        )
+            return record
 
-        raw_mode = (app_config or {}).get("raw_metadata_mode", "gzip")
-        raw_path = write_raw_metadata(
-            info,
-            metadata_dir=metadata_dir,
-            vendor=VENDOR_YOUTUBE,
-            vendor_id=vendor_id,
-            mode=raw_mode,
-        )
-        if raw_path:
-            compact["raw_metadata_path"] = raw_path
-
-        with open(metadata_path, "w", encoding="utf-8") as f:
-            json.dump(compact, f, indent=2, ensure_ascii=False)
-
-        record = {
-            **(registry_record or {}),
-            "success": True,
-            "strategy": strategy_name,
-            "output_path": downloaded_path,
-            "metadata": info,
-            "stdout": stdout_text,
-            "stderr": stderr_text,
-            "attempts": attempts,
-            "vendor": VENDOR_YOUTUBE,
-            "vendor_id": vendor_id,
-            "metadata_file": os.path.basename(metadata_path),
-            "metadata_path": metadata_path,
-            "original_filename": downloaded_path,
-            "to_process": downloaded_path,
-        }
-
-        return record
+        if attempted_unavailable_source:
+            print(f"[youtube] strategy={strategy_name} exhausted cookie sources; trying next strategy")
 
     final_attempt = attempts[-1] if attempts else {}
     return {
