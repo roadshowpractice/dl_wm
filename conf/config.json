@@ -17,10 +17,10 @@
       "$HOME/Desktop/dl_wm/conf/youtube.cookies.1.txt"
     ],
     "browser_cookie_order": [
-      "firefox",
+      "safari",
       "chrome",
       "chromium",
-      "brave"
+      "duckduckgo"
     ]
   },
   "Linux": {
