@@ -82,6 +82,37 @@ class MetadataCompactorTests(unittest.TestCase):
 
             self.assertEqual(payload["postprocessors"], ["non-serializable"])
 
+    def test_write_raw_metadata_creates_vendor_scoped_path_for_gzip(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            raw_path = write_raw_metadata(
+                {"id": "GM8dIWY1o5Y"},
+                metadata_dir=tmpdir,
+                vendor="youtube",
+                vendor_id="GM8dIWY1o5Y",
+                mode="gzip",
+            )
+
+            expected = os.path.join(
+                tmpdir,
+                "raw",
+                "youtube__GM8dIWY1o5Y",
+                "youtube__GM8dIWY1o5Y.raw.json.gz",
+            )
+            self.assertEqual(raw_path, expected)
+            self.assertTrue(os.path.exists(raw_path))
+
+    def test_write_raw_metadata_rejects_empty_explicit_stem(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaises(ValueError):
+                write_raw_metadata(
+                    {"id": "GM8dIWY1o5Y"},
+                    metadata_dir=tmpdir,
+                    vendor="youtube",
+                    vendor_id="GM8dIWY1o5Y",
+                    mode="gzip",
+                    stem="   ",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
