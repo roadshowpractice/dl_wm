@@ -147,3 +147,61 @@ def test_download_falls_through_to_android_strategy(monkeypatch, tmp_path):
     assert len(result["attempts"]) == 2
     assert result["attempts"][0]["retryable"] is True
     assert any("--extractor-args" in c for c in calls)
+
+
+def test_download_browser_strategy_rotates_cookie_sources(monkeypatch, tmp_path):
+    download_dir = tmp_path / "out"
+    metadata_dir = tmp_path / "meta"
+    video_file = download_dir / "youtube__abc123.mp4"
+
+    monkeypatch.setattr(
+        youtube_module,
+        "load_app_config",
+        lambda: {
+            "youtube_download": {
+                "strategies": [
+                    {
+                        "name": "web_browser",
+                        "use_remote_components": False,
+                        "cookies_mode": "browser",
+                        "format": "best",
+                    }
+                ],
+                "browser_cookie_order": ["firefox", "chrome"],
+            }
+        },
+    )
+    monkeypatch.setattr(youtube_module, "_load_platform_config", lambda: {})
+
+    calls = []
+
+    def fake_run(cmd, capture_output, text, check):
+        calls.append(cmd)
+        if cmd[:2] == ["yt-dlp", "--version"]:
+            return _Result(stdout="2025.02.19\n")
+        if "--cookies-from-browser" in cmd and "firefox" in cmd:
+            return _Result(stdout="", stderr="Could not find firefox cookies database", returncode=1)
+        if "--cookies-from-browser" in cmd and "chrome" in cmd:
+            video_file.parent.mkdir(parents=True, exist_ok=True)
+            video_file.write_text("x")
+            payload = json.dumps({"id": "abc123", "ext": "mp4", "_filename": str(video_file)})
+            return _Result(stdout=payload + "\n", stderr="", returncode=0)
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = youtube_module.download(
+        "https://www.youtube.com/watch?v=abc123",
+        str(download_dir),
+        str(metadata_dir),
+        registry_record={},
+        cookie_path=None,
+        video_download={"youtube_cookie_files": []},
+    )
+
+    assert result["success"] is True
+    assert result["strategy"] == "web_browser"
+    assert len(result["attempts"]) == 2
+    assert result["attempts"][0]["credential_source"] == "browser:firefox"
+    assert result["attempts"][1]["credential_source"] == "browser:chrome"
+    assert any("--cookies-from-browser" in c and "chrome" in c for c in calls)
