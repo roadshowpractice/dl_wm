@@ -1,9 +1,14 @@
 import gzip
 import json
+import logging
 import os
 from datetime import datetime
+from pathlib import Path
 
 from tasks_lib import load_default_tasks
+
+
+logger = logging.getLogger(__name__)
 
 
 def _json_fallback(value):
@@ -67,20 +72,39 @@ def build_compact_metadata(info: dict, *, url: str, vendor: str, vendor_id: str,
     return compact
 
 
-def write_raw_metadata(info: dict, *, metadata_dir: str, vendor: str, vendor_id: str, mode: str = "gzip"):
+def write_raw_metadata(
+    info: dict,
+    *,
+    metadata_dir: str,
+    vendor: str,
+    vendor_id: str,
+    mode: str = "gzip",
+    stem: str | None = None,
+):
     if mode not in {"gzip", "json"}:
         return None
 
-    raw_dir = os.path.join(metadata_dir, "raw")
-    os.makedirs(raw_dir, exist_ok=True)
+    base_dir = Path(metadata_dir) / "raw" / f"{vendor}__{vendor_id}"
+    base_dir.mkdir(parents=True, exist_ok=True)
+
+    if stem is not None and not str(stem).strip():
+        raise ValueError("Invalid metadata filename stem (empty)")
+
+    resolved_stem = str(stem).strip() if stem is not None else ""
+    if not resolved_stem:
+        resolved_stem = f"{vendor}__{vendor_id}" or "raw"
+
+    suffix = ".raw.json.gz" if mode == "gzip" else ".raw.json"
+    raw_path = base_dir / f"{resolved_stem}{suffix}"
+    raw_path.parent.mkdir(parents=True, exist_ok=True)
+
+    logger.info("Writing raw metadata to: %s", raw_path)
 
     if mode == "gzip":
-        raw_path = os.path.join(raw_dir, f"{vendor}__{vendor_id}.raw.json.gz")
         with gzip.open(raw_path, "wt", encoding="utf-8") as fh:
             json.dump(info, fh, ensure_ascii=False, default=_json_fallback)
-        return raw_path
+    else:
+        with raw_path.open("w", encoding="utf-8") as fh:
+            json.dump(info, fh, ensure_ascii=False, default=_json_fallback)
 
-    raw_path = os.path.join(raw_dir, f"{vendor}__{vendor_id}.raw.json")
-    with open(raw_path, "w", encoding="utf-8") as fh:
-        json.dump(info, fh, ensure_ascii=False, default=_json_fallback)
-    return raw_path
+    return str(raw_path)
