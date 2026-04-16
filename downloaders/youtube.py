@@ -18,6 +18,7 @@ RETRYABLE_FAILURE_MARKERS = [
     "sign in to confirm you are not a bot",
 ]
 DEFAULT_YT_FORMAT = "bestvideo[height<=?1080]+bestaudio/best"
+_REMOTE_COMPONENTS_SUPPORTED: Optional[bool] = None
 
 
 def _repo_root() -> str:
@@ -56,6 +57,19 @@ def _ensure_supported_yt_dlp(min_version=MIN_YT_DLP_VERSION):
             f"yt-dlp {detected} is too old. Minimum supported version is {min_version}. "
             "Please update yt-dlp and rerun."
         )
+
+
+def _supports_remote_components() -> bool:
+    global _REMOTE_COMPONENTS_SUPPORTED
+    if _REMOTE_COMPONENTS_SUPPORTED is not None:
+        return _REMOTE_COMPONENTS_SUPPORTED
+    try:
+        result = subprocess.run(["yt-dlp", "--help"], capture_output=True, text=True, check=True)
+        help_text = f"{result.stdout or ''}\n{result.stderr or ''}".lower()
+        _REMOTE_COMPONENTS_SUPPORTED = "--remote-components" in help_text
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        _REMOTE_COMPONENTS_SUPPORTED = False
+    return _REMOTE_COMPONENTS_SUPPORTED
 
 
 def _load_platform_config() -> Dict:
@@ -184,7 +198,7 @@ def _build_command(url: str, output_template: str, fmt: str, strategy: Dict) -> 
         output_template,
     ]
 
-    if strategy.get("use_remote_components"):
+    if strategy.get("use_remote_components") and _supports_remote_components():
         cmd.extend(["--remote-components", "ejs:github"])
 
     extractor_arg = strategy.get("extractor_arg")
