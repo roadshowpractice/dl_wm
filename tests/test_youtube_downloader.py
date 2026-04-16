@@ -88,6 +88,26 @@ def test_contains_retryable_marker_detects_known_messages():
     assert not youtube_module._contains_retryable_marker("ok", "different error")
 
 
+def test_build_command_skips_remote_components_when_unsupported(monkeypatch):
+    youtube_module._REMOTE_COMPONENTS_SUPPORTED = None
+
+    def fake_run(cmd, capture_output, text, check):
+        if cmd[:2] == ["yt-dlp", "--help"]:
+            return _Result(stdout="yt-dlp options list without remote components", stderr="", returncode=0)
+        raise AssertionError(f"Unexpected command: {cmd}")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    command = youtube_module._build_command(
+        url="https://www.youtube.com/watch?v=abc123",
+        output_template="/tmp/youtube__abc123.%(ext)s",
+        fmt="best",
+        strategy={"use_remote_components": True},
+    )
+
+    assert "--remote-components" not in command
+
+
 def test_download_falls_through_to_android_strategy(monkeypatch, tmp_path):
     download_dir = tmp_path / "out"
     metadata_dir = tmp_path / "meta"
