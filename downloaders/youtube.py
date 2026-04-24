@@ -205,6 +205,8 @@ def _build_command(url: str, output_template: str, fmt: str, strategy: Dict) -> 
     cmd = [
         "yt-dlp",
         "--print-json",
+        "--remote-components",
+        "ejs:github",
         "--format",
         fmt,
         "--merge-output-format",
@@ -214,14 +216,42 @@ def _build_command(url: str, output_template: str, fmt: str, strategy: Dict) -> 
         output_template,
     ]
 
-    if strategy.get("use_remote_components") and _supports_remote_components():
-        cmd.extend(["--remote-components", "ejs:github"])
-
     extractor_arg = strategy.get("extractor_arg")
     if extractor_arg:
         cmd.extend(["--extractor-args", str(extractor_arg)])
 
     return cmd
+
+
+COOKIE_REPAIR_FAILURE_MARKERS = [
+    "sign in to confirm you are not a bot",
+    "sabr",
+    "cookies",
+    "cookie",
+    "authentication",
+    "login required",
+    "requested format is not available",
+    "only images are available",
+]
+
+
+def _is_cookie_repairable_failure(stdout_text: str, stderr_text: str) -> bool:
+    combined = f"{stdout_text or ''}\n{stderr_text or ''}".lower()
+    return any(marker in combined for marker in COOKIE_REPAIR_FAILURE_MARKERS)
+
+
+def _regenerate_youtube_cookie_from_firefox(url: str, cookie_file: str) -> Tuple[bool, str, str]:
+    command = [
+        "yt-dlp",
+        "--cookies-from-browser",
+        "firefox",
+        "--cookies",
+        cookie_file,
+        "--skip-download",
+        url,
+    ]
+    rc, stdout_text, stderr_text = _run_yt_dlp(command)
+    return rc == 0, stdout_text, stderr_text
 
 
 def _run_yt_dlp(command: List[str]) -> Tuple[int, str, str]:
@@ -325,6 +355,10 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
 
         for credential_source, credential_args in credential_attempts:
             attempt_command = command + credential_args + [url]
+            selected_cookie_file = None
+            if credential_source.startswith("file:"):
+                selected_cookie_file = credential_source.split("file:", 1)[1]
+                print(f"[youtube] using saved YouTube cookie file: {selected_cookie_file}")
             print(
                 f"[youtube] attempting strategy={strategy_name} "
                 f"cookies_mode={cookies_mode} credential={credential_source}"
@@ -351,27 +385,78 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
             attempts.append(attempt_result)
 
             if rc != 0:
-                if source_unavailable:
-                    attempted_unavailable_source = True
-                    print(
-                        f"[youtube] strategy={strategy_name} credential={credential_source} "
-                        "cookie source unavailable; trying next credential"
+                if selected_cookie_file and _is_cookie_repairable_failure(stdout_text, stderr_text):
+                    print("[youtube] saved cookie failed")
+                    print("[youtube] regenerating YouTube cookie from Firefox")
+                    regen_ok, regen_stdout, regen_stderr = _regenerate_youtube_cookie_from_firefox(
+                        url=url, cookie_file=selected_cookie_file
                     )
-                    continue
-                if retryable:
-                    print(f"[youtube] strategy={strategy_name} failed with retryable marker; continuing")
-                    continue
-                return {
-                    "success": False,
-                    "strategy": strategy_name,
-                    "vendor": VENDOR_YOUTUBE,
-                    "vendor_id": vendor_id,
-                    "stdout": stdout_text,
-                    "stderr": stderr_text,
-                    "error": "yt-dlp failed with a non-retryable error",
-                    "retryable": False,
-                    "attempts": attempts,
-                }
+                    attempts.append({
+                        "strategy": strategy_name,
+                        "success": regen_ok,
+                        "retryable": not regen_ok,
+                        "stdout": regen_stdout,
+                        "stderr": regen_stderr,
+                        "credential_source": f"repair:firefox->{selected_cookie_file}",
+                        "command": [
+                            "yt-dlp",
+                            "--cookies-from-browser",
+                            "firefox",
+                            "--cookies",
+                            selected_cookie_file,
+                            "--skip-download",
+                            url,
+                        ],
+                    })
+                    if regen_ok:
+                        print("[youtube] cookie regeneration succeeded")
+                        print("[youtube] retrying with regenerated cookie")
+                        retry_rc, retry_stdout, retry_stderr = _run_yt_dlp(attempt_command)
+                        retry_info = _parse_last_json_line(retry_stdout)
+                        retry_success = retry_rc == 0 and isinstance(retry_info, dict)
+                        attempts.append({
+                            "strategy": strategy_name,
+                            "success": retry_success,
+                            "retryable": retry_rc != 0 and _contains_retryable_marker(retry_stdout, retry_stderr),
+                            "stdout": retry_stdout,
+                            "stderr": retry_stderr,
+                            "credential_source": f"file-regenerated:{selected_cookie_file}",
+                            "command": attempt_command,
+                        })
+                        if retry_success:
+                            rc, stdout_text, stderr_text, info = retry_rc, retry_stdout, retry_stderr, retry_info
+                        else:
+                            rc, stdout_text, stderr_text = retry_rc, retry_stdout, retry_stderr
+                            info = None
+                    else:
+                        print("[youtube] cookie regeneration failed")
+
+                if rc == 0 and isinstance(info, dict):
+                    pass
+                elif rc != 0:
+                    source_unavailable = _cookie_source_unavailable(stdout_text, stderr_text)
+                    retryable = _contains_retryable_marker(stdout_text, stderr_text) or source_unavailable
+                    if source_unavailable:
+                        attempted_unavailable_source = True
+                        print(
+                            f"[youtube] strategy={strategy_name} credential={credential_source} "
+                            "cookie source unavailable; trying next credential"
+                        )
+                        continue
+                    if retryable:
+                        print(f"[youtube] strategy={strategy_name} failed with retryable marker; continuing")
+                        continue
+                    return {
+                        "success": False,
+                        "strategy": strategy_name,
+                        "vendor": VENDOR_YOUTUBE,
+                        "vendor_id": vendor_id,
+                        "stdout": stdout_text,
+                        "stderr": stderr_text,
+                        "error": "yt-dlp failed with a non-retryable error",
+                        "retryable": False,
+                        "attempts": attempts,
+                    }
 
             if not info:
                 return {
