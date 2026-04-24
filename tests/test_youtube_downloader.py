@@ -88,16 +88,7 @@ def test_contains_retryable_marker_detects_known_messages():
     assert not youtube_module._contains_retryable_marker("ok", "different error")
 
 
-def test_build_command_skips_remote_components_when_unsupported(monkeypatch):
-    youtube_module._REMOTE_COMPONENTS_SUPPORTED = None
-
-    def fake_run(cmd, capture_output, text, check):
-        if cmd[:2] == ["yt-dlp", "--help"]:
-            return _Result(stdout="yt-dlp options list without remote components", stderr="", returncode=0)
-        raise AssertionError(f"Unexpected command: {cmd}")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-
+def test_build_command_always_includes_remote_components():
     command = youtube_module._build_command(
         url="https://www.youtube.com/watch?v=abc123",
         output_template="/tmp/youtube__abc123.%(ext)s",
@@ -105,7 +96,9 @@ def test_build_command_skips_remote_components_when_unsupported(monkeypatch):
         strategy={"use_remote_components": True},
     )
 
-    assert "--remote-components" not in command
+    assert "--remote-components" in command
+    idx = command.index("--remote-components")
+    assert command[idx + 1] == "ejs:github"
 
 
 def test_download_falls_through_to_android_strategy(monkeypatch, tmp_path):
@@ -205,3 +198,55 @@ def test_download_browser_strategy_rotates_cookie_sources(monkeypatch, tmp_path)
     assert result["attempts"][0]["credential_source"] == "browser:firefox"
     assert result["attempts"][1]["credential_source"] == "browser:chrome"
     assert any("--cookies-from-browser" in c and "chrome" in c for c in calls)
+
+
+def test_youtube_cookie_repair_flow_uses_saved_file_then_regenerates_then_retries(monkeypatch, tmp_path):
+    download_dir = tmp_path / "out"
+    metadata_dir = tmp_path / "meta"
+    cookie_file = tmp_path / "youtube.cookies.1.txt"
+    cookie_file.write_text("fake-cookie")
+    video_file = download_dir / "youtube__abc123.mp4"
+
+    calls = []
+
+    def fake_run(cmd, capture_output, text, check):
+        calls.append(cmd)
+        if cmd[:2] == ["yt-dlp", "--version"]:
+            return _Result(stdout="2025.02.19\n")
+        if "--skip-download" in cmd and "--cookies-from-browser" in cmd:
+            cookie_file.write_text("regenerated-cookie")
+            return _Result(stdout="", stderr="", returncode=0)
+        if "--cookies" in cmd and str(cookie_file) in cmd:
+            if len([c for c in calls if "--skip-download" not in c and "--cookies" in c]) == 1:
+                return _Result(stdout="", stderr="Sign in to confirm you are not a bot", returncode=1)
+            video_file.parent.mkdir(parents=True, exist_ok=True)
+            video_file.write_text("x")
+            payload = json.dumps({"id": "abc123", "ext": "mp4", "_filename": str(video_file)})
+            return _Result(stdout=payload + "\n", stderr="", returncode=0)
+        return _Result(stdout="", stderr="unexpected", returncode=1)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(youtube_module, "_load_platform_config", lambda: {})
+
+    result = youtube_module.download(
+        "https://www.youtube.com/watch?v=abc123",
+        str(download_dir),
+        str(metadata_dir),
+        registry_record={},
+        cookie_path=str(cookie_file),
+        video_download={"youtube_cookie_files": [str(cookie_file)]},
+    )
+
+    assert result["success"] is True
+    assert cookie_file.read_text() == "regenerated-cookie"
+    non_version_calls = [c for c in calls if c[:2] != ["yt-dlp", "--version"]]
+    assert "--remote-components" in non_version_calls[0]
+    assert "--cookies" in non_version_calls[0]
+    assert str(cookie_file) in non_version_calls[0]
+    assert "--cookies-from-browser" in non_version_calls[1]
+    assert non_version_calls[1][-1] == "https://www.youtube.com/watch?v=abc123"
+    assert non_version_calls[1][non_version_calls[1].index("--cookies") + 1] == str(cookie_file)
+    assert "--cookies" in non_version_calls[2]
+    assert str(cookie_file) in non_version_calls[2]
+    assert result["attempts"][1]["credential_source"].startswith("repair:firefox->")
+    assert result["attempts"][2]["credential_source"].startswith("file-regenerated:")
