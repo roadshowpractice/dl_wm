@@ -1,4 +1,5 @@
 import json
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -24,6 +25,14 @@ def assert_has_subsequence(testcase: unittest.TestCase, cmd: list[str], expected
         if cmd[idx : idx + len(expected)] == expected:
             return
     testcase.fail(f"Expected subsequence {expected!r} in command {cmd!r}")
+
+
+def read_png_dimensions(path: Path) -> tuple[int, int]:
+    data = path.read_bytes()
+    if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n":
+        raise ValueError(f"Not a PNG file: {path}")
+    width, height = struct.unpack(">II", data[16:24])
+    return width, height
 
 
 class IntroStageTests(unittest.TestCase):
@@ -82,11 +91,13 @@ class IntroStageTests(unittest.TestCase):
             self.assertEqual(clip.comment, "Break card text")
             self.assertEqual(clip.srt_path, "subtitles/clip01.srt")
             self.assertTrue((tmpdir / "intro" / "clip01.card.mp4").exists())
+            self.assertTrue((tmpdir / "intro" / "clip01.card.png").exists())
             self.assertTrue((tmpdir / "intro" / "clip01.mp4").exists())
             self.assertIn(
                 "file 'clip01.normalized.mp4'",
                 (tmpdir / "intro" / "clip01__concat.txt").read_text(encoding="utf-8"),
             )
+            self.assertEqual(read_png_dimensions(tmpdir / "intro" / "clip01.card.png"), (1920, 1080))
 
     def test_render_intro_manifest_normalizes_audio_for_card_black_and_concat(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -126,6 +137,8 @@ class IntroStageTests(unittest.TestCase):
                 "scale=1920:1080:force_original_aspect_ratio=decrease",
                 " ".join(normalize_cmd),
             )
+            assert_has_subsequence(self, card_cmd, ["-loop", "1"])
+            self.assertNotIn("drawtext", " ".join(card_cmd))
             self.assertIn(normalized_anullsrc(), card_cmd)
             self.assertIn(normalized_anullsrc(), black_cmd)
             assert_has_subsequence(self, card_cmd, normalized_video_codec_args(fps=30))
