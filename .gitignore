@@ -15,3 +15,7 @@ logs/
 # local outputs
 metadata/
 *.save
+
+# local cookie files
+conf/youtube.cookies.1.txt
+conf/insta.justin.txt
