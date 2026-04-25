@@ -6,8 +6,8 @@ CLIP_DIR="${2:-short1}"
 OUT="${3:-final_film.mp4}"
 TITLE_IMAGE="${4:-jane.png}"
 
-WIDTH="${WIDTH:-1920}"
-HEIGHT="${HEIGHT:-1080}"
+WIDTH="${WIDTH:-}"
+HEIGHT="${HEIGHT:-}"
 FPS="${FPS:-30}"
 TITLE_SECONDS="${TITLE_SECONDS:-2}"
 AUDIO_RATE="${AUDIO_RATE:-48000}"
@@ -20,7 +20,23 @@ AUDIO_LAYOUT="${AUDIO_LAYOUT:-stereo}"
 
 command -v jq >/dev/null 2>&1 || { echo "ERROR: jq not found" >&2; exit 1; }
 command -v ffmpeg >/dev/null 2>&1 || { echo "ERROR: ffmpeg not found" >&2; exit 1; }
+command -v ffprobe >/dev/null 2>&1 || { echo "ERROR: ffprobe not found" >&2; exit 1; }
 command -v readlink >/dev/null 2>&1 || { echo "ERROR: readlink not found" >&2; exit 1; }
+
+if [[ -z "$WIDTH" || -z "$HEIGHT" ]]; then
+  FIRST_CLIP="$(find "$CLIP_DIR" -maxdepth 1 -type f -name '*.mp4' | sort | head -n 1)"
+  [[ -n "$FIRST_CLIP" ]] || { echo "ERROR: unable to auto-detect WIDTH/HEIGHT; no clips found in $CLIP_DIR" >&2; exit 1; }
+
+  CLIP_DIMENSIONS="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$FIRST_CLIP" | head -n1)"
+  CLIP_WIDTH="${CLIP_DIMENSIONS%x*}"
+  CLIP_HEIGHT="${CLIP_DIMENSIONS#*x}"
+
+  [[ "$CLIP_WIDTH" =~ ^[0-9]+$ ]] || { echo "ERROR: failed to detect clip width from $FIRST_CLIP ($CLIP_DIMENSIONS)" >&2; exit 1; }
+  [[ "$CLIP_HEIGHT" =~ ^[0-9]+$ ]] || { echo "ERROR: failed to detect clip height from $FIRST_CLIP ($CLIP_DIMENSIONS)" >&2; exit 1; }
+
+  WIDTH="${WIDTH:-$CLIP_WIDTH}"
+  HEIGHT="${HEIGHT:-$CLIP_HEIGHT}"
+fi
 
 TMP_DIR="$(mktemp -d)"
 TMP_LIST="$TMP_DIR/concat.txt"
