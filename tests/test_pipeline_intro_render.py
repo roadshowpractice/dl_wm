@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pipeline import render as render_module
-from pipeline.intro import render_intro_manifest
+from pipeline.intro import _resolve_output_dimensions, render_intro_manifest
 from pipeline.render import prepare_make_final_film_inputs
 from pipeline.utils import (
     ClipEntry,
@@ -27,6 +27,17 @@ def assert_has_subsequence(testcase: unittest.TestCase, cmd: list[str], expected
 
 
 class IntroStageTests(unittest.TestCase):
+    def test_resolve_output_dimensions_prioritizes_cli_then_manifest_then_probe(self):
+        manifest = ClipsManifest(source_video="source.mp4", clips=[])
+        self.assertEqual(_resolve_output_dimensions(manifest, width=360, height=640), (360, 640))
+
+        manifest_with_render = ClipsManifest(
+            source_video="source.mp4",
+            clips=[],
+            render=RenderSettings(width=480, height=854),
+        )
+        self.assertEqual(_resolve_output_dimensions(manifest_with_render, width=None, height=None), (480, 854))
+
     def test_render_intro_manifest_advances_path_and_preserves_srt_path(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmpdir = Path(tmp)
@@ -56,7 +67,9 @@ class IntroStageTests(unittest.TestCase):
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 output_path.write_bytes(b"video")
 
-            with patch("pipeline.intro.run_cmd", side_effect=fake_run):
+            with patch("pipeline.intro.probe_video_dimensions", return_value=(1920, 1080)), patch(
+                "pipeline.intro.run_cmd", side_effect=fake_run
+            ):
                 updated = render_intro_manifest(
                     manifest,
                     output_dir=tmpdir / "intro",
@@ -71,7 +84,7 @@ class IntroStageTests(unittest.TestCase):
             self.assertTrue((tmpdir / "intro" / "clip01.card.mp4").exists())
             self.assertTrue((tmpdir / "intro" / "clip01.mp4").exists())
             self.assertIn(
-                f"file '{source_clip.resolve()}'",
+                "file 'clip01.normalized.mp4'",
                 (tmpdir / "intro" / "clip01__concat.txt").read_text(encoding="utf-8"),
             )
 
@@ -96,7 +109,9 @@ class IntroStageTests(unittest.TestCase):
                 commands.append(cmd)
                 Path(cmd[-1]).write_bytes(b"video")
 
-            with patch("pipeline.intro.run_cmd", side_effect=fake_run):
+            with patch("pipeline.intro.probe_video_dimensions", return_value=(1920, 1080)), patch(
+                "pipeline.intro.run_cmd", side_effect=fake_run
+            ):
                 render_intro_manifest(
                     manifest,
                     output_dir=tmpdir / "intro",
@@ -105,8 +120,12 @@ class IntroStageTests(unittest.TestCase):
                     black_seconds=1.0,
                 )
 
-            self.assertEqual(len(commands), 3)
-            card_cmd, black_cmd, concat_cmd = commands
+            self.assertEqual(len(commands), 4)
+            normalize_cmd, card_cmd, black_cmd, concat_cmd = commands
+            self.assertIn(
+                "scale=1920:1080:force_original_aspect_ratio=decrease",
+                " ".join(normalize_cmd),
+            )
             self.assertIn(normalized_anullsrc(), card_cmd)
             self.assertIn(normalized_anullsrc(), black_cmd)
             assert_has_subsequence(self, card_cmd, normalized_video_codec_args(fps=30))
@@ -221,13 +240,17 @@ class FinalRenderPrepTests(unittest.TestCase):
             ):
                 render_module.main()
 
-            self.assertEqual(len(commands), 3)
-            title_cmd, black_cmd, concat_cmd = commands
+            self.assertEqual(len(commands), 4)
+            title_cmd, black_cmd, normalize_cmd, concat_cmd = commands
             self.assertIn(normalized_anullsrc(), title_cmd)
             self.assertIn(normalized_anullsrc(), black_cmd)
             assert_has_subsequence(self, title_cmd, normalized_video_codec_args(fps=30, crf=18))
             assert_has_subsequence(self, title_cmd, normalized_audio_codec_args())
             assert_has_subsequence(self, black_cmd, normalized_video_codec_args(fps=30))
+            self.assertIn(
+                "scale=1920:1080:force_original_aspect_ratio=decrease",
+                " ".join(normalize_cmd),
+            )
             assert_has_subsequence(self, black_cmd, normalized_audio_codec_args())
             assert_has_subsequence(self, concat_cmd, normalized_video_codec_args(fps=30, crf=18))
             assert_has_subsequence(self, concat_cmd, normalized_audio_codec_args())

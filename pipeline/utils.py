@@ -119,6 +119,42 @@ def ensure_ffmpeg() -> None:
         raise RuntimeError("ffmpeg is required but not available on PATH") from exc
 
 
+def probe_video_dimensions(video_path: Path) -> tuple[int, int]:
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=width,height",
+                "-of",
+                "json",
+                str(video_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        raise RuntimeError(f"Failed to probe video dimensions for {video_path}") from exc
+
+    try:
+        payload = json.loads(proc.stdout)
+        stream = payload["streams"][0]
+        width = int(stream["width"])
+        height = int(stream["height"])
+    except (KeyError, IndexError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Invalid ffprobe output while probing {video_path}") from exc
+
+    if width <= 0 or height <= 0:
+        raise RuntimeError(f"Non-positive probed dimensions for {video_path}: {width}x{height}")
+
+    return width, height
+
+
 def validate_clips_manifest(data: dict[str, Any]) -> ClipsManifest:
     if not isinstance(data, dict):
         raise ValueError("clips_manifest must be a JSON object")
