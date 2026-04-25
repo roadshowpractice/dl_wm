@@ -76,6 +76,7 @@ need_cmd() {
 
 need_cmd python
 need_cmd ffmpeg
+need_cmd ffprobe
 
 need_file "$VIDEO_PATH"
 need_file "$JSONL_PATH"
@@ -95,6 +96,15 @@ echo "INTRO_DIR:      $INTRO_DIR"
 echo "MANIFEST_PATH:  $MANIFEST_PATH"
 echo "FINAL_VIDEO:    $FINAL_VIDEO_PATH"
 
+SRC_DIMENSIONS="$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0:s=x "$VIDEO_PATH" | head -n1)"
+SRC_W="${SRC_DIMENSIONS%x*}"
+SRC_H="${SRC_DIMENSIONS#*x}"
+[[ "$SRC_W" =~ ^[0-9]+$ ]] || die "Unable to detect source width from: $SRC_DIMENSIONS"
+[[ "$SRC_H" =~ ^[0-9]+$ ]] || die "Unable to detect source height from: $SRC_DIMENSIONS"
+
+echo "SRC_W:          $SRC_W"
+echo "SRC_H:          $SRC_H"
+
 ########################################
 # STAGE 1 — EXTRACT CLIPS
 ########################################
@@ -112,6 +122,34 @@ if [[ "$DO_EXTRACT" == "1" ]]; then
     --manifest-out "$MANIFEST_PATH"
 
   need_file "$MANIFEST_PATH"
+fi
+
+if [[ -f "$MANIFEST_PATH" ]]; then
+  python - <<'PY' "$MANIFEST_PATH" "$SRC_W" "$SRC_H"
+import json
+import sys
+from pathlib import Path
+
+manifest_path = Path(sys.argv[1])
+src_w = int(sys.argv[2])
+src_h = int(sys.argv[3])
+
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+render = manifest.get("render")
+if not isinstance(render, dict):
+    render = {}
+
+render["width"] = src_w
+render["height"] = src_h
+render.setdefault("fps", 30)
+render.setdefault("video_codec", "libx264")
+render.setdefault("audio_codec", "aac")
+render.setdefault("crf", 18)
+manifest["render"] = render
+
+manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+print(f"Updated manifest render dimensions to {src_w}x{src_h}: {manifest_path}")
+PY
 fi
 
 ########################################
@@ -324,6 +362,8 @@ if [[ "$DO_INTRO" == "1" ]]; then
     --output-dir "$INTRO_DIR" \
     --manifest-out "$MANIFEST_PATH" \
     --font "$FONT_PATH" \
+    --width "$SRC_W" \
+    --height "$SRC_H" \
     --intro-seconds 2.0
 
   need_file "$MANIFEST_PATH"
@@ -339,36 +379,26 @@ if [[ "$DO_RENDER" == "1" ]]; then
 
   need_file "$MANIFEST_PATH"
   need_file "$TITLE_IMAGE_PATH"
-  need_cmd jq
-  need_cmd readlink
 
-  CLIPS_JSONL_FOR_FILM="${RUN_DIR}/clips_for_film.jsonl"
-  FILM_CLIP_DIR="${RUN_DIR}/film_clips"
-
-  rm -rf "$FILM_CLIP_DIR"
-  mkdir -p "$FILM_CLIP_DIR"
-
-  python - <<'PY' "$MANIFEST_PATH" "$CLIPS_JSONL_FOR_FILM" "$FILM_CLIP_DIR"
+  python - <<'PY' "$MANIFEST_PATH" "$TITLE_IMAGE_PATH"
+import json
 import sys
 from pathlib import Path
 
-from pipeline.render import prepare_make_final_film_inputs
+manifest_path = Path(sys.argv[1])
+title_image = str(Path(sys.argv[2]).resolve())
 
-prepare_make_final_film_inputs(
-    Path(sys.argv[1]),
-    Path(sys.argv[2]),
-    Path(sys.argv[3]),
-)
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+manifest["title_image"] = title_image
+manifest.setdefault("title_seconds", 2.0)
+manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+print(f"Set manifest title_image: {title_image}")
 PY
 
-  need_file "$CLIPS_JSONL_FOR_FILM"
-  need_dir "$FILM_CLIP_DIR"
-
-  bash bin/make_final_film.sh \
-    "$CLIPS_JSONL_FOR_FILM" \
-    "$FILM_CLIP_DIR" \
-    "$FINAL_VIDEO_PATH" \
-    "$TITLE_IMAGE_PATH"
+  python -m pipeline.render \
+    --manifest "$MANIFEST_PATH" \
+    --output "$FINAL_VIDEO_PATH" \
+    --work-dir "${RUN_DIR}/render_tmp"
 
   need_file "$FINAL_VIDEO_PATH"
 fi

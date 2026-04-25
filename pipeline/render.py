@@ -118,9 +118,27 @@ def main() -> None:
         path = Path(segment.path)
         if not path.exists():
             raise FileNotFoundError(f"Missing segment file: {path}")
+
+        normalized_segment = work_dir / f"{segment.clip_id}.normalized.mp4"
+        run_cmd(
+            [
+                "ffmpeg",
+                "-y",
+                "-i",
+                str(path),
+                "-vf",
+                f"scale={manifest.render.width}:{manifest.render.height}:force_original_aspect_ratio=decrease,"
+                f"pad={manifest.render.width}:{manifest.render.height}:(ow-iw)/2:(oh-ih)/2:black,"
+                f"fps={manifest.render.fps},format=yuv420p",
+                *normalized_video_codec_args(fps=manifest.render.fps, crf=manifest.render.crf),
+                *normalized_audio_codec_args(),
+                str(normalized_segment),
+            ]
+        )
+
         if args.black_seconds > 0:
             concat_lines.append(f"file '{black_mp4.resolve()}'")
-        concat_lines.append(f"file '{path.resolve()}'")
+        concat_lines.append(f"file '{normalized_segment.resolve()}'")
 
     concat_txt.write_text("\n".join(concat_lines) + "\n", encoding="utf-8")
 
