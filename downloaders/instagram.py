@@ -35,6 +35,31 @@ def _resolve_entries(info):
     return [info] if isinstance(info, dict) else []
 
 
+def _extract_image_url(entry):
+    if not isinstance(entry, dict):
+        return None
+
+    direct = entry.get("url") or entry.get("display_url") or entry.get("thumbnail")
+    if direct:
+        return direct
+
+    thumbnails = entry.get("thumbnails")
+    if isinstance(thumbnails, list):
+        for thumb in reversed(thumbnails):
+            if isinstance(thumb, dict) and thumb.get("url"):
+                return thumb["url"]
+
+    image_versions = entry.get("image_versions2")
+    if isinstance(image_versions, dict):
+        candidates = image_versions.get("candidates")
+        if isinstance(candidates, list):
+            for candidate in candidates:
+                if isinstance(candidate, dict) and candidate.get("url"):
+                    return candidate["url"]
+
+    return None
+
+
 def _download_video_entry(entry, media_dir, index, cookie_path, video_download):
     output_template = os.path.join(media_dir, f"{index:03d}.%(ext)s")
     ydl_opts = {
@@ -127,7 +152,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
             continue
 
         logger.info("Skipping non-video entry (image) for video pipeline entry %s", i)
-        image_url = entry.get("url") or entry.get("thumbnail")
+        image_url = _extract_image_url(entry)
         if not image_url:
             logger.warning("Skipping image entry %s (missing url/thumbnail)", i)
             continue
@@ -151,7 +176,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         logger.info("Downloaded image entry %s", i)
 
     if not downloaded_files:
-        raise RuntimeError("No downloadable Instagram carousel entries were found")
+        raise RuntimeError("No downloadable Instagram media entries were found")
 
     downloaded_path = downloaded_files[0]
 
