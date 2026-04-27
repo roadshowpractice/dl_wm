@@ -66,6 +66,22 @@ Dry run mode:
 python bin/call_router.py "<media-url>" --dry-run
 ```
 
+## Manual watermark (no metadata JSON required)
+
+When you already have a local video file and want to watermark it without downloader sidecar metadata, use:
+
+```bash
+bin/watermark_manual.sh \
+  "INPUT_VIDEO.mp4" \
+  "OUTPUT_VIDEO.mp4" \
+  "Uploader Name" \
+  "2026-04-26" \
+  "Video title here"
+```
+
+This calls `bin/call_watermark.py` in manual mode and builds a source label like:
+`Uploader Name | 2026-04-26 | Video title here` (long titles are truncated safely).
+
 ## Add-url examples
 
 Add a new URL (writes `vendor`, `vendor_id`, optional `kind`, and metadata file names like `{vendor}__{vendor_id}.json`):
