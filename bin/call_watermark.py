@@ -75,18 +75,6 @@ def _metadata_path_for_media(input_video_path: str, metadata_dir: str) -> str:
     return ""
 
 
-def _truncate_for_label(text: str, max_chars: int = 120) -> str:
-    clean = " ".join(str(text or "").split())
-    if len(clean) <= max_chars:
-        return clean
-    return clean[: max_chars - 1].rstrip() + "…"
-
-
-def _build_source_label(uploader: str, upload_date: str, title: str, max_chars: int = 160) -> str:
-    pieces = [piece.strip() for piece in [uploader, upload_date, title] if str(piece or "").strip()]
-    return _truncate_for_label(" | ".join(pieces), max_chars=max_chars)
-
-
 def _parse_args(argv):
     parser = argparse.ArgumentParser(
         description=(
@@ -141,7 +129,7 @@ def main():
         video_date = args.upload_date or datetime.now().strftime("%Y-%m-%d")
         video_title = args.title or ""
 
-        if not (args.uploader and args.upload_date and args.title):
+        if not (args.uploader and args.upload_date):
             metadata_dir = app_config.get("metadata_dir", "./metadata")
             if not os.path.isabs(metadata_dir):
                 metadata_dir = os.path.join(root_dir, metadata_dir)
@@ -158,10 +146,10 @@ def main():
                 except json.JSONDecodeError as e:
                     logger.error(f"Failed to parse JSON metadata from {json_path}: {e}")
                     sys.exit(1)
-            elif not (args.uploader and args.upload_date and args.title):
+            elif not (args.uploader and args.upload_date):
                 logger.error(
                     "Metadata file not found for input video and manual metadata is incomplete. "
-                    "Provide --uploader, --upload-date, and --title."
+                    "Provide --uploader and --upload-date."
                 )
                 sys.exit(1)
 
@@ -169,15 +157,12 @@ def main():
             logger.warning("Uploader looks like a filename; skipping username watermark.")
             username = ""
 
-        source_label = _build_source_label(username, video_date, video_title) if video_title else ""
-
         params = {
             **dict(watermark_config),
             "input_video_path": input_video_path,
             "download_path": os.path.dirname(input_video_path),
             "username": username,
             "video_date": video_date,
-            "source_label": source_label,
         }
         if args.output_video:
             params["output_video_path"] = args.output_video
