@@ -50,6 +50,30 @@ class FakeYDL:
         return path
 
 
+class FakeSingleImageYDL:
+    def __init__(self, opts):
+        self.opts = opts
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def extract_info(self, url, download=False):
+        if download:
+            raise AssertionError("extract_info should be inspection-only")
+        return {
+            "id": "IMGONLY1",
+            "title": "single image post",
+            "display_url": "https://cdn.example/main.jpg",
+            "thumbnails": [
+                {"url": "https://cdn.example/thumb-small.jpg"},
+                {"url": "https://cdn.example/thumb-large.jpg"},
+            ],
+        }
+
+
 def test_instagram_carousel_downloads_images_and_videos(monkeypatch, tmp_path):
     out_dir = tmp_path / "out"
     metadata_dir = tmp_path / "meta"
@@ -83,3 +107,38 @@ def test_instagram_carousel_downloads_images_and_videos(monkeypatch, tmp_path):
     assert data["items"][2]["filename"].startswith("004")
     assert "manifest" in data
     assert record["to_process"].endswith("001.jpg")
+
+
+def test_instagram_single_image_uses_display_url(monkeypatch, tmp_path):
+    out_dir = tmp_path / "out"
+    metadata_dir = tmp_path / "meta"
+
+    monkeypatch.setattr(ig, "load_app_config", lambda: {"raw_metadata_mode": "json"})
+    monkeypatch.setattr(ig, "extract_vendor_id", lambda *_: "IMGONLY1")
+    monkeypatch.setattr(ig.yt_dlp, "YoutubeDL", FakeSingleImageYDL)
+
+    downloaded = {}
+
+    def fake_image(url, path):
+        downloaded["url"] = url
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_bytes(b"img")
+        return path
+
+    monkeypatch.setattr(ig, "download_image", fake_image)
+
+    record = ig.download(
+        "https://www.instagram.com/p/IMGONLY1/",
+        str(out_dir),
+        str(metadata_dir),
+        {},
+        cookie_path="",
+        video_download={"format": "best"},
+    )
+
+    data = json.loads(Path(record["metadata_path"]).read_text(encoding="utf-8"))
+    assert downloaded["url"] == "https://cdn.example/main.jpg"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["type"] == "image"
+    assert "manifest" not in data
+    assert record["to_process"].endswith(".jpg")
