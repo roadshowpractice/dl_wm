@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import traceback
+import argparse
 from datetime import datetime
 
 # Ensure we can import shared utilities
@@ -74,6 +75,48 @@ def _metadata_path_for_media(input_video_path: str, metadata_dir: str) -> str:
     return ""
 
 
+def _truncate_for_label(text: str, max_chars: int = 120) -> str:
+    clean = " ".join(str(text or "").split())
+    if len(clean) <= max_chars:
+        return clean
+    return clean[: max_chars - 1].rstrip() + "…"
+
+
+def _build_source_label(uploader: str, upload_date: str, title: str, max_chars: int = 160) -> str:
+    pieces = [piece.strip() for piece in [uploader, upload_date, title] if str(piece or "").strip()]
+    return _truncate_for_label(" | ".join(pieces), max_chars=max_chars)
+
+
+def _parse_args(argv):
+    parser = argparse.ArgumentParser(
+        description=(
+            "Apply watermark overlays to a video. Supports legacy metadata-json mode and "
+            "standalone manual metadata mode."
+        )
+    )
+    parser.add_argument(
+        "legacy_input",
+        nargs="?",
+        help="Legacy input video path (metadata sidecar lookup mode).",
+    )
+    parser.add_argument("--input", dest="input_video", help="Input video path.")
+    parser.add_argument(
+        "--output",
+        dest="output_video",
+        help="Output video path (optional; defaults to *_watermarked beside input).",
+    )
+    parser.add_argument("--uploader", dest="uploader", help="Uploader/source handle.")
+    parser.add_argument("--upload-date", dest="upload_date", help="Upload date string.")
+    parser.add_argument("--title", dest="title", help="Video title.")
+    args = parser.parse_args(argv)
+
+    input_video_path = args.input_video or args.legacy_input
+    if not input_video_path:
+        parser.error("Missing input video path. Provide legacy positional path or --input.")
+    args.input_video = input_video_path
+    return args
+
+
 def main():
     try:
         platform_config = load_config()
@@ -85,39 +128,48 @@ def main():
         }
         logger = initialize_logging_from_config(logging_config)
 
-        if len(sys.argv) < 2:
-            logger.error("Usage: python call_watermark.py <video_file_path>")
-            sys.exit(1)
-
-        input_video_path = sys.argv[1]
+        args = _parse_args(sys.argv[1:])
+        input_video_path = args.input_video
         if not os.path.isfile(input_video_path):
             logger.error(f"Input video file does not exist: {input_video_path}")
             sys.exit(1)
 
         logger.info(f"Processing video file: {input_video_path}")
 
-        metadata_dir = app_config.get("metadata_dir", "./metadata")
-        if not os.path.isabs(metadata_dir):
-            metadata_dir = os.path.join(root_dir, metadata_dir)
+        json_path = ""
+        username = args.uploader or ""
+        video_date = args.upload_date or datetime.now().strftime("%Y-%m-%d")
+        video_title = args.title or ""
 
-        json_path = _metadata_path_for_media(input_video_path, metadata_dir)
-        if not json_path:
-            logger.error(f"Metadata file not found for input video: {input_video_path}")
-            sys.exit(1)
+        if not (args.uploader and args.upload_date and args.title):
+            metadata_dir = app_config.get("metadata_dir", "./metadata")
+            if not os.path.isabs(metadata_dir):
+                metadata_dir = os.path.join(root_dir, metadata_dir)
 
-        logger.info(f"Loaded metadata from: {json_path}")
+            json_path = _metadata_path_for_media(input_video_path, metadata_dir)
+            if json_path:
+                logger.info(f"Loaded metadata from: {json_path}")
+                try:
+                    with open(json_path, "r", encoding="utf-8") as file:
+                        data = json.load(file)
+                    username = username or data.get("uploader", "")
+                    video_date = args.upload_date or data.get("video_date", video_date)
+                    video_title = video_title or data.get("video_title") or data.get("title", "")
+                except json.JSONDecodeError as e:
+                    logger.error(f"Failed to parse JSON metadata from {json_path}: {e}")
+                    sys.exit(1)
+            elif not (args.uploader and args.upload_date and args.title):
+                logger.error(
+                    "Metadata file not found for input video and manual metadata is incomplete. "
+                    "Provide --uploader, --upload-date, and --title."
+                )
+                sys.exit(1)
 
-        try:
-            with open(json_path, "r", encoding="utf-8") as file:
-                data = json.load(file)
-            username = data.get("uploader", "")
-            if looks_like_filename(username):
-                logger.warning("Metadata uploader looks like a filename; skipping username watermark.")
-                username = ""
-            video_date = data.get("video_date", datetime.now().strftime("%Y-%m-%d"))
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse JSON metadata from {json_path}: {e}")
-            sys.exit(1)
+        if looks_like_filename(username):
+            logger.warning("Uploader looks like a filename; skipping username watermark.")
+            username = ""
+
+        source_label = _build_source_label(username, video_date, video_title) if video_title else ""
 
         params = {
             **dict(watermark_config),
@@ -125,14 +177,18 @@ def main():
             "download_path": os.path.dirname(input_video_path),
             "username": username,
             "video_date": video_date,
+            "source_label": source_label,
         }
+        if args.output_video:
+            params["output_video_path"] = args.output_video
 
         logger.debug(f"Watermark configuration: {watermark_config}")
         logger.info("Starting watermarking process...")
         result = add_watermark(params)
 
         if result and "to_process" in result:
-            update_task_output_path(json_path, "apply_watermark", result["to_process"])
+            if json_path:
+                update_task_output_path(json_path, "apply_watermark", result["to_process"])
             logger.info(f"Watermarked video created successfully: {result['to_process']}")
             print(result["to_process"])
             return
