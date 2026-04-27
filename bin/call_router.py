@@ -29,6 +29,17 @@ TASK_DISPATCH = {
     # Convert screenshot timestamps after all other tasks
     "post_processed": "bin/convert_screenshots.py"
 }
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def is_image_media(found_data, downloaded_path):
+    """Return True when metadata or download path indicates image media."""
+    metadata_media_type = str(found_data.get("media_type", "")).strip().lower()
+    if metadata_media_type == "image":
+        return True
+
+    extension = os.path.splitext(str(downloaded_path))[1].strip().lower()
+    return extension in IMAGE_EXTENSIONS
 
 def execute_tasks(task_config, url, to_process, dry_run=False):
     """Run appropriate script for each task based on its config."""
@@ -193,6 +204,12 @@ def main():
 
         if not wait_for_download_file(to_process, logger):
             logger.error("Input file does not exist: {}".format(to_process))
+            return
+
+        if is_image_media(found_data, to_process):
+            logger.info(
+                "Image media detected; download complete. Skipping video/audio pipeline."
+            )
             return
 
         default_tasks = found_data.get("default_tasks", {})
