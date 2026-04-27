@@ -37,7 +37,7 @@ def detect_vendor(url: str):
     if host in YOUTUBE_HOSTS:
         if host == "youtu.be":
             return VENDOR_YOUTUBE
-        if path.startswith("watch") or path.startswith("shorts/"):
+        if path.startswith("watch") or path.startswith("shorts/") or path.startswith("live/"):
             return VENDOR_YOUTUBE
 
     return None
@@ -88,6 +88,10 @@ def extract_vendor_id(vendor: str, url: str):
             video_id = parse_qs(parsed.query).get("v", [None])[0]
             return video_id
 
+        match = re.match(r"^live/([^/?#]+)/?", path)
+        if match:
+            return match.group(1)
+
         match = re.match(r"^shorts/([^/?#]+)/?", path)
         return match.group(1) if match else None
 
@@ -114,7 +118,11 @@ def infer_kind(vendor: str, url: str):
     if vendor == VENDOR_YOUTUBE:
         if path.startswith("shorts/"):
             return "short"
-        if path.startswith("watch") or (parsed.hostname or "").lower() == "youtu.be":
+        if (
+            path.startswith("watch")
+            or path.startswith("live/")
+            or (parsed.hostname or "").lower() == "youtu.be"
+        ):
             return "video"
 
     return None
@@ -137,6 +145,17 @@ def canonicalize_vendor_url(vendor: str, url: str):
             return f"https://www.youtube.com/watch?v={vendor_id}"
 
     return url
+
+
+def recognized_vendor_patterns_text() -> str:
+    """Return a compact list of supported URL patterns for user-facing errors."""
+    return (
+        "Instagram: instagram.com/reel/<id>, instagram.com/reels/<id>, instagram.com/p/<id>; "
+        "Facebook: facebook.com/reel/<id>, facebook.com/watch/?v=<id>, "
+        "facebook.com/share/r/<id>, facebook.com/share/v/<id>, fb.watch/<id>; "
+        "YouTube: youtube.com/watch?v=<id>, youtube.com/shorts/<id>, "
+        "youtube.com/live/<id>, youtu.be/<id>."
+    )
 
 
 def format_shortcode(vendor: str, token: str):
