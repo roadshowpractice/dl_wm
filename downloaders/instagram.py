@@ -1,9 +1,11 @@
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from urllib.request import Request, urlopen
 
+import requests
 import yt_dlp
 
 from lib.metadata_compactor import build_compact_metadata, write_raw_metadata
@@ -60,6 +62,132 @@ def _extract_image_url(entry):
     return None
 
 
+def _decode_escaped(value):
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(f'"{value}"')
+    except Exception:
+        return value.replace("\\/", "/")
+
+
+def _load_cookie_jar(cookie_path):
+    jar = requests.cookies.RequestsCookieJar()
+    if not cookie_path or not os.path.exists(cookie_path):
+        return jar
+
+    with open(cookie_path, "r", encoding="utf-8", errors="ignore") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split("\t")
+            if len(parts) < 7:
+                continue
+            domain, _, path, _, _, name, value = parts[:7]
+            if not name:
+                continue
+            jar.set(name, value, domain=domain or None, path=path or "/")
+    return jar
+
+
+def extract_image_candidates_from_html(html):
+    candidates = []
+    seen = set()
+
+    def add_candidate(url, source, width=None, height=None):
+        clean_url = _decode_escaped(url)
+        if not clean_url or clean_url in seen:
+            return
+        seen.add(clean_url)
+        candidates.append(
+            {
+                "url": clean_url,
+                "source": source,
+                "width": width,
+                "height": height,
+            }
+        )
+
+    og_matches = re.findall(
+        r'<meta[^>]+(?:property|name)=["\']og:image["\'][^>]*content=["\']([^"\']+)["\']',
+        html,
+        flags=re.IGNORECASE,
+    )
+    for og_url in og_matches:
+        add_candidate(og_url, "og:image")
+
+    for key in ("display_url", "thumbnail_src"):
+        for raw_url in re.findall(rf'"{key}"\s*:\s*"([^"]+)"', html):
+            add_candidate(raw_url, key)
+
+    for match in re.finditer(r'"image_versions2"\s*:\s*\{', html):
+        block = html[match.start() : match.start() + 50000]
+        candidates_match = re.search(r'"candidates"\s*:\s*\[(.*?)\]', block, flags=re.DOTALL)
+        if not candidates_match:
+            continue
+        block_urls = re.finditer(
+            r'"url"\s*:\s*"([^"]+)"(?:[^{}]{0,200}?"width"\s*:\s*(\d+))?(?:[^{}]{0,200}?"height"\s*:\s*(\d+))?',
+            candidates_match.group(1),
+        )
+        for block_url in block_urls:
+            width = int(block_url.group(2)) if block_url.group(2) else None
+            height = int(block_url.group(3)) if block_url.group(3) else None
+            add_candidate(block_url.group(1), "image_versions2", width=width, height=height)
+
+    return candidates
+
+
+def extract_page_metadata_from_html(html):
+    caption = None
+    uploader = None
+    title = None
+
+    caption_match = re.search(
+        r'"edge_media_to_caption"\s*:\s*\{"edges"\s*:\s*\[\{"node"\s*:\s*\{"text"\s*:\s*"([^"]*)"',
+        html,
+    )
+    if caption_match:
+        caption = _decode_escaped(caption_match.group(1))
+
+    username_match = re.search(r'"owner"\s*:\s*\{[^{}]*"username"\s*:\s*"([^"]+)"', html)
+    if username_match:
+        uploader = _decode_escaped(username_match.group(1))
+
+    og_title_match = re.search(
+        r'<meta[^>]+(?:property|name)=["\']og:title["\'][^>]*content=["\']([^"\']+)["\']',
+        html,
+        flags=re.IGNORECASE,
+    )
+    if og_title_match:
+        title = _decode_escaped(og_title_match.group(1))
+
+    return {"caption": caption, "uploader": uploader, "title": title}
+
+
+def inspect_image_candidates(url, cookie_path=None):
+    session = requests.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0"})
+    jar = _load_cookie_jar(cookie_path)
+    response = session.get(url, cookies=jar, timeout=20)
+    response.raise_for_status()
+    return extract_image_candidates_from_html(response.text)
+
+
+def _choose_best_candidate(candidates):
+    if not candidates:
+        return None
+
+    def rank(candidate):
+        width = candidate.get("width") or 0
+        height = candidate.get("height") or 0
+        source = candidate.get("source") or ""
+        source_bonus = 1000000 if source == "image_versions2" else 0
+        return source_bonus + (width * height), width, height
+
+    return max(candidates, key=rank)
+
+
 def _download_video_entry(entry, media_dir, index, cookie_path, video_download):
     output_template = os.path.join(media_dir, f"{index:03d}.%(ext)s")
     ydl_opts = {
@@ -103,77 +231,123 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         "writeinfojson": False,
     }
 
-    with yt_dlp.YoutubeDL(inspect_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    info = None
+    page_metadata = {}
+    used_html_fallback = False
+    try:
+        with yt_dlp.YoutubeDL(inspect_opts) as ydl:
+            info = ydl.extract_info(url, download=False)
+    except Exception as exc:
+        download_error_cls = getattr(getattr(yt_dlp, "utils", None), "DownloadError", None)
+        is_download_error = bool(download_error_cls and isinstance(exc, download_error_cls))
+        message = str(exc)
+        if is_download_error and "No video formats found" in message:
+            logger.warning("yt-dlp extract_info failed for Instagram post: %s", message)
+            logger.info("Attempting Instagram HTML image fallback for %s", url)
+            candidates = inspect_image_candidates(url, cookie_path=cookie_path)
+            if not candidates:
+                raise RuntimeError("No downloadable Instagram media entries were found") from exc
+            best = _choose_best_candidate(candidates)
+            logger.info(
+                "Instagram HTML fallback selected image candidate from %s",
+                best.get("source"),
+            )
+            ext = Path(best["url"].split("?")[0]).suffix.lstrip(".").lower() or "jpg"
+            if len(ext) > 5:
+                ext = "jpg"
+            fallback_filename = f"{VENDOR_INSTAGRAM}__{vendor_id}.{ext}"
+            downloaded_path = os.path.join(output_dir, fallback_filename)
+            download_image(best["url"], downloaded_path)
 
-    entries = _resolve_entries(info)
-    is_carousel = len(entries) > 1
+            session = requests.Session()
+            session.headers.update({"User-Agent": "Mozilla/5.0"})
+            html_response = session.get(url, cookies=_load_cookie_jar(cookie_path), timeout=20)
+            html_response.raise_for_status()
+            page_metadata = extract_page_metadata_from_html(html_response.text)
 
-    if is_carousel:
-        media_dir = os.path.join(output_dir, "media")
-        os.makedirs(media_dir, exist_ok=True)
-    else:
-        media_dir = output_dir
+            info = {
+                "id": vendor_id,
+                "title": page_metadata.get("title") or page_metadata.get("caption"),
+                "uploader": page_metadata.get("uploader"),
+                "ext": ext,
+                "display_url": best["url"],
+            }
+            used_html_fallback = True
+            items = [{"index": 1, "type": "image", "filename": os.path.basename(downloaded_path)}]
+            downloaded_files = [downloaded_path]
+            is_carousel = False
+        else:
+            raise
 
-    items = []
-    downloaded_files = []
+    if not used_html_fallback:
+        entries = _resolve_entries(info)
+        is_carousel = len(entries) > 1
 
-    for i, entry in enumerate(entries, start=1):
-        if entry is None:
-            logger.warning("Skipping empty playlist entry at index %s", i)
-            continue
+        if is_carousel:
+            media_dir = os.path.join(output_dir, "media")
+            os.makedirs(media_dir, exist_ok=True)
+        else:
+            media_dir = output_dir
 
-        is_video = bool(entry.get("formats"))
+        items = []
+        downloaded_files = []
 
-        if is_video and not download_videos:
-            logger.info("Skipping video entry %s due to configuration", i)
-            continue
-        if not is_video and not download_images:
-            logger.info("Skipping non-video entry (image) %s due to configuration", i)
-            continue
-
-        if is_video:
-            downloaded_path = _download_video_entry(entry, media_dir, i, cookie_path, video_download)
-            if not downloaded_path:
-                logger.warning("Skipping video entry %s (download failed)", i)
+        for i, entry in enumerate(entries, start=1):
+            if entry is None:
+                logger.warning("Skipping empty playlist entry at index %s", i)
                 continue
 
-            filename = os.path.basename(downloaded_path)
-            downloaded_files.append(downloaded_path)
+            is_video = bool(entry.get("formats"))
+
+            if is_video and not download_videos:
+                logger.info("Skipping video entry %s due to configuration", i)
+                continue
+            if not is_video and not download_images:
+                logger.info("Skipping non-video entry (image) %s due to configuration", i)
+                continue
+
+            if is_video:
+                downloaded_path = _download_video_entry(entry, media_dir, i, cookie_path, video_download)
+                if not downloaded_path:
+                    logger.warning("Skipping video entry %s (download failed)", i)
+                    continue
+
+                filename = os.path.basename(downloaded_path)
+                downloaded_files.append(downloaded_path)
+                items.append(
+                    {
+                        "index": i,
+                        "type": "video",
+                        "filename": filename,
+                        "duration": entry.get("duration"),
+                    }
+                )
+                logger.info("Downloaded video entry %s", i)
+                continue
+
+            logger.info("Skipping non-video entry (image) for video pipeline entry %s", i)
+            image_url = _extract_image_url(entry)
+            if not image_url:
+                logger.warning("Skipping image entry %s (missing url/thumbnail)", i)
+                continue
+
+            ext = (entry.get("ext") or "jpg").split("?")[0].lower()
+            if not ext or len(ext) > 5:
+                ext = "jpg"
+
+            image_path = os.path.join(media_dir, f"{i:03d}.{ext}")
+            download_image(image_url, image_path)
+
+            filename = os.path.basename(image_path)
+            downloaded_files.append(image_path)
             items.append(
                 {
                     "index": i,
-                    "type": "video",
+                    "type": "image",
                     "filename": filename,
-                    "duration": entry.get("duration"),
                 }
             )
-            logger.info("Downloaded video entry %s", i)
-            continue
-
-        logger.info("Skipping non-video entry (image) for video pipeline entry %s", i)
-        image_url = _extract_image_url(entry)
-        if not image_url:
-            logger.warning("Skipping image entry %s (missing url/thumbnail)", i)
-            continue
-
-        ext = (entry.get("ext") or "jpg").split("?")[0].lower()
-        if not ext or len(ext) > 5:
-            ext = "jpg"
-
-        image_path = os.path.join(media_dir, f"{i:03d}.{ext}")
-        download_image(image_url, image_path)
-
-        filename = os.path.basename(image_path)
-        downloaded_files.append(image_path)
-        items.append(
-            {
-                "index": i,
-                "type": "image",
-                "filename": filename,
-            }
-        )
-        logger.info("Downloaded image entry %s", i)
+            logger.info("Downloaded image entry %s", i)
 
     if not downloaded_files:
         raise RuntimeError("No downloadable Instagram media entries were found")
@@ -194,6 +368,13 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         vendor_id=vendor_id,
         downloaded_path=downloaded_path,
     )
+    compact["source_url"] = url
+    compact["media_type"] = "carousel" if len(items) > 1 else items[0]["type"]
+    compact["downloaded_file"] = downloaded_path
+    compact["shortcode"] = vendor_id
+    compact["title"] = page_metadata.get("title") if page_metadata else (info.get("title") if isinstance(info, dict) else None)
+    compact["caption"] = page_metadata.get("caption") if page_metadata else None
+    compact["uploader"] = compact.get("uploader") or (page_metadata.get("uploader") if page_metadata else None)
 
     if items:
         compact["items"] = items
