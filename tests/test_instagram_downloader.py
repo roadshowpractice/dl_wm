@@ -301,3 +301,117 @@ def test_extract_image_candidates_from_html_uses_multiple_sources():
     assert "https://cdn.example/display.jpg" in urls
     assert "https://cdn.example/thumb.jpg" in urls
     assert "https://cdn.example/hi.jpg" in urls
+
+
+class _FallbackResponse:
+    def __init__(self, status_code, content_type, body):
+        self.status_code = status_code
+        self.headers = {"Content-Type": content_type}
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            err = RuntimeError(f"HTTP {self.status_code}")
+            err.response = self
+            raise err
+
+    def iter_content(self, chunk_size=65536):
+        _ = chunk_size
+        yield self._body
+
+
+class _FallbackSession:
+    def __init__(self, responses):
+        self.headers = {"User-Agent": "Mozilla/5.0 (test)"}
+        self._responses = responses
+        self.calls = []
+
+    def get(self, url, **kwargs):
+        self.calls.append({"url": url, **kwargs})
+        return self._responses[url]
+
+
+def test_html_fallback_tries_next_candidate_after_403(monkeypatch, tmp_path, caplog):
+    download_path = tmp_path / "out" / "instagram__DW9hy3kidPl.bin"
+    metadata_dir = tmp_path / "meta"
+    candidates = [
+        {"url": "https://cdn.example/blocked.jpg?x=1", "source": "image_versions2", "width": 1080, "height": 1920},
+        {"url": "https://cdn.example/success.webp?x=2", "source": "og:image"},
+    ]
+    session = _FallbackSession(
+        {
+            "https://cdn.example/blocked.jpg?x=1": _FallbackResponse(403, "image/jpeg", b""),
+            "https://cdn.example/success.webp?x=2": _FallbackResponse(200, "image/webp", b"ok-image"),
+        }
+    )
+
+    monkeypatch.setattr(
+        ig,
+        "inspect_image_candidates_diagnostics",
+        lambda *_args, **_kwargs: {
+            "status_code": 200,
+            "cookies_loaded": True,
+            "candidate_sources": [c["source"] for c in candidates],
+            "candidates": candidates,
+            "html": '<meta property="og:title" content="Title" />',
+            "session": session,
+        },
+    )
+
+    caplog.set_level("WARNING")
+    result = ig.download_instagram_html_fallback(
+        "https://www.instagram.com/p/DW9hy3kidPl/",
+        str(download_path),
+        str(metadata_dir),
+        cookie_path="",
+        registry_record={},
+    )
+
+    assert len(session.calls) == 2
+    assert result["source"] == "og:image"
+    assert result["downloaded_path"].endswith(".webp")
+    assert Path(result["downloaded_path"]).read_bytes() == b"ok-image"
+    failure_logs = [record.getMessage() for record in caplog.records if "candidate failed" in record.getMessage()]
+    assert failure_logs
+    assert "source=image_versions2" in failure_logs[0]
+
+
+def test_html_fallback_image_request_uses_referer_and_user_agent(monkeypatch, tmp_path):
+    download_path = tmp_path / "out" / "instagram__DW9hy3kidPl.bin"
+    metadata_dir = tmp_path / "meta"
+    candidate_url = "https://cdn.example/og.jpg"
+    session = _FallbackSession({candidate_url: _FallbackResponse(200, "image/jpeg", b"jpeg-data")})
+    candidates = [{"url": candidate_url, "source": "og:image"}]
+
+    monkeypatch.setattr(
+        ig,
+        "inspect_image_candidates_diagnostics",
+        lambda *_args, **_kwargs: {
+            "status_code": 200,
+            "cookies_loaded": True,
+            "candidate_sources": ["og:image"],
+            "candidates": candidates,
+            "html": "",
+            "session": session,
+        },
+    )
+
+    result = ig.download_instagram_html_fallback(
+        "https://www.instagram.com/p/DW9hy3kidPl/",
+        str(download_path),
+        str(metadata_dir),
+        cookie_path="",
+        registry_record={},
+    )
+
+    call = session.calls[0]
+    assert call["stream"] is True
+    assert call["headers"]["Referer"] == "https://www.instagram.com/p/DW9hy3kidPl/"
+    assert call["headers"]["User-Agent"] == "Mozilla/5.0 (test)"
+    assert result["downloaded_path"].endswith(".jpg")

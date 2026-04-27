@@ -3,7 +3,6 @@ import logging
 import os
 import re
 from pathlib import Path
-from urllib.request import Request, urlopen
 
 import requests
 import yt_dlp
@@ -14,6 +13,7 @@ from lib.vendor_router import VENDOR_INSTAGRAM, extract_vendor_id, metadata_file
 
 
 logger = logging.getLogger(__name__)
+INSTAGRAM_UA = "Mozilla/5.0"
 
 
 def download_image(url, path):
@@ -23,9 +23,10 @@ def download_image(url, path):
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
 
-    request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urlopen(request) as response, target.open("wb") as handle:
-        handle.write(response.read())
+    with requests.get(url, headers={"User-Agent": INSTAGRAM_UA}, timeout=30) as response:
+        response.raise_for_status()
+        with target.open("wb") as handle:
+            handle.write(response.content)
 
     return str(target)
 
@@ -167,19 +168,21 @@ def extract_page_metadata_from_html(html):
 
 def inspect_image_candidates(url, cookie_path=None):
     session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0"})
+    session.headers.update({"User-Agent": INSTAGRAM_UA})
     jar = _load_cookie_jar(cookie_path)
-    response = session.get(url, cookies=jar, timeout=20)
+    session.cookies.update(jar)
+    response = session.get(url, timeout=20)
     response.raise_for_status()
     return extract_image_candidates_from_html(response.text)
 
 
 def inspect_image_candidates_diagnostics(url, cookie_path=None):
     session = requests.Session()
-    session.headers.update({"User-Agent": "Mozilla/5.0"})
+    session.headers.update({"User-Agent": INSTAGRAM_UA})
     jar = _load_cookie_jar(cookie_path)
     cookies_loaded = bool(jar)
-    response = session.get(url, cookies=jar, timeout=20)
+    session.cookies.update(jar)
+    response = session.get(url, timeout=20)
     response.raise_for_status()
     candidates = extract_image_candidates_from_html(response.text)
     return {
@@ -189,6 +192,7 @@ def inspect_image_candidates_diagnostics(url, cookie_path=None):
         "candidate_sources": [candidate.get("source") for candidate in candidates],
         "candidates": candidates,
         "html": response.text,
+        "session": session,
     }
 
 
@@ -204,6 +208,38 @@ def _choose_best_candidate(candidates):
         return source_bonus + (width * height), width, height
 
     return max(candidates, key=rank)
+
+
+def _rank_candidates(candidates):
+    if not candidates:
+        return []
+
+    def rank(candidate):
+        width = candidate.get("width") or 0
+        height = candidate.get("height") or 0
+        source = candidate.get("source") or ""
+        source_bonus = 1000000 if source == "image_versions2" else 0
+        return source_bonus + (width * height), width, height
+
+    return sorted(candidates, key=rank, reverse=True)
+
+
+def _ext_from_url_or_content_type(url, content_type):
+    ext = Path((url or "").split("?")[0]).suffix.lstrip(".").lower()
+    if ext and len(ext) <= 5:
+        return "jpg" if ext == "jpeg" else ext
+
+    ctype = (content_type or "").split(";")[0].strip().lower()
+    mapping = {
+        "image/jpeg": "jpg",
+        "image/jpg": "jpg",
+        "image/png": "png",
+        "image/webp": "webp",
+        "image/gif": "gif",
+        "image/avif": "avif",
+        "image/svg+xml": "svg",
+    }
+    return mapping.get(ctype, "jpg")
 
 
 def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_path, registry_record):
@@ -231,20 +267,70 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
     if not candidates:
         return None
 
-    best = _choose_best_candidate(candidates)
-    ext = Path(best["url"].split("?")[0]).suffix.lstrip(".").lower() or "jpg"
-    if len(ext) > 5:
-        ext = "jpg"
-    target_path = str(Path(download_path).with_suffix(f".{ext}"))
-    download_image(best["url"], target_path)
+    session = diagnostics.get("session") or requests.Session()
+    ordered_candidates = _rank_candidates(candidates)
+    errors = []
+    user_agent = (getattr(session, "headers", {}) or {}).get("User-Agent", INSTAGRAM_UA)
+    page_metadata = extract_page_metadata_from_html(diagnostics.get("html") or "")
 
-    return {
-        "downloaded_path": target_path,
-        "image_url": best["url"],
-        "ext": ext,
-        "source": best.get("source"),
-        "page_metadata": extract_page_metadata_from_html(diagnostics.get("html") or ""),
-    }
+    for candidate in ordered_candidates:
+        image_url = candidate.get("url")
+        source = candidate.get("source")
+        image_headers = {
+            "User-Agent": user_agent,
+            "Referer": url,
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        status_code = "unknown"
+        content_type = ""
+        try:
+            with session.get(image_url, headers=image_headers, stream=True, timeout=30) as response:
+                status_code = response.status_code
+                content_type = response.headers.get("Content-Type", "")
+                logger.warning(
+                    "Instagram HTML fallback candidate download status source=%s status=%s content-type=%s",
+                    source,
+                    status_code,
+                    content_type or "unknown",
+                )
+                response.raise_for_status()
+                if not content_type.lower().startswith("image/"):
+                    raise RuntimeError(f"unexpected content-type: {content_type or 'unknown'}")
+                ext = _ext_from_url_or_content_type(image_url, content_type)
+                target_path = str(Path(download_path).with_suffix(f".{ext}"))
+                Path(target_path).parent.mkdir(parents=True, exist_ok=True)
+                with open(target_path, "wb") as handle:
+                    for chunk in response.iter_content(chunk_size=64 * 1024):
+                        if chunk:
+                            handle.write(chunk)
+                return {
+                    "downloaded_path": target_path,
+                    "image_url": image_url,
+                    "ext": ext,
+                    "source": source,
+                    "page_metadata": page_metadata,
+                }
+        except Exception as exc:
+            response = getattr(exc, "response", None)
+            if response is not None:
+                status_code = getattr(response, "status_code", status_code)
+                content_type = getattr(response, "headers", {}).get("Content-Type", content_type)
+            logger.warning(
+                "Instagram HTML fallback candidate failed source=%s status=%s content-type=%s error=%s",
+                source,
+                status_code,
+                content_type or "unknown",
+                exc,
+            )
+            errors.append(
+                f"{source}(status={status_code}, content_type={content_type or 'unknown'}, error={exc})"
+            )
+
+    raise RuntimeError(
+        "Instagram HTML fallback found image candidates but failed to download any of them: "
+        + "; ".join(errors)
+    )
 
 
 def _download_video_entry(entry, media_dir, index, cookie_path, video_download):
