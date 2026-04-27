@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import traceback
 from glob import glob
@@ -124,6 +125,28 @@ def is_cookie_identity_blocked_error(exc):
     return any(marker in text for marker in block_markers)
 
 
+def safe_slug(value, max_length=40):
+    text = str(value or "").strip().lower()
+    if not text:
+        return ""
+
+    text = re.sub(r"\s+", "_", text)
+    text = re.sub(r"[^a-z0-9_-]", "", text)
+    text = re.sub(r"_+", "_", text).strip("_-")
+
+    if not text:
+        return ""
+
+    return text[:max_length].rstrip("_-")
+
+
+def build_run_name(vendor, vendor_id, title=None):
+    resolved_vendor_id = str(vendor_id or "unknown")
+    base = f"{vendor}__{resolved_vendor_id}"
+    slug = safe_slug(title)
+    return f"{base}__{slug}" if slug else base
+
+
 def upsert_index_record(index_path, record):
     os.makedirs(os.path.dirname(index_path), exist_ok=True)
 
@@ -186,11 +209,17 @@ def main():
         os.makedirs(metadata_dir, exist_ok=True)
 
         video_download_cfg = app_config.get("video_download", {}) if isinstance(app_config.get("video_download"), dict) else {}
+        vendor_id = extract_vendor_id(vendor, url)
+        run_name = build_run_name(vendor, vendor_id)
+        run_dir = os.path.join(download_path, run_name)
+        os.makedirs(run_dir, exist_ok=True)
+        logger.info("Run directory: %s", os.path.abspath(run_dir))
+
         registry_record = {
             "url": url,
             "vendor": vendor,
-            "vendor_id": extract_vendor_id(vendor, url),
-            "metadata_file": metadata_filename(vendor, extract_vendor_id(vendor, url)),
+            "vendor_id": vendor_id,
+            "metadata_file": metadata_filename(vendor, vendor_id),
         }
 
         cookie_paths = resolve_cookie_paths(platform_config, video_download_cfg, vendor)
@@ -209,7 +238,7 @@ def main():
         for idx, cookie_path in enumerate(cookie_paths, start=1):
             try:
                 if vendor == VENDOR_YOUTUBE:
-                    result = download_youtube(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                    result = download_youtube(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
                     if not result.get("success", False):
                         raise RuntimeError(
                             "YouTube download failed"
@@ -219,10 +248,10 @@ def main():
                         )
                 elif vendor == VENDOR_FACEBOOK:
                     logger.info("Facebook download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
-                    result = download_facebook(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                    result = download_facebook(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
                 else:
                     logger.info("Instagram download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
-                    result = download_instagram(url, download_path, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                    result = download_instagram(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
                 break
             except Exception as exc:
                 last_error = exc
