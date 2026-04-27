@@ -4,8 +4,32 @@ import sys
 import types
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 sys.modules.setdefault("yt_dlp", types.SimpleNamespace(YoutubeDL=None))
 sys.modules.setdefault("tasks_lib", types.SimpleNamespace(load_default_tasks=lambda: {}))
+
+
+class _FakeCookieJar(dict):
+    def set(self, name, value, domain=None, path="/"):
+        self[name] = value
+
+
+class _FakeSession:
+    def __init__(self):
+        self.headers = {}
+
+    def get(self, *_args, **_kwargs):
+        raise AssertionError("Session.get should be monkeypatched in tests")
+
+
+sys.modules.setdefault(
+    "requests",
+    types.SimpleNamespace(
+        Session=_FakeSession,
+        cookies=types.SimpleNamespace(RequestsCookieJar=_FakeCookieJar),
+    ),
+)
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "downloaders" / "instagram.py"
 spec = importlib.util.spec_from_file_location("ig_downloader_test", MODULE_PATH)
@@ -72,6 +96,24 @@ class FakeSingleImageYDL:
                 {"url": "https://cdn.example/thumb-large.jpg"},
             ],
         }
+
+
+class FakeDownloadError(Exception):
+    pass
+
+
+class FakeFailingYDL:
+    def __init__(self, opts):
+        self.opts = opts
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def extract_info(self, url, download=False):
+        raise FakeDownloadError("No video formats found!")
 
 
 def test_instagram_carousel_downloads_images_and_videos(monkeypatch, tmp_path):
@@ -142,3 +184,91 @@ def test_instagram_single_image_uses_display_url(monkeypatch, tmp_path):
     assert data["items"][0]["type"] == "image"
     assert "manifest" not in data
     assert record["to_process"].endswith(".jpg")
+
+
+def test_instagram_html_fallback_on_no_video_formats(monkeypatch, tmp_path):
+    out_dir = tmp_path / "out"
+    metadata_dir = tmp_path / "meta"
+
+    monkeypatch.setattr(ig, "load_app_config", lambda: {"raw_metadata_mode": "json"})
+    monkeypatch.setattr(ig, "extract_vendor_id", lambda *_: "DW9hy3kidPl")
+    monkeypatch.setattr(ig.yt_dlp, "YoutubeDL", FakeFailingYDL)
+    monkeypatch.setattr(
+        ig.yt_dlp,
+        "utils",
+        types.SimpleNamespace(DownloadError=FakeDownloadError),
+        raising=False,
+    )
+
+    html = """
+    <html>
+      <head>
+        <meta property="og:image" content="https://cdn.example/og-image.jpg" />
+        <meta property="og:title" content="OG Caption" />
+      </head>
+      <body>
+        <script type="application/json">
+          {"owner":{"username":"fallback_user"}}
+        </script>
+      </body>
+    </html>
+    """
+
+    class FakeResponse:
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.headers = {}
+
+        def get(self, url, cookies=None, timeout=20):
+            return FakeResponse(html)
+
+    monkeypatch.setattr(ig.requests, "Session", FakeSession)
+
+    downloaded = {}
+
+    def fake_image(url, path):
+        downloaded["url"] = url
+        downloaded["path"] = path
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_bytes(b"img")
+        return path
+
+    monkeypatch.setattr(ig, "download_image", fake_image)
+
+    record = ig.download(
+        "https://www.instagram.com/p/DW9hy3kidPl/",
+        str(out_dir),
+        str(metadata_dir),
+        {},
+        cookie_path="",
+        video_download={"format": "best"},
+    )
+
+    data = json.loads(Path(record["metadata_path"]).read_text(encoding="utf-8"))
+    assert downloaded["url"] == "https://cdn.example/og-image.jpg"
+    assert record["to_process"].endswith("instagram__DW9hy3kidPl.jpg")
+    assert data["media_type"] == "image"
+    assert data["uploader"] == "fallback_user"
+    assert "manifest" not in data
+
+
+def test_extract_image_candidates_from_html_uses_multiple_sources():
+    html = """
+    <meta property="og:image" content="https://cdn.example/og.jpg" />
+    <script>
+      {"display_url":"https:\\/\\/cdn.example\\/display.jpg","thumbnail_src":"https:\\/\\/cdn.example\\/thumb.jpg","image_versions2":{"candidates":[{"url":"https:\\/\\/cdn.example\\/hi.jpg","width":1080,"height":1920}]}}
+    </script>
+    """
+
+    candidates = ig.extract_image_candidates_from_html(html)
+    urls = {item["url"] for item in candidates}
+    assert "https://cdn.example/og.jpg" in urls
+    assert "https://cdn.example/display.jpg" in urls
+    assert "https://cdn.example/thumb.jpg" in urls
+    assert "https://cdn.example/hi.jpg" in urls
