@@ -57,6 +57,11 @@ def test_cookie_block_error_detection_matches_common_markers():
     assert not call_download.is_cookie_identity_blocked_error(RuntimeError("network unavailable"))
 
 
+def test_youtube_retryable_error_detection_matches_post_live_marker():
+    assert call_download.is_youtube_retryable_error(RuntimeError("ERROR: This live event has ended."))
+    assert not call_download.is_youtube_retryable_error(RuntimeError("network unavailable"))
+
+
 def test_resolve_cookie_paths_prefers_hierarchy_then_discovers_conf_files(tmp_path, monkeypatch):
     conf_dir = tmp_path / "conf"
     conf_dir.mkdir(parents=True)

@@ -16,6 +16,7 @@ RETRYABLE_FAILURE_MARKERS = [
     "n challenge solving failed",
     "error solving n challenge request",
     "sign in to confirm you are not a bot",
+    "this live event has ended",
 ]
 COOKIE_SOURCE_UNAVAILABLE_MARKERS = [
     "could not find firefox cookies database",
@@ -140,6 +141,41 @@ def _contains_retryable_marker(stdout_text: str, stderr_text: str) -> bool:
     return any(marker in combined for marker in RETRYABLE_FAILURE_MARKERS)
 
 
+def _probe_live_metadata(url: str) -> Dict[str, str]:
+    command = [
+        "yt-dlp",
+        "--skip-download",
+        "--print",
+        "%(id)s|%(live_status)s|%(was_live)s|%(availability)s|%(title)s",
+        "--no-playlist",
+        url,
+    ]
+    rc, stdout_text, _stderr_text = _run_yt_dlp(command)
+    if rc != 0:
+        return {}
+
+    first_line = ""
+    for line in (stdout_text or "").splitlines():
+        line = line.strip()
+        if line:
+            first_line = line
+            break
+    if not first_line:
+        return {}
+
+    parts = first_line.split("|", 4)
+    if len(parts) < 5:
+        return {}
+
+    return {
+        "id": parts[0],
+        "live_status": (parts[1] or "").strip().lower(),
+        "was_live": (parts[2] or "").strip().lower(),
+        "availability": (parts[3] or "").strip().lower(),
+        "title": parts[4],
+    }
+
+
 def _cookie_source_unavailable(stdout_text: str, stderr_text: str) -> bool:
     combined = f"{stdout_text or ''}\n{stderr_text or ''}".lower()
     return any(marker in combined for marker in COOKIE_SOURCE_UNAVAILABLE_MARKERS)
@@ -221,6 +257,14 @@ def _build_command(url: str, output_template: str, fmt: str, strategy: Dict) -> 
         cmd.extend(["--extractor-args", str(extractor_arg)])
 
     return cmd
+
+
+def _build_format_probe_command(url: str, strategy: Dict, credential_args: List[str]) -> List[str]:
+    command = ["yt-dlp", "-F", "--no-playlist"]
+    extractor_arg = strategy.get("extractor_arg")
+    if extractor_arg:
+        command.extend(["--extractor-args", str(extractor_arg)])
+    return command + credential_args + [url]
 
 
 COOKIE_REPAIR_FAILURE_MARKERS = [
@@ -307,6 +351,20 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
     platform_section = _get_platform_section(platform_cfg)
 
     attempts = []
+    live_probe = _probe_live_metadata(url)
+    is_post_live_vod = (
+        live_probe.get("live_status") == "post_live"
+        or live_probe.get("was_live") in {"true", "1", "yes"}
+    )
+    if is_post_live_vod:
+        strategies = list(strategies) + [
+            {
+                "name": "post_live_vod_dash_fallback",
+                "cookies_mode": "none",
+                "format": DEFAULT_YT_FORMAT,
+                "preflight_list_formats": True,
+            }
+        ]
 
     for strategy in strategies:
         strategy_name = strategy.get("name", "unnamed_strategy")
@@ -354,6 +412,33 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
         attempted_unavailable_source = False
 
         for credential_source, credential_args in credential_attempts:
+            if strategy.get("preflight_list_formats"):
+                probe_command = _build_format_probe_command(url=url, strategy=strategy, credential_args=credential_args)
+                probe_rc, probe_stdout, probe_stderr = _run_yt_dlp(probe_command)
+                attempts.append(
+                    {
+                        "strategy": strategy_name,
+                        "success": probe_rc == 0,
+                        "retryable": probe_rc != 0 and _contains_retryable_marker(probe_stdout, probe_stderr),
+                        "stdout": probe_stdout,
+                        "stderr": probe_stderr,
+                        "credential_source": f"{credential_source}:format_probe",
+                        "command": probe_command,
+                    }
+                )
+                if probe_rc != 0 and not _contains_retryable_marker(probe_stdout, probe_stderr):
+                    return {
+                        "success": False,
+                        "strategy": strategy_name,
+                        "vendor": VENDOR_YOUTUBE,
+                        "vendor_id": vendor_id,
+                        "stdout": probe_stdout,
+                        "stderr": probe_stderr,
+                        "error": "yt-dlp format probe failed with a non-retryable error",
+                        "retryable": False,
+                        "attempts": attempts,
+                    }
+
             attempt_command = command + credential_args + [url]
             selected_cookie_file = None
             if credential_source.startswith("file:"):
@@ -376,7 +461,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path=None, v
             attempt_result = {
                 "strategy": strategy_name,
                 "success": rc == 0 and isinstance(info, dict),
-                "retryable": retryable,
+                "retryable": retryable or is_post_live_vod,
                 "stdout": stdout_text,
                 "stderr": stderr_text,
                 "credential_source": credential_source,

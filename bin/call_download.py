@@ -125,6 +125,16 @@ def is_cookie_identity_blocked_error(exc):
     return any(marker in text for marker in block_markers)
 
 
+def is_youtube_retryable_error(exc):
+    message_parts = [str(exc)]
+    if hasattr(exc, "stderr") and exc.stderr:
+        message_parts.append(str(exc.stderr))
+    if hasattr(exc, "msg") and exc.msg:
+        message_parts.append(str(exc.msg))
+    text = "\n".join(message_parts).lower()
+    return "this live event has ended" in text
+
+
 def upsert_index_record(index_path, record):
     os.makedirs(os.path.dirname(index_path), exist_ok=True)
 
@@ -235,6 +245,15 @@ def main():
                 if has_more and is_cookie_identity_blocked_error(exc):
                     logger.warning(
                         "Download failed due to cookie/account block on %s. Rotating to next cookie (%s/%s).",
+                        cookie_path,
+                        idx + 1,
+                        len(cookie_paths),
+                    )
+                    continue
+                if vendor == VENDOR_YOUTUBE and has_more and is_youtube_retryable_error(exc):
+                    logger.warning(
+                        "YouTube attempt returned a retryable post-live error on %s. "
+                        "Trying next strategy/cookie (%s/%s).",
                         cookie_path,
                         idx + 1,
                         len(cookie_paths),

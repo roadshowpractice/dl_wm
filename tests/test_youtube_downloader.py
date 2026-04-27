@@ -85,6 +85,7 @@ def test_ensure_supported_yt_dlp_rejects_old_versions(monkeypatch):
 def test_contains_retryable_marker_detects_known_messages():
     assert youtube_module._contains_retryable_marker("", "Only images are available for download")
     assert youtube_module._contains_retryable_marker("n challenge solving failed", "")
+    assert youtube_module._contains_retryable_marker("", "This live event has ended.")
     assert not youtube_module._contains_retryable_marker("ok", "different error")
 
 
@@ -172,6 +173,8 @@ def test_download_browser_strategy_rotates_cookie_sources(monkeypatch, tmp_path)
         calls.append(cmd)
         if cmd[:2] == ["yt-dlp", "--version"]:
             return _Result(stdout="2025.02.19\n")
+        if "--skip-download" in cmd and "--print" in cmd:
+            return _Result(stdout="abc123|not_live|False|public|Example title\n", returncode=0)
         if "--cookies-from-browser" in cmd and "firefox" in cmd:
             return _Result(stdout="", stderr="Could not find firefox cookies database", returncode=1)
         if "--cookies-from-browser" in cmd and "chrome" in cmd:
@@ -213,6 +216,8 @@ def test_youtube_cookie_repair_flow_uses_saved_file_then_regenerates_then_retrie
         calls.append(cmd)
         if cmd[:2] == ["yt-dlp", "--version"]:
             return _Result(stdout="2025.02.19\n")
+        if "--skip-download" in cmd and "--print" in cmd and "--cookies-from-browser" not in cmd:
+            return _Result(stdout="abc123|not_live|False|public|Example title\n", returncode=0)
         if "--skip-download" in cmd and "--cookies-from-browser" in cmd:
             cookie_file.write_text("regenerated-cookie")
             return _Result(stdout="", stderr="", returncode=0)
@@ -240,13 +245,61 @@ def test_youtube_cookie_repair_flow_uses_saved_file_then_regenerates_then_retrie
     assert result["success"] is True
     assert cookie_file.read_text() == "regenerated-cookie"
     non_version_calls = [c for c in calls if c[:2] != ["yt-dlp", "--version"]]
-    assert "--remote-components" in non_version_calls[0]
-    assert "--cookies" in non_version_calls[0]
-    assert str(cookie_file) in non_version_calls[0]
-    assert "--cookies-from-browser" in non_version_calls[1]
-    assert non_version_calls[1][-1] == "https://www.youtube.com/watch?v=abc123"
-    assert non_version_calls[1][non_version_calls[1].index("--cookies") + 1] == str(cookie_file)
-    assert "--cookies" in non_version_calls[2]
-    assert str(cookie_file) in non_version_calls[2]
+    download_calls = [c for c in non_version_calls if "--print" not in c]
+    assert "--remote-components" in download_calls[0]
+    assert "--cookies" in download_calls[0]
+    assert str(cookie_file) in download_calls[0]
+    assert "--cookies-from-browser" in download_calls[1]
+    assert download_calls[1][-1] == "https://www.youtube.com/watch?v=abc123"
+    assert download_calls[1][download_calls[1].index("--cookies") + 1] == str(cookie_file)
+    assert "--cookies" in download_calls[2]
+    assert str(cookie_file) in download_calls[2]
     assert result["attempts"][1]["credential_source"].startswith("repair:firefox->")
     assert result["attempts"][2]["credential_source"].startswith("file-regenerated:")
+
+
+def test_download_uses_post_live_vod_dash_fallback_after_live_event_ended(monkeypatch, tmp_path):
+    download_dir = tmp_path / "out"
+    metadata_dir = tmp_path / "meta"
+    video_file = download_dir / "youtube__abc123.mp4"
+
+    monkeypatch.setattr(youtube_module, "_load_platform_config", lambda: {})
+
+    calls = []
+
+    def fake_run(cmd, capture_output, text, check):
+        calls.append(cmd)
+        if cmd[:2] == ["yt-dlp", "--version"]:
+            return _Result(stdout="2025.02.19\n")
+        if "--skip-download" in cmd and "--print" in cmd:
+            return _Result(stdout="abc123|post_live|True|public|Example title\n", returncode=0)
+        if "-F" in cmd:
+            return _Result(stdout="137 mp4\n140 m4a\n", returncode=0)
+        if "--extractor-args" in cmd:
+            return _Result(stdout="", stderr="This live event has ended.", returncode=1)
+
+        video_file.parent.mkdir(parents=True, exist_ok=True)
+        video_file.write_text("x")
+        payload = json.dumps({"id": "abc123", "ext": "mp4", "_filename": str(video_file)})
+        return _Result(stdout=payload + "\n", stderr="", returncode=0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    result = youtube_module.download(
+        "https://www.youtube.com/watch?v=abc123",
+        str(download_dir),
+        str(metadata_dir),
+        registry_record={},
+        cookie_path=None,
+        video_download={"youtube_cookie_files": []},
+    )
+
+    assert result["success"] is True
+    assert result["strategy"] == "post_live_vod_dash_fallback"
+    assert any(cmd[:2] == ["yt-dlp", "-F"] for cmd in calls)
+    assert any(
+        attempt["strategy"] == "android_fallback"
+        and "This live event has ended" in attempt["stderr"]
+        and attempt["retryable"] is True
+        for attempt in result["attempts"]
+    )
