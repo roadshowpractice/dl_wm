@@ -101,9 +101,13 @@ def add_watermark(params):
         logger.info(f"Processing video: {input_video_path}")
 
         filename, ext = os.path.splitext(os.path.basename(input_video_path))
-        watermarked_video_path = os.path.join(
-            params["download_path"], f"{filename}_watermarked{ext}"
-        )
+        explicit_output_path = params.get("output_video_path")
+        if explicit_output_path:
+            watermarked_video_path = str(explicit_output_path)
+        else:
+            watermarked_video_path = os.path.join(
+                params["download_path"], f"{filename}_watermarked{ext}"
+            )
 
         font = params.get("font", "")
         if not font or not os.path.exists(font):
@@ -116,7 +120,7 @@ def add_watermark(params):
 
         filters = []
 
-        username_text = params.get("username", "")
+        username_text = params.get("source_label") or params.get("username", "")
         if username_text and not looks_like_filename(username_text):
             filters.append(
                 _drawtext_filter(
@@ -128,15 +132,17 @@ def add_watermark(params):
                 )
             )
 
-        filters.append(
-            _drawtext_filter(
-                params.get("video_date", ""),
-                params.get("date_color", "cyan"),
-                font,
-                font_size,
-                params.get("date_position", ["left", "bottom"]),
+        video_date = params.get("video_date", "")
+        if str(video_date).strip():
+            filters.append(
+                _drawtext_filter(
+                    video_date,
+                    params.get("date_color", "cyan"),
+                    font,
+                    font_size,
+                    params.get("date_position", ["left", "bottom"]),
+                )
             )
-        )
 
         filters.append(
             _timestamp_filter(
