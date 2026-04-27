@@ -415,3 +415,38 @@ def test_html_fallback_image_request_uses_referer_and_user_agent(monkeypatch, tm
     assert call["headers"]["Referer"] == "https://www.instagram.com/p/DW9hy3kidPl/"
     assert call["headers"]["User-Agent"] == "Mozilla/5.0 (test)"
     assert result["downloaded_path"].endswith(".jpg")
+
+
+def test_html_fallback_unescapes_html_entities_before_request(monkeypatch, tmp_path):
+    download_path = tmp_path / "out" / "instagram__DW9hy3kidPl.bin"
+    metadata_dir = tmp_path / "meta"
+    raw_candidate_url = "https://cdn.example/og.jpg?x=1&amp;y=2"
+    unescaped_candidate_url = "https://cdn.example/og.jpg?x=1&y=2"
+    session = _FallbackSession({unescaped_candidate_url: _FallbackResponse(200, "image/jpeg", b"jpeg-data")})
+    candidates = [{"url": raw_candidate_url, "source": "og:image"}]
+
+    monkeypatch.setattr(
+        ig,
+        "inspect_image_candidates_diagnostics",
+        lambda *_args, **_kwargs: {
+            "status_code": 200,
+            "cookies_loaded": True,
+            "candidate_sources": ["og:image"],
+            "candidates": candidates,
+            "html": "",
+            "session": session,
+        },
+    )
+
+    result = ig.download_instagram_html_fallback(
+        "https://www.instagram.com/p/DW9hy3kidPl/",
+        str(download_path),
+        str(metadata_dir),
+        cookie_path="",
+        registry_record={},
+    )
+
+    call = session.calls[0]
+    assert call["url"] == unescaped_candidate_url
+    assert "&amp;" not in call["url"]
+    assert result["image_url"] == unescaped_candidate_url
