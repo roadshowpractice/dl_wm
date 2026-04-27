@@ -342,8 +342,8 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
     )
 
 
-def _download_video_entry(entry, media_dir, index, cookie_path, video_download):
-    output_template = os.path.join(media_dir, f"{index:03d}.%(ext)s")
+def _download_video_entry(entry, media_dir, stem, cookie_path, video_download):
+    output_template = os.path.join(media_dir, f"{stem}.%(ext)s")
     ydl_opts = {
         "outtmpl": output_template,
         "cookiefile": cookie_path,
@@ -376,6 +376,8 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         instagram_cfg = {}
     download_images = instagram_cfg.get("download_images", True)
     download_videos = instagram_cfg.get("download_videos", True)
+
+    run_id = Path(output_dir).name
 
     inspect_opts = {
         "cookiefile": cookie_path,
@@ -433,11 +435,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         entries = _resolve_entries(info)
         is_carousel = len(entries) > 1
 
-        if is_carousel:
-            media_dir = os.path.join(output_dir, "media")
-            os.makedirs(media_dir, exist_ok=True)
-        else:
-            media_dir = output_dir
+        media_dir = output_dir
 
         for i, entry in enumerate(entries, start=1):
             if entry is None:
@@ -454,7 +452,8 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
                 continue
 
             if is_video:
-                downloaded_path = _download_video_entry(entry, media_dir, i, cookie_path, video_download)
+                stem = f"{run_id}__{i:02d}" if is_carousel else run_id
+                downloaded_path = _download_video_entry(entry, media_dir, stem, cookie_path, video_download)
                 if not downloaded_path:
                     logger.warning("Skipping video entry %s (download failed)", i)
                     continue
@@ -482,7 +481,8 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
             if not ext or len(ext) > 5:
                 ext = "jpg"
 
-            image_path = os.path.join(media_dir, f"{i:03d}.{ext}")
+            stem = f"{run_id}__{i:02d}" if is_carousel else run_id
+            image_path = os.path.join(media_dir, f"{stem}.{ext}")
             download_image(image_url, image_path)
 
             filename = os.path.basename(image_path)
