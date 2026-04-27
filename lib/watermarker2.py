@@ -132,10 +132,11 @@ def add_watermark(params):
                 )
             )
 
-        if not params.get("source_label"):
+        video_date = params.get("video_date", "")
+        if str(video_date).strip():
             filters.append(
                 _drawtext_filter(
-                    params.get("video_date", ""),
+                    video_date,
                     params.get("date_color", "cyan"),
                     font,
                     font_size,
