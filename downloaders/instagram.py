@@ -174,6 +174,24 @@ def inspect_image_candidates(url, cookie_path=None):
     return extract_image_candidates_from_html(response.text)
 
 
+def inspect_image_candidates_diagnostics(url, cookie_path=None):
+    session = requests.Session()
+    session.headers.update({"User-Agent": "Mozilla/5.0"})
+    jar = _load_cookie_jar(cookie_path)
+    cookies_loaded = bool(jar)
+    response = session.get(url, cookies=jar, timeout=20)
+    response.raise_for_status()
+    candidates = extract_image_candidates_from_html(response.text)
+    return {
+        "status_code": response.status_code,
+        "cookies_loaded": cookies_loaded,
+        "candidate_count": len(candidates),
+        "candidate_sources": [candidate.get("source") for candidate in candidates],
+        "candidates": candidates,
+        "html": response.text,
+    }
+
+
 def _choose_best_candidate(candidates):
     if not candidates:
         return None
@@ -186,6 +204,47 @@ def _choose_best_candidate(candidates):
         return source_bonus + (width * height), width, height
 
     return max(candidates, key=rank)
+
+
+def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_path, registry_record):
+    _ = metadata_dir
+    _ = registry_record
+    try:
+        diagnostics = inspect_image_candidates_diagnostics(url, cookie_path=cookie_path)
+    except requests.HTTPError as exc:
+        status_code = getattr(getattr(exc, "response", None), "status_code", "unknown")
+        logger.warning("Instagram HTML fallback HTTP status code: %s", status_code)
+        return None
+    except Exception as exc:
+        logger.warning("Instagram HTML fallback failed before candidate extraction: %s", exc)
+        return None
+
+    candidates = diagnostics.get("candidates") or []
+    logger.warning("Instagram HTML fallback HTTP status code: %s", diagnostics.get("status_code"))
+    logger.warning("Instagram HTML fallback cookies loaded: %s", diagnostics.get("cookies_loaded"))
+    logger.warning("Instagram HTML fallback image candidate count: %s", len(candidates))
+    logger.warning(
+        "Instagram HTML fallback first 3 candidate sources: %s",
+        [candidate.get("source") for candidate in candidates[:3]],
+    )
+
+    if not candidates:
+        return None
+
+    best = _choose_best_candidate(candidates)
+    ext = Path(best["url"].split("?")[0]).suffix.lstrip(".").lower() or "jpg"
+    if len(ext) > 5:
+        ext = "jpg"
+    target_path = str(Path(download_path).with_suffix(f".{ext}"))
+    download_image(best["url"], target_path)
+
+    return {
+        "downloaded_path": target_path,
+        "image_url": best["url"],
+        "ext": ext,
+        "source": best.get("source"),
+        "page_metadata": extract_page_metadata_from_html(diagnostics.get("html") or ""),
+    }
 
 
 def _download_video_entry(entry, media_dir, index, cookie_path, video_download):
@@ -234,6 +293,9 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
     info = None
     page_metadata = {}
     used_html_fallback = False
+    downloaded_files = []
+    items = []
+    is_carousel = False
     try:
         with yt_dlp.YoutubeDL(inspect_opts) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -241,41 +303,34 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         download_error_cls = getattr(getattr(yt_dlp, "utils", None), "DownloadError", None)
         is_download_error = bool(download_error_cls and isinstance(exc, download_error_cls))
         message = str(exc)
+        if is_download_error:
+            logger.warning("yt-dlp extract_info failed: %s", message)
         if is_download_error and "No video formats found" in message:
-            logger.warning("yt-dlp extract_info failed for Instagram post: %s", message)
-            logger.info("Attempting Instagram HTML image fallback for %s", url)
-            candidates = inspect_image_candidates(url, cookie_path=cookie_path)
-            if not candidates:
-                raise RuntimeError("No downloadable Instagram media entries were found") from exc
-            best = _choose_best_candidate(candidates)
-            logger.info(
-                "Instagram HTML fallback selected image candidate from %s",
-                best.get("source"),
+            logger.warning("No video formats found; trying Instagram HTML fallback")
+            fallback = download_instagram_html_fallback(
+                url=url,
+                download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{vendor_id}.jpg"),
+                metadata_dir=metadata_dir,
+                cookie_path=cookie_path,
+                registry_record=registry_record,
             )
-            ext = Path(best["url"].split("?")[0]).suffix.lstrip(".").lower() or "jpg"
-            if len(ext) > 5:
-                ext = "jpg"
-            fallback_filename = f"{VENDOR_INSTAGRAM}__{vendor_id}.{ext}"
-            downloaded_path = os.path.join(output_dir, fallback_filename)
-            download_image(best["url"], downloaded_path)
-
-            session = requests.Session()
-            session.headers.update({"User-Agent": "Mozilla/5.0"})
-            html_response = session.get(url, cookies=_load_cookie_jar(cookie_path), timeout=20)
-            html_response.raise_for_status()
-            page_metadata = extract_page_metadata_from_html(html_response.text)
-
-            info = {
-                "id": vendor_id,
-                "title": page_metadata.get("title") or page_metadata.get("caption"),
-                "uploader": page_metadata.get("uploader"),
-                "ext": ext,
-                "display_url": best["url"],
-            }
-            used_html_fallback = True
-            items = [{"index": 1, "type": "image", "filename": os.path.basename(downloaded_path)}]
-            downloaded_files = [downloaded_path]
-            is_carousel = False
+            if fallback:
+                page_metadata = fallback.get("page_metadata") or {}
+                downloaded_path = fallback["downloaded_path"]
+                ext = fallback.get("ext") or "jpg"
+                info = {
+                    "id": vendor_id,
+                    "title": page_metadata.get("title") or page_metadata.get("caption"),
+                    "uploader": page_metadata.get("uploader"),
+                    "ext": ext,
+                    "display_url": fallback.get("image_url"),
+                }
+                used_html_fallback = True
+                items = [{"index": 1, "type": "image", "filename": os.path.basename(downloaded_path)}]
+                downloaded_files = [downloaded_path]
+                is_carousel = False
+            else:
+                raise RuntimeError("No downloadable Instagram media entries were found") from exc
         else:
             raise
 
@@ -288,9 +343,6 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
             os.makedirs(media_dir, exist_ok=True)
         else:
             media_dir = output_dir
-
-        items = []
-        downloaded_files = []
 
         for i, entry in enumerate(entries, start=1):
             if entry is None:
@@ -348,6 +400,33 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
                 }
             )
             logger.info("Downloaded image entry %s", i)
+
+        if not downloaded_files:
+            logger.warning("No yt-dlp downloadable media entries; trying Instagram HTML fallback")
+            fallback = download_instagram_html_fallback(
+                url=url,
+                download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{vendor_id}.jpg"),
+                metadata_dir=metadata_dir,
+                cookie_path=cookie_path,
+                registry_record=registry_record,
+            )
+            if fallback:
+                page_metadata = fallback.get("page_metadata") or {}
+                downloaded_path = fallback["downloaded_path"]
+                ext = fallback.get("ext") or "jpg"
+                prior_title = info.get("title") if isinstance(info, dict) else None
+                prior_uploader = info.get("uploader") if isinstance(info, dict) else None
+                info = {
+                    "id": vendor_id,
+                    "title": page_metadata.get("title") or page_metadata.get("caption") or prior_title,
+                    "uploader": prior_uploader or page_metadata.get("uploader"),
+                    "ext": ext,
+                    "display_url": fallback.get("image_url"),
+                }
+                used_html_fallback = True
+                items = [{"index": 1, "type": "image", "filename": os.path.basename(downloaded_path)}]
+                downloaded_files = [downloaded_path]
+                is_carousel = False
 
     if not downloaded_files:
         raise RuntimeError("No downloadable Instagram media entries were found")

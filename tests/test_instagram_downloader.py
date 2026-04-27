@@ -116,6 +116,20 @@ class FakeFailingYDL:
         raise FakeDownloadError("No video formats found!")
 
 
+class FakeNoEntriesYDL:
+    def __init__(self, opts):
+        self.opts = opts
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def extract_info(self, url, download=False):
+        return {"id": "DW9hy3kidPl", "title": "empty", "entries": []}
+
+
 def test_instagram_carousel_downloads_images_and_videos(monkeypatch, tmp_path):
     out_dir = tmp_path / "out"
     metadata_dir = tmp_path / "meta"
@@ -200,46 +214,21 @@ def test_instagram_html_fallback_on_no_video_formats(monkeypatch, tmp_path):
         raising=False,
     )
 
-    html = """
-    <html>
-      <head>
-        <meta property="og:image" content="https://cdn.example/og-image.jpg" />
-        <meta property="og:title" content="OG Caption" />
-      </head>
-      <body>
-        <script type="application/json">
-          {"owner":{"username":"fallback_user"}}
-        </script>
-      </body>
-    </html>
-    """
+    fallback_calls = {"count": 0}
 
-    class FakeResponse:
-        def __init__(self, text):
-            self.text = text
+    def fake_fallback(url, download_path, metadata_dir, cookie_path, registry_record):
+        fallback_calls["count"] += 1
+        Path(download_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(download_path).write_bytes(b"img")
+        return {
+            "downloaded_path": download_path,
+            "image_url": "https://cdn.example/og-image.jpg",
+            "ext": "jpg",
+            "source": "og:image",
+            "page_metadata": {"title": "OG Caption", "uploader": "fallback_user", "caption": None},
+        }
 
-        def raise_for_status(self):
-            return None
-
-    class FakeSession:
-        def __init__(self):
-            self.headers = {}
-
-        def get(self, url, cookies=None, timeout=20):
-            return FakeResponse(html)
-
-    monkeypatch.setattr(ig.requests, "Session", FakeSession)
-
-    downloaded = {}
-
-    def fake_image(url, path):
-        downloaded["url"] = url
-        downloaded["path"] = path
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).write_bytes(b"img")
-        return path
-
-    monkeypatch.setattr(ig, "download_image", fake_image)
+    monkeypatch.setattr(ig, "download_instagram_html_fallback", fake_fallback)
 
     record = ig.download(
         "https://www.instagram.com/p/DW9hy3kidPl/",
@@ -251,11 +240,51 @@ def test_instagram_html_fallback_on_no_video_formats(monkeypatch, tmp_path):
     )
 
     data = json.loads(Path(record["metadata_path"]).read_text(encoding="utf-8"))
-    assert downloaded["url"] == "https://cdn.example/og-image.jpg"
+    assert fallback_calls["count"] == 1
     assert record["to_process"].endswith("instagram__DW9hy3kidPl.jpg")
     assert data["media_type"] == "image"
     assert data["uploader"] == "fallback_user"
     assert "manifest" not in data
+
+
+def test_instagram_fallback_when_extract_info_returns_empty_entries(monkeypatch, tmp_path):
+    out_dir = tmp_path / "out"
+    metadata_dir = tmp_path / "meta"
+
+    monkeypatch.setattr(ig, "load_app_config", lambda: {"raw_metadata_mode": "json"})
+    monkeypatch.setattr(ig, "extract_vendor_id", lambda *_: "DW9hy3kidPl")
+    monkeypatch.setattr(ig.yt_dlp, "YoutubeDL", FakeNoEntriesYDL)
+
+    fallback_calls = {"count": 0}
+
+    def fake_fallback(url, download_path, metadata_dir, cookie_path, registry_record):
+        fallback_calls["count"] += 1
+        Path(download_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(download_path).write_bytes(b"img")
+        return {
+            "downloaded_path": download_path,
+            "image_url": "https://cdn.example/og-image.jpg",
+            "ext": "jpg",
+            "source": "display_url",
+            "page_metadata": {"title": "Fallback title", "uploader": "fallback_user", "caption": "fallback"},
+        }
+
+    monkeypatch.setattr(ig, "download_instagram_html_fallback", fake_fallback)
+
+    record = ig.download(
+        "https://www.instagram.com/p/DW9hy3kidPl/",
+        str(out_dir),
+        str(metadata_dir),
+        {},
+        cookie_path="",
+        video_download={"format": "best"},
+    )
+
+    data = json.loads(Path(record["metadata_path"]).read_text(encoding="utf-8"))
+    assert fallback_calls["count"] == 1
+    assert record["to_process"].endswith("instagram__DW9hy3kidPl.jpg")
+    assert data["media_type"] == "image"
+    assert data["uploader"] == "fallback_user"
 
 
 def test_extract_image_candidates_from_html_uses_multiple_sources():
