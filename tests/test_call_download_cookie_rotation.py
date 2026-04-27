@@ -20,6 +20,7 @@ def _load_call_download_module():
     vendor_router.extract_vendor_id = lambda *_args, **_kwargs: "id"
     vendor_router.metadata_filename = lambda *_args, **_kwargs: "id.json"
     vendor_router.canonicalize_vendor_url = lambda _vendor, url: url
+    vendor_router.recognized_vendor_patterns_text = lambda: "patterns"
     sys.modules["vendor_router"] = vendor_router
 
     dl_pkg = types.ModuleType("downloaders")

@@ -46,6 +46,11 @@ class VendorRouterTests(unittest.TestCase):
         self.assertEqual(detect_vendor("https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "youtube")
         self.assertEqual(detect_vendor("https://youtu.be/dQw4w9WgXcQ"), "youtube")
         self.assertEqual(detect_vendor("https://www.youtube.com/shorts/dQw4w9WgXcQ"), "youtube")
+        self.assertEqual(detect_vendor("https://www.youtube.com/live/feFGLbMvuc4"), "youtube")
+        self.assertEqual(detect_vendor("https://youtube.com/live/feFGLbMvuc4"), "youtube")
+        self.assertEqual(detect_vendor("https://m.youtube.com/live/feFGLbMvuc4"), "youtube")
+        self.assertEqual(detect_vendor("https://www.youtube.com/live/feFGLbMvuc4?si=abc123"), "youtube")
+        self.assertEqual(detect_vendor("https://www.youtube.com/live/feFGLbMvuc4?t=120"), "youtube")
 
     def test_detect_facebook_vendor(self):
         self.assertEqual(detect_vendor("https://www.facebook.com/reel/123456789012345/"), "facebook")
@@ -83,6 +88,28 @@ class VendorRouterTests(unittest.TestCase):
             "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         )
 
+    def test_canonicalize_youtube_live_url(self):
+        self.assertEqual(
+            canonicalize_vendor_url("youtube", "https://www.youtube.com/live/feFGLbMvuc4"),
+            "https://www.youtube.com/watch?v=feFGLbMvuc4",
+        )
+        self.assertEqual(
+            canonicalize_vendor_url("youtube", "https://youtube.com/live/feFGLbMvuc4"),
+            "https://www.youtube.com/watch?v=feFGLbMvuc4",
+        )
+        self.assertEqual(
+            canonicalize_vendor_url("youtube", "https://m.youtube.com/live/feFGLbMvuc4"),
+            "https://www.youtube.com/watch?v=feFGLbMvuc4",
+        )
+        self.assertEqual(
+            canonicalize_vendor_url("youtube", "https://www.youtube.com/live/feFGLbMvuc4?si=abc123"),
+            "https://www.youtube.com/watch?v=feFGLbMvuc4",
+        )
+        self.assertEqual(
+            canonicalize_vendor_url("youtube", "https://www.youtube.com/live/feFGLbMvuc4?t=120"),
+            "https://www.youtube.com/watch?v=feFGLbMvuc4",
+        )
+
     def test_extract_youtube_id(self):
         self.assertEqual(
             extract_vendor_id("youtube", "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=43s"),
@@ -95,6 +122,10 @@ class VendorRouterTests(unittest.TestCase):
         self.assertEqual(
             extract_vendor_id("youtube", "https://www.youtube.com/shorts/dQw4w9WgXcQ?feature=share"),
             "dQw4w9WgXcQ",
+        )
+        self.assertEqual(
+            extract_vendor_id("youtube", "https://www.youtube.com/live/feFGLbMvuc4?t=120"),
+            "feFGLbMvuc4",
         )
 
 

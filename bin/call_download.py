@@ -22,6 +22,7 @@ from vendor_router import (
     extract_vendor_id,
     metadata_filename,
     canonicalize_vendor_url,
+    recognized_vendor_patterns_text,
 )
 from downloaders.instagram import download as download_instagram
 from downloaders.facebook import download as download_facebook
@@ -169,7 +170,11 @@ def main():
         url = sys.argv[1].strip()
         vendor = detect_vendor(url)
         if vendor not in {VENDOR_INSTAGRAM, VENDOR_FACEBOOK, VENDOR_YOUTUBE}:
-            logger.error("Unsupported URL vendor. Supported vendors are Instagram, Facebook, and YouTube.")
+            logger.error(
+                "Unsupported URL vendor for URL: %s. Recognized patterns: %s",
+                url,
+                recognized_vendor_patterns_text(),
+            )
             sys.exit(1)
         url = canonicalize_vendor_url(vendor, url)
 
