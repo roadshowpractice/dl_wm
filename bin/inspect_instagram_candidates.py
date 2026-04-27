@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import html
 import sys
 from pathlib import Path
 
@@ -20,6 +21,10 @@ def main():
     print("Candidate source names: og:image/display_url/thumbnail_src/image_versions2")
     for source in diagnostics["candidate_sources"]:
         print(f"- {source}")
+    print("Candidate URLs:")
+    for candidate in diagnostics["candidates"]:
+        raw_url = candidate.get("url", "")
+        print(f"- {html.unescape(raw_url)}")
 
 
 if __name__ == "__main__":

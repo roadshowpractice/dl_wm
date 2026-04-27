@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import html as html_lib
 from pathlib import Path
 
 import requests
@@ -98,6 +99,10 @@ def extract_image_candidates_from_html(html):
 
     def add_candidate(url, source, width=None, height=None):
         clean_url = _decode_escaped(url)
+        if isinstance(clean_url, str) and "&amp;" in clean_url:
+            logger.warning("unescaped HTML entities in image URL")
+        if isinstance(clean_url, str):
+            clean_url = html_lib.unescape(clean_url)
         if not clean_url or clean_url in seen:
             return
         seen.add(clean_url)
@@ -275,6 +280,10 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
 
     for candidate in ordered_candidates:
         image_url = candidate.get("url")
+        if isinstance(image_url, str) and "&amp;" in image_url:
+            logger.warning("unescaped HTML entities in image URL")
+        if isinstance(image_url, str):
+            image_url = html_lib.unescape(image_url)
         source = candidate.get("source")
         image_headers = {
             "User-Agent": user_agent,
