@@ -534,3 +534,45 @@ def test_ordered_candidates_without_img_index_uses_rank_order():
     ordered = ig._ordered_candidates_for_url(candidates, "https://www.instagram.com/p/DXw_ZyYiTeo/")
 
     assert ordered[0]["url"] == "https://cdn.example/hi.jpg"
+
+
+def test_html_fallback_img_index_selects_second_carousel_image(monkeypatch, tmp_path):
+    download_path = tmp_path / "out" / "instagram__DXw_ZyYiTeo.bin"
+    metadata_dir = tmp_path / "meta"
+    html = """
+    <meta property="og:image" content="https://cdn.example/og.jpg" />
+    <script type="application/json">
+      {"display_url":"https:\\/\\/cdn.example\\/first.jpg","display_url":"https:\\/\\/cdn.example\\/second.jpg"}
+    </script>
+    """
+    candidates = ig.extract_image_candidates_from_html(html)
+    session = _FallbackSession(
+        {
+            "https://cdn.example/second.jpg": _FallbackResponse(200, "image/jpeg", b"second"),
+        }
+    )
+
+    monkeypatch.setattr(
+        ig,
+        "inspect_image_candidates_diagnostics",
+        lambda *_args, **_kwargs: {
+            "status_code": 200,
+            "cookies_loaded": True,
+            "candidate_sources": [c["source"] for c in candidates],
+            "candidates": candidates,
+            "html": html,
+            "session": session,
+        },
+    )
+
+    result = ig.download_instagram_html_fallback(
+        "https://www.instagram.com/p/DXw_ZyYiTeo/?img_index=2",
+        str(download_path),
+        str(metadata_dir),
+        cookie_path="",
+        registry_record={},
+    )
+
+    assert len(session.calls) == 1
+    assert session.calls[0]["url"] == "https://cdn.example/second.jpg"
+    assert result["image_url"] == "https://cdn.example/second.jpg"
