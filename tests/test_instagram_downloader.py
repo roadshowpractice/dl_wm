@@ -507,3 +507,30 @@ def test_html_fallback_unescapes_html_entities_before_request(monkeypatch, tmp_p
     assert call["url"] == unescaped_candidate_url
     assert "&amp;" not in call["url"]
     assert result["image_url"] == unescaped_candidate_url
+
+
+def test_ordered_candidates_prioritizes_requested_img_index():
+    candidates = [
+        {"url": "https://cdn.example/first.jpg", "source": "display_url"},
+        {"url": "https://cdn.example/second.jpg", "source": "display_url"},
+        {"url": "https://cdn.example/thumb.jpg", "source": "thumbnail_src"},
+        {"url": "https://cdn.example/hi.jpg", "source": "image_versions2", "width": 1080, "height": 1920},
+    ]
+
+    ordered = ig._ordered_candidates_for_url(
+        candidates,
+        "https://www.instagram.com/p/DXw_ZyYiTeo/?img_index=2",
+    )
+
+    assert ordered[0]["url"] == "https://cdn.example/second.jpg"
+
+
+def test_ordered_candidates_without_img_index_uses_rank_order():
+    candidates = [
+        {"url": "https://cdn.example/first.jpg", "source": "display_url"},
+        {"url": "https://cdn.example/hi.jpg", "source": "image_versions2", "width": 1080, "height": 1920},
+    ]
+
+    ordered = ig._ordered_candidates_for_url(candidates, "https://www.instagram.com/p/DXw_ZyYiTeo/")
+
+    assert ordered[0]["url"] == "https://cdn.example/hi.jpg"

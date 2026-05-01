@@ -4,6 +4,7 @@ import os
 import re
 import html as html_lib
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import requests
 import yt_dlp
@@ -229,6 +230,35 @@ def _rank_candidates(candidates):
     return sorted(candidates, key=rank, reverse=True)
 
 
+def _img_index_from_url(url):
+    try:
+        parsed = urlparse(url or "")
+        values = parse_qs(parsed.query).get("img_index") or []
+        if not values:
+            return None
+        requested = int(values[0])
+        return requested if requested > 0 else None
+    except Exception:
+        return None
+
+
+def _ordered_candidates_for_url(candidates, source_url):
+    ordered = _rank_candidates(candidates)
+    requested_index = _img_index_from_url(source_url)
+    if not requested_index:
+        return ordered
+
+    indexed = []
+    for candidate in candidates:
+        source = (candidate.get("source") or "").lower()
+        if source in {"display_url", "thumbnail_src"}:
+            indexed.append(candidate)
+    if requested_index <= len(indexed):
+        selected = indexed[requested_index - 1]
+        return [selected, *[c for c in ordered if c.get("url") != selected.get("url")]]
+    return ordered
+
+
 def _ext_from_url_or_content_type(url, content_type):
     ext = Path((url or "").split("?")[0]).suffix.lstrip(".").lower()
     if ext and len(ext) <= 5:
@@ -273,7 +303,7 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
         return None
 
     session = diagnostics.get("session") or requests.Session()
-    ordered_candidates = _rank_candidates(candidates)
+    ordered_candidates = _ordered_candidates_for_url(candidates, url)
     errors = []
     user_agent = (getattr(session, "headers", {}) or {}).get("User-Agent", INSTAGRAM_UA)
     page_metadata = extract_page_metadata_from_html(diagnostics.get("html") or "")
