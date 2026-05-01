@@ -124,7 +124,7 @@ def extract_image_candidates_from_html(html):
     for og_url in og_matches:
         add_candidate(og_url, "og:image")
 
-    for key in ("display_url", "thumbnail_src"):
+    for key in ("display_url", "thumbnail_src", "src"):
         for raw_url in re.findall(rf'"{key}"\s*:\s*"([^"]+)"', html):
             add_candidate(raw_url, key)
 
@@ -301,6 +301,13 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
 
     if not candidates:
         return None
+
+    requested_index = _img_index_from_url(url)
+    if requested_index and len(candidates) < requested_index:
+        logger.warning(
+            "img_index requested but only %s candidates found; falling back to ranked candidates",
+            len(candidates),
+        )
 
     session = diagnostics.get("session") or requests.Session()
     ordered_candidates = _ordered_candidates_for_url(candidates, url)
