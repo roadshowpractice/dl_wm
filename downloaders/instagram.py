@@ -311,6 +311,14 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
 
     session = diagnostics.get("session") or requests.Session()
     ordered_candidates = _ordered_candidates_for_url(candidates, url)
+    ordered_sources = [candidate.get("source") for candidate in ordered_candidates]
+    selected_priority_source = ordered_sources[0] if ordered_sources else None
+    logger.warning(
+        "Ordered candidate selection: first 5 sources=%s, img_index=%s, selected_priority_source=%s",
+        ordered_sources[:5],
+        requested_index,
+        selected_priority_source,
+    )
     errors = []
     user_agent = (getattr(session, "headers", {}) or {}).get("User-Agent", INSTAGRAM_UA)
     page_metadata = extract_page_metadata_from_html(diagnostics.get("html") or "")
