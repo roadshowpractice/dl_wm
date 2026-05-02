@@ -437,9 +437,8 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
     download_images = instagram_cfg.get("download_images", True)
     download_videos = instagram_cfg.get("download_videos", True)
 
-    run_id = Path(output_dir).name
-    if artifact_vendor_id != vendor_id:
-        run_id = f"{VENDOR_INSTAGRAM}__{artifact_vendor_id.split('__', 1)[1]}"
+    artifact_stem = f"{VENDOR_INSTAGRAM}__{artifact_vendor_id}"
+    run_id = artifact_stem
 
     inspect_opts = {
         "cookiefile": cookie_path,
@@ -468,7 +467,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
             logger.warning("No video formats found; trying Instagram HTML fallback")
             fallback = download_instagram_html_fallback(
                 url=url,
-                download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{artifact_vendor_id.split('__', 1)[1]}.jpg"),
+                download_path=os.path.join(output_dir, f"{artifact_stem}.jpg"),
                 metadata_dir=metadata_dir,
                 cookie_path=cookie_path,
                 registry_record=registry_record,
@@ -562,7 +561,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
             logger.warning("No yt-dlp downloadable media entries; trying Instagram HTML fallback")
             fallback = download_instagram_html_fallback(
                 url=url,
-                download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{artifact_vendor_id.split('__', 1)[1]}.jpg"),
+                download_path=os.path.join(output_dir, f"{artifact_stem}.jpg"),
                 metadata_dir=metadata_dir,
                 cookie_path=cookie_path,
                 registry_record=registry_record,

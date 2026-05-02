@@ -271,10 +271,11 @@ def test_instagram_html_fallback_on_no_video_formats(monkeypatch, tmp_path):
         raising=False,
     )
 
-    fallback_calls = {"count": 0}
+    fallback_calls = {"count": 0, "paths": []}
 
     def fake_fallback(url, download_path, metadata_dir, cookie_path, registry_record):
         fallback_calls["count"] += 1
+        fallback_calls["paths"].append(download_path)
         Path(download_path).parent.mkdir(parents=True, exist_ok=True)
         Path(download_path).write_bytes(b"img")
         return {
@@ -298,6 +299,7 @@ def test_instagram_html_fallback_on_no_video_formats(monkeypatch, tmp_path):
 
     data = json.loads(Path(record["metadata_path"]).read_text(encoding="utf-8"))
     assert fallback_calls["count"] == 1
+    assert fallback_calls["paths"] == [str(out_dir / "instagram__DW9hy3kidPl.jpg")]
     assert record["to_process"].endswith("instagram__DW9hy3kidPl.jpg")
     assert data["media_type"] == "image"
     assert data["uploader"] == "fallback_user"
@@ -312,10 +314,11 @@ def test_instagram_fallback_when_extract_info_returns_empty_entries(monkeypatch,
     monkeypatch.setattr(ig, "extract_vendor_id", lambda *_: "DW9hy3kidPl")
     monkeypatch.setattr(ig.yt_dlp, "YoutubeDL", FakeNoEntriesYDL)
 
-    fallback_calls = {"count": 0}
+    fallback_calls = {"count": 0, "paths": []}
 
     def fake_fallback(url, download_path, metadata_dir, cookie_path, registry_record):
         fallback_calls["count"] += 1
+        fallback_calls["paths"].append(download_path)
         Path(download_path).parent.mkdir(parents=True, exist_ok=True)
         Path(download_path).write_bytes(b"img")
         return {
@@ -339,6 +342,7 @@ def test_instagram_fallback_when_extract_info_returns_empty_entries(monkeypatch,
 
     data = json.loads(Path(record["metadata_path"]).read_text(encoding="utf-8"))
     assert fallback_calls["count"] == 1
+    assert fallback_calls["paths"] == [str(out_dir / "instagram__DW9hy3kidPl.jpg")]
     assert record["to_process"].endswith("instagram__DW9hy3kidPl.jpg")
     assert data["media_type"] == "image"
     assert data["uploader"] == "fallback_user"
