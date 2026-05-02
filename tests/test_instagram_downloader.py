@@ -132,6 +132,33 @@ class FakeSingleVideoYDL:
         return path
 
 
+class FakeImageOnlyPlaylistYDL:
+    def __init__(self, opts):
+        self.opts = opts
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def extract_info(self, url, download=False):
+        if download:
+            raise AssertionError("extract_info should be inspection-only")
+        return {
+            "id": "IMGPLAY1",
+            "title": "image-only carousel",
+            "entries": [
+                {"id": "img1", "display_url": "https://cdn.example/carousel/1.jpg"},
+                {"id": "img2", "thumbnail": "https://cdn.example/carousel/2.jpg"},
+                {"id": "img3", "thumbnails": [{"url": "https://cdn.example/carousel/3.jpg"}]},
+                {"id": "img4", "display_url": "https://cdn.example/carousel/4.jpg"},
+                {"id": "img5", "thumbnail": "https://cdn.example/carousel/5.jpg"},
+                {"id": "img6", "display_url": "https://cdn.example/carousel/6.jpg"},
+            ],
+        }
+
+
 class FakeDownloadError(Exception):
     pass
 
@@ -255,6 +282,41 @@ def test_instagram_single_video_uses_run_id_stem(monkeypatch, tmp_path):
     data = json.loads(Path(record["metadata_path"]).read_text(encoding="utf-8"))
     assert data["items"][0]["filename"] == "instagram__VIDONLY1.mp4"
     assert record["to_process"].endswith("instagram__VIDONLY1.mp4")
+
+
+def test_img_index_uses_ytdlp_playlist_image_only_entries(monkeypatch, tmp_path):
+    out_dir = tmp_path / "instagram__IMGPLAY1"
+    metadata_dir = tmp_path / "meta"
+
+    monkeypatch.setattr(ig, "load_app_config", lambda: {"raw_metadata_mode": "json"})
+    monkeypatch.setattr(ig, "extract_vendor_id", lambda *_: "IMGPLAY1")
+    monkeypatch.setattr(ig.yt_dlp, "YoutubeDL", FakeImageOnlyPlaylistYDL)
+
+    downloaded = {}
+
+    def fake_image(url, path):
+        downloaded["url"] = url
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_bytes(b"img")
+        return path
+
+    monkeypatch.setattr(ig, "download_image", fake_image)
+    monkeypatch.setattr(ig, "download_instagram_html_fallback", lambda **_kwargs: None)
+
+    record = ig.download(
+        "https://www.instagram.com/p/IMGPLAY1/?img_index=2",
+        str(out_dir),
+        str(metadata_dir),
+        {},
+        cookie_path="",
+        video_download={"format": "best"},
+    )
+
+    data = json.loads(Path(record["metadata_path"]).read_text(encoding="utf-8"))
+    assert downloaded["url"] == "https://cdn.example/carousel/2.jpg"
+    assert len(data["items"]) == 1
+    assert data["items"][0]["index"] == 2
+    assert record["to_process"].endswith("instagram__IMGPLAY1__img002__02.jpg")
 
 
 def test_instagram_html_fallback_on_no_video_formats(monkeypatch, tmp_path):
