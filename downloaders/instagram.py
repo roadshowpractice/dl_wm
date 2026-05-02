@@ -549,16 +549,33 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
 
     if not used_html_fallback:
         entries = _resolve_entries(info)
+        requested_index = _img_index_from_url(url)
         is_carousel = len(entries) > 1
+        indexed_entries = list(enumerate(entries, start=1))
+        if requested_index and indexed_entries:
+            if 1 <= requested_index <= len(indexed_entries):
+                indexed_entries = [indexed_entries[requested_index - 1]]
+                logger.info(
+                    "Using yt-dlp playlist entry selected by img_index=%s (playlist_len=%s)",
+                    requested_index,
+                    len(entries),
+                )
+            else:
+                logger.warning(
+                    "img_index=%s is out of playlist bounds (playlist_len=%s); considering all entries",
+                    requested_index,
+                    len(entries),
+                )
 
         media_dir = output_dir
 
-        for i, entry in enumerate(entries, start=1):
+        for i, entry in indexed_entries:
             if entry is None:
                 logger.warning("Skipping empty playlist entry at index %s", i)
                 continue
 
             is_video = bool(entry.get("formats"))
+            entry_keys = sorted(entry.keys())
 
             if is_video and not download_videos:
                 logger.info("Skipping video entry %s due to configuration", i)
@@ -587,11 +604,26 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
                 logger.info("Downloaded video entry %s", i)
                 continue
 
-            logger.info("Skipping non-video entry (image) for video pipeline entry %s", i)
+            logger.info(
+                "Processing non-video yt-dlp entry index=%s keys=%s",
+                i,
+                entry_keys,
+            )
             image_url = _extract_image_url(entry)
             if not image_url:
-                logger.warning("Skipping image entry %s (missing url/thumbnail)", i)
+                logger.warning(
+                    "Skipping image entry index=%s keys=%s extracted_image_url_prefix=%s",
+                    i,
+                    entry_keys,
+                    None,
+                )
                 continue
+            logger.info(
+                "Resolved image entry index=%s keys=%s extracted_image_url_prefix=%s",
+                i,
+                entry_keys,
+                image_url[:80],
+            )
 
             ext = (entry.get("ext") or "jpg").split("?")[0].lower()
             if not ext or len(ext) > 5:
