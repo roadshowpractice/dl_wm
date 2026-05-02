@@ -98,7 +98,7 @@ def extract_image_candidates_from_html(html):
     candidates = []
     seen = set()
 
-    def add_candidate(url, source, width=None, height=None):
+    def add_candidate(url, source, width=None, height=None, key_name=None, pattern=None):
         clean_url = _decode_escaped(url)
         if isinstance(clean_url, str) and "&amp;" in clean_url:
             logger.warning("unescaped HTML entities in image URL")
@@ -113,6 +113,8 @@ def extract_image_candidates_from_html(html):
                 "source": source,
                 "width": width,
                 "height": height,
+                "key_name": key_name,
+                "pattern": pattern,
             }
         )
 
@@ -122,11 +124,11 @@ def extract_image_candidates_from_html(html):
         flags=re.IGNORECASE,
     )
     for og_url in og_matches:
-        add_candidate(og_url, "og:image")
+        add_candidate(og_url, "og:image", key_name="og:image", pattern="meta_og_image")
 
     for key in ("display_url", "thumbnail_src", "src"):
         for raw_url in re.findall(rf'"{key}"\s*:\s*"([^"]+)"', html):
-            add_candidate(raw_url, key)
+            add_candidate(raw_url, key, key_name=key, pattern=f"json_key:{key}")
 
     for match in re.finditer(r'"image_versions2"\s*:\s*\{', html):
         block = html[match.start() : match.start() + 50000]
@@ -140,7 +142,14 @@ def extract_image_candidates_from_html(html):
         for block_url in block_urls:
             width = int(block_url.group(2)) if block_url.group(2) else None
             height = int(block_url.group(3)) if block_url.group(3) else None
-            add_candidate(block_url.group(1), "image_versions2", width=width, height=height)
+            add_candidate(
+                block_url.group(1),
+                "image_versions2",
+                width=width,
+                height=height,
+                key_name="image_versions2.candidates.url",
+                pattern="image_versions2_candidates",
+            )
 
     return candidates
 
@@ -202,6 +211,57 @@ def inspect_image_candidates_diagnostics(url, cookie_path=None):
     }
 
 
+
+
+def _is_instagram_cdn_image_url(url):
+    if not isinstance(url, str):
+        return False
+    parsed = urlparse(url)
+    host = (parsed.netloc or "").lower()
+    if not host or "cdninstagram" not in host and "scontent" not in host:
+        return False
+    return True
+
+
+def _looks_like_small_or_static_asset(candidate):
+    url = (candidate.get("url") or "").lower()
+    key_name = (candidate.get("key_name") or "").lower()
+    if any(token in url for token in ["/sprite", "/icons/", "/favicon", "/profile_pic", "profile_pic", "static"]):
+        return True
+    if any(token in key_name for token in ["profile", "avatar", "icon", "sprite"]):
+        return True
+    w = candidate.get("width")
+    h = candidate.get("height")
+    if isinstance(w, int) and isinstance(h, int) and (w <= 200 or h <= 200):
+        return True
+    q = parse_qs(urlparse(url).query)
+    for dim in ("w", "width", "h", "height"):
+        if dim in q:
+            try:
+                if int(q[dim][0]) <= 200:
+                    return True
+            except Exception:
+                pass
+    return False
+
+
+def _carousel_candidates(candidates):
+    filtered = []
+    seen = set()
+    for candidate in candidates:
+        source = (candidate.get("source") or "").lower()
+        url = candidate.get("url")
+        if source in {"display_url", "thumbnail_src", "image_versions2"}:
+            usable = True
+        else:
+            usable = _is_instagram_cdn_image_url(url)
+        if not usable or _looks_like_small_or_static_asset(candidate):
+            continue
+        if url in seen:
+            continue
+        seen.add(url)
+        filtered.append(candidate)
+    return filtered
 def _choose_best_candidate(candidates):
     if not candidates:
         return None
@@ -255,11 +315,7 @@ def _ordered_candidates_for_url(candidates, source_url):
     if not requested_index:
         return ordered
 
-    indexed = []
-    for candidate in candidates:
-        source = (candidate.get("source") or "").lower()
-        if source in {"display_url", "thumbnail_src", "image_versions2"}:
-            indexed.append(candidate)
+    indexed = _carousel_candidates(candidates)
     if requested_index <= len(indexed):
         selected = indexed[requested_index - 1]
         return [selected, *[c for c in ordered if c.get("url") != selected.get("url")]]
@@ -310,9 +366,8 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
         return None
 
     requested_index = _img_index_from_url(url)
-    carousel_candidate_count = len(
-        [c for c in candidates if (c.get("source") or "").lower() in {"display_url", "thumbnail_src", "image_versions2"}]
-    )
+    carousel_candidates = _carousel_candidates(candidates)
+    carousel_candidate_count = len(carousel_candidates)
     if requested_index and len(candidates) < requested_index:
         logger.warning(
             "img_index requested but only %s candidates found; falling back to ranked candidates",
@@ -325,13 +380,13 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
     selected_priority_source = ordered_sources[0] if ordered_sources else None
     logger.warning(
         "Ordered candidate selection: parsed_img_index=%s selected_candidate_source=%s "
-        "selected_candidate_url_prefix=%s candidate_count=%s carousel_candidate_count=%s first_5_sources=%s",
+        "selected_candidate_url_prefix=%s candidate_count=%s carousel_candidate_count=%s first_10_carousel_prefixes=%s",
         requested_index,
         selected_priority_source,
         ((ordered_candidates[0].get("url") or "")[:80] if ordered_candidates else None),
         len(candidates),
         carousel_candidate_count,
-        ordered_sources[:5],
+        [(c.get("url") or "")[:80] for c in carousel_candidates[:10]],
     )
     errors = []
     user_agent = (getattr(session, "headers", {}) or {}).get("User-Agent", INSTAGRAM_UA)
