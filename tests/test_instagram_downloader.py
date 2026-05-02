@@ -782,3 +782,36 @@ def test_html_fallback_img_index_3_uses_src_carousel_candidate(monkeypatch, tmp_
 
     assert session.calls[0]["url"].endswith("/3.jpg")
     assert result["image_url"].endswith("/3.jpg")
+
+def test_ordered_candidates_uses_edge_sidecar_json_for_img_index_3():
+    html = '''
+    <script>
+    window.__additionalDataLoaded('/p/DXw_ZyYiTeo/', {
+      "graphql": {
+        "shortcode_media": {
+          "edge_sidecar_to_children": {
+            "edges": [
+              {"node": {"display_url": "https://cdn.example/sidecar/1.jpg"}},
+              {"node": {"display_url": "https://cdn.example/sidecar/2.jpg"}},
+              {"node": {"display_url": "https://cdn.example/sidecar/3.jpg"}}
+            ]
+          }
+        }
+      }
+    });
+    </script>
+    '''
+    candidates = [
+        {"url": "https://cdn.example/og.jpg", "source": "og:image"},
+        {"url": "https://cdn.example/sidecar/1.jpg", "source": "src"},
+        {"url": "https://cdn.example/sidecar/2.jpg", "source": "src"},
+        {"url": "https://cdn.example/sidecar/3.jpg", "source": "src"},
+    ]
+
+    ordered = ig._ordered_candidates_for_url(
+        candidates,
+        "https://www.instagram.com/p/DXw_ZyYiTeo/?img_index=3",
+        html=html,
+    )
+
+    assert ordered[0]["url"] == "https://cdn.example/sidecar/3.jpg"

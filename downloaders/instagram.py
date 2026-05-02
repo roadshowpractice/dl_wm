@@ -309,11 +309,85 @@ def _artifact_vendor_id(vendor_id, source_url):
     return f"{vendor_id}__img{requested_index:03d}"
 
 
-def _ordered_candidates_for_url(candidates, source_url):
+def _extract_json_objects_from_instagram_html(html):
+    objects = []
+    if not isinstance(html, str) or not html:
+        return objects
+
+    for match in re.finditer(r"window\.__additionalDataLoaded\s*\(\s*[^,]+,\s*(\{.*?\})\s*\)\s*;", html, flags=re.DOTALL):
+        payload = match.group(1)
+        try:
+            objects.append(json.loads(payload))
+        except Exception:
+            continue
+
+    shared_match = re.search(r"window\._sharedData\s*=\s*(\{.*?\})\s*;", html, flags=re.DOTALL)
+    if shared_match:
+        try:
+            objects.append(json.loads(shared_match.group(1)))
+        except Exception:
+            pass
+
+    return objects
+
+
+def _edge_sidecar_urls_from_object(obj):
+    urls = []
+
+    def walk(node):
+        if isinstance(node, dict):
+            sidecar = node.get("edge_sidecar_to_children")
+            if isinstance(sidecar, dict):
+                edges = sidecar.get("edges")
+                if isinstance(edges, list):
+                    for edge in edges:
+                        child = edge.get("node") if isinstance(edge, dict) else None
+                        display_url = child.get("display_url") if isinstance(child, dict) else None
+                        if isinstance(display_url, str) and display_url:
+                            urls.append(_decode_escaped(display_url))
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(obj)
+    return urls
+
+
+def _extract_ordered_carousel_urls_from_html(html):
+    ordered = []
+    seen = set()
+    for obj in _extract_json_objects_from_instagram_html(html):
+        for url in _edge_sidecar_urls_from_object(obj):
+            if url and url not in seen:
+                seen.add(url)
+                ordered.append(url)
+    return ordered
+
+
+def _ordered_candidates_for_url(candidates, source_url, html=None):
     ordered = _rank_candidates(candidates)
     requested_index = _img_index_from_url(source_url)
     if not requested_index:
         return ordered
+
+    sidecar_urls = _extract_ordered_carousel_urls_from_html(html)
+    if sidecar_urls:
+        logger.warning(
+            "Instagram JSON carousel extraction: edges=%s selected_index=%s selected_url_prefix=%s",
+            len(sidecar_urls),
+            requested_index,
+            (sidecar_urls[requested_index - 1][:80] if requested_index and requested_index <= len(sidecar_urls) else None),
+        )
+        if requested_index <= len(sidecar_urls):
+            selected_url = sidecar_urls[requested_index - 1]
+            selected = next((c for c in candidates if c.get("url") == selected_url), None)
+            if not selected:
+                selected = {"url": selected_url, "source": "edge_sidecar_to_children"}
+            return [selected, *[c for c in ordered if c.get("url") != selected.get("url")]]
+    else:
+        logger.warning("Instagram JSON carousel extraction: edges=0 selected_index=%s selected_url_prefix=%s", requested_index, None)
 
     indexed = _carousel_candidates(candidates)
     if requested_index <= len(indexed):
@@ -375,7 +449,7 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
         )
 
     session = diagnostics.get("session") or requests.Session()
-    ordered_candidates = _ordered_candidates_for_url(candidates, url)
+    ordered_candidates = _ordered_candidates_for_url(candidates, url, diagnostics.get("html") or "")
     ordered_sources = [candidate.get("source") for candidate in ordered_candidates]
     selected_priority_source = ordered_sources[0] if ordered_sources else None
     logger.warning(
