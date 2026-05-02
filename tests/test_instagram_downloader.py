@@ -670,3 +670,53 @@ def test_img_indexes_do_not_overwrite_metadata_paths(monkeypatch, tmp_path):
     assert len(set(paths)) == 3
     for p in paths:
         assert Path(p).exists()
+
+
+def test_ordered_candidates_img_index_3_uses_src_carousel_candidates_not_og_image():
+    candidates = [
+        {"url": "https://cdn.example/og.jpg", "source": "og:image"},
+        {"url": "https://scontent-lax3-2.cdninstagram.com/v/t51.2885-15/1.jpg", "source": "src", "key_name": "src", "pattern": "json_key:src"},
+        {"url": "https://scontent-lax3-2.cdninstagram.com/v/t51.2885-15/2.jpg", "source": "src", "key_name": "src", "pattern": "json_key:src"},
+        {"url": "https://scontent-lax3-2.cdninstagram.com/v/t51.2885-15/3.jpg", "source": "src", "key_name": "src", "pattern": "json_key:src"},
+    ]
+
+    ordered = ig._ordered_candidates_for_url(candidates, "https://www.instagram.com/p/DXw_ZyYiTeo/?img_index=3")
+
+    assert ordered[0]["url"].endswith("/3.jpg")
+    assert ordered[0]["source"] == "src"
+
+
+def test_html_fallback_img_index_3_uses_src_carousel_candidate(monkeypatch, tmp_path):
+    download_path = tmp_path / "out" / "instagram__DXw_ZyYiTeo.bin"
+    metadata_dir = tmp_path / "meta"
+    candidates = [
+        {"url": "https://cdn.example/og.jpg", "source": "og:image"},
+        {"url": "https://scontent-lax3-2.cdninstagram.com/v/t51.2885-15/1.jpg", "source": "src", "key_name": "src", "pattern": "json_key:src"},
+        {"url": "https://scontent-lax3-2.cdninstagram.com/v/t51.2885-15/2.jpg", "source": "src", "key_name": "src", "pattern": "json_key:src"},
+        {"url": "https://scontent-lax3-2.cdninstagram.com/v/t51.2885-15/3.jpg", "source": "src", "key_name": "src", "pattern": "json_key:src"},
+    ]
+    session = _FallbackSession({"https://scontent-lax3-2.cdninstagram.com/v/t51.2885-15/3.jpg": _FallbackResponse(200, "image/jpeg", b"third")})
+
+    monkeypatch.setattr(
+        ig,
+        "inspect_image_candidates_diagnostics",
+        lambda *_args, **_kwargs: {
+            "status_code": 200,
+            "cookies_loaded": True,
+            "candidate_sources": [c["source"] for c in candidates],
+            "candidates": candidates,
+            "html": "",
+            "session": session,
+        },
+    )
+
+    result = ig.download_instagram_html_fallback(
+        "https://www.instagram.com/p/DXw_ZyYiTeo/?img_index=3",
+        str(download_path),
+        str(metadata_dir),
+        cookie_path="",
+        registry_record={},
+    )
+
+    assert session.calls[0]["url"].endswith("/3.jpg")
+    assert result["image_url"].endswith("/3.jpg")
