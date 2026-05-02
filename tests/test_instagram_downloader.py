@@ -615,3 +615,54 @@ def test_html_fallback_download_uses_ordered_candidates_for_iteration(monkeypatc
 
     assert session.calls[0]["url"] == "https://cdn.example/second.jpg"
     assert result["image_url"] == "https://cdn.example/second.jpg"
+
+
+def test_img_index_artifact_stem_is_distinct(monkeypatch, tmp_path):
+    out_dir = tmp_path / "instagram__IMGONLY1"
+    metadata_dir = tmp_path / "meta"
+
+    monkeypatch.setattr(ig, "load_app_config", lambda: {"raw_metadata_mode": "json"})
+    monkeypatch.setattr(ig, "extract_vendor_id", lambda *_: "IMGONLY1")
+    monkeypatch.setattr(ig.yt_dlp, "YoutubeDL", FakeSingleImageYDL)
+    monkeypatch.setattr(ig, "download_image", lambda _url, path: Path(path).write_bytes(b"img") or path)
+
+    record1 = ig.download("https://www.instagram.com/p/IMGONLY1/?img_index=1", str(out_dir), str(metadata_dir), {}, cookie_path="")
+    record2 = ig.download("https://www.instagram.com/p/IMGONLY1/?img_index=2", str(out_dir), str(metadata_dir), {}, cookie_path="")
+
+    assert record1["metadata_file"] == "instagram__IMGONLY1__img001.json"
+    assert record2["metadata_file"] == "instagram__IMGONLY1__img002.json"
+    assert record1["to_process"] != record2["to_process"]
+
+
+def test_ordered_candidates_img_index_2_does_not_prioritize_og_image_when_carousel_exists():
+    candidates = [
+        {"url": "https://cdn.example/og.jpg", "source": "og:image"},
+        {"url": "https://cdn.example/first.jpg", "source": "display_url"},
+        {"url": "https://cdn.example/second.jpg", "source": "display_url"},
+    ]
+
+    ordered = ig._ordered_candidates_for_url(candidates, "https://www.instagram.com/p/DXw_ZyYiTeo/?img_index=2")
+
+    assert ordered[0]["source"] != "og:image"
+    assert ordered[0]["url"] == "https://cdn.example/second.jpg"
+
+
+def test_img_indexes_do_not_overwrite_metadata_paths(monkeypatch, tmp_path):
+    out_dir = tmp_path / "instagram__IMGONLY1"
+    metadata_dir = tmp_path / "meta"
+
+    monkeypatch.setattr(ig, "load_app_config", lambda: {"raw_metadata_mode": "json"})
+    monkeypatch.setattr(ig, "extract_vendor_id", lambda *_: "IMGONLY1")
+    monkeypatch.setattr(ig.yt_dlp, "YoutubeDL", FakeSingleImageYDL)
+    monkeypatch.setattr(ig, "download_image", lambda _url, path: Path(path).write_bytes(b"img") or path)
+
+    records = [
+        ig.download("https://www.instagram.com/p/IMGONLY1/?img_index=1", str(out_dir), str(metadata_dir), {}, cookie_path=""),
+        ig.download("https://www.instagram.com/p/IMGONLY1/?img_index=2", str(out_dir), str(metadata_dir), {}, cookie_path=""),
+        ig.download("https://www.instagram.com/p/IMGONLY1/?img_index=4", str(out_dir), str(metadata_dir), {}, cookie_path=""),
+    ]
+
+    paths = [r["metadata_path"] for r in records]
+    assert len(set(paths)) == 3
+    for p in paths:
+        assert Path(p).exists()
