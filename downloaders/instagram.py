@@ -242,6 +242,13 @@ def _img_index_from_url(url):
         return None
 
 
+def _artifact_vendor_id(vendor_id, source_url):
+    requested_index = _img_index_from_url(source_url)
+    if not requested_index:
+        return vendor_id
+    return f"{vendor_id}__img{requested_index:03d}"
+
+
 def _ordered_candidates_for_url(candidates, source_url):
     ordered = _rank_candidates(candidates)
     requested_index = _img_index_from_url(source_url)
@@ -251,7 +258,7 @@ def _ordered_candidates_for_url(candidates, source_url):
     indexed = []
     for candidate in candidates:
         source = (candidate.get("source") or "").lower()
-        if source in {"display_url", "thumbnail_src"}:
+        if source in {"display_url", "thumbnail_src", "image_versions2"}:
             indexed.append(candidate)
     if requested_index <= len(indexed):
         selected = indexed[requested_index - 1]
@@ -303,6 +310,9 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
         return None
 
     requested_index = _img_index_from_url(url)
+    carousel_candidate_count = len(
+        [c for c in candidates if (c.get("source") or "").lower() in {"display_url", "thumbnail_src", "image_versions2"}]
+    )
     if requested_index and len(candidates) < requested_index:
         logger.warning(
             "img_index requested but only %s candidates found; falling back to ranked candidates",
@@ -314,10 +324,14 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
     ordered_sources = [candidate.get("source") for candidate in ordered_candidates]
     selected_priority_source = ordered_sources[0] if ordered_sources else None
     logger.warning(
-        "Ordered candidate selection: first 5 sources=%s, img_index=%s, selected_priority_source=%s",
-        ordered_sources[:5],
+        "Ordered candidate selection: parsed_img_index=%s selected_candidate_source=%s "
+        "selected_candidate_url_prefix=%s candidate_count=%s carousel_candidate_count=%s first_5_sources=%s",
         requested_index,
         selected_priority_source,
+        ((ordered_candidates[0].get("url") or "")[:80] if ordered_candidates else None),
+        len(candidates),
+        carousel_candidate_count,
+        ordered_sources[:5],
     )
     errors = []
     user_agent = (getattr(session, "headers", {}) or {}).get("User-Agent", INSTAGRAM_UA)
@@ -413,7 +427,8 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
     os.makedirs(output_dir, exist_ok=True)
     os.makedirs(metadata_dir, exist_ok=True)
 
-    metadata_path = os.path.join(metadata_dir, metadata_filename(VENDOR_INSTAGRAM, vendor_id))
+    artifact_vendor_id = _artifact_vendor_id(vendor_id, url)
+    metadata_path = os.path.join(metadata_dir, metadata_filename(VENDOR_INSTAGRAM, artifact_vendor_id))
 
     app_config = load_app_config() or {}
     instagram_cfg = app_config.get("instagram") if isinstance(app_config, dict) else {}
@@ -423,6 +438,8 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
     download_videos = instagram_cfg.get("download_videos", True)
 
     run_id = Path(output_dir).name
+    if artifact_vendor_id != vendor_id:
+        run_id = f"{VENDOR_INSTAGRAM}__{artifact_vendor_id.split('__', 1)[1]}"
 
     inspect_opts = {
         "cookiefile": cookie_path,
@@ -451,7 +468,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
             logger.warning("No video formats found; trying Instagram HTML fallback")
             fallback = download_instagram_html_fallback(
                 url=url,
-                download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{vendor_id}.jpg"),
+                download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{artifact_vendor_id.split('__', 1)[1]}.jpg"),
                 metadata_dir=metadata_dir,
                 cookie_path=cookie_path,
                 registry_record=registry_record,
@@ -545,7 +562,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
             logger.warning("No yt-dlp downloadable media entries; trying Instagram HTML fallback")
             fallback = download_instagram_html_fallback(
                 url=url,
-                download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{vendor_id}.jpg"),
+                download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{artifact_vendor_id.split('__', 1)[1]}.jpg"),
                 metadata_dir=metadata_dir,
                 cookie_path=cookie_path,
                 registry_record=registry_record,
