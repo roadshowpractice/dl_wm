@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+URL="${1:?Usage: bash bin/igp_probe.sh 'https://www.instagram.com/p/SHORTCODE/'}"
+COOKIE_FILE="${COOKIE_FILE:-conf/instagram.cookies.txt}"
+HEADLESS="${HEADLESS:-0}"
+ROUNDS="${ROUNDS:-10}"
+SHORTCODE="$(python3 -m igp.extract shortcode "$URL")"
+TODAY="$(date +%F)"
+TS="$(date +%Y%m%d_%H%M%S)"
+OUTDIR="outputs/${TODAY}/instagram__${SHORTCODE}/browser_cookie_full_${TS}"
+mkdir -p "$OUTDIR"
+python3 -m igp.capture "$URL" "$SHORTCODE" "$COOKIE_FILE" "$OUTDIR" "$HEADLESS" "$ROUNDS"
+python3 -m igp.extract media "$OUTDIR/captured_responses.jsonl" "$SHORTCODE" "$OUTDIR"
+python3 -m igp.select "$OUTDIR" "$SHORTCODE"
+python3 -m igp.download "$OUTDIR" "$SHORTCODE" "$COOKIE_FILE"
+echo "$OUTDIR"
