@@ -1,4 +1,4 @@
-import asyncio, json, re, sys
+import asyncio, html, json, re, sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -24,6 +24,24 @@ def looks_like_junk(url):
 
 def media_group_key(url):
     return Path(urlparse(url).path).name or url
+
+
+def normalize_media_url(url):
+    u = html.unescape(url.strip())
+    u = u.replace("\\/", "/")
+    if u.startswith("//"):
+        u = f"https:{u}"
+    return u
+
+
+def extract_candidate_urls(text):
+    pattern = r"https?:\\/\\/[^\"'\\s]+|https?://[^\"'\\s]+|//[^\"'\\s]*cdninstagram[^\"'\\s]*"
+    candidates = []
+    for raw in re.findall(pattern, text):
+        nu = normalize_media_url(raw)
+        if is_media_url(nu):
+            candidates.append(nu)
+    return candidates
 
 
 def parse_stp(url):
@@ -67,17 +85,14 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
     out = Path(outdir)
     out.mkdir(parents=True, exist_ok=True)
 
-    best_by_filename = {}
+    candidates_by_filename = {}
     order_by_filename = {}
-    downloaded_filenames = set()
-    next_index = 1
 
     manifest_path = out / "manifest.jsonl"
     manifest_fp = manifest_path.open("w", encoding="utf-8")
 
-    async def maybe_download_best(response):
-        nonlocal next_index
-        ru = response.url
+    def add_candidate(url):
+        ru = normalize_media_url(url)
         if not is_media_url(ru):
             return
 
@@ -88,41 +103,9 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
         if filename not in order_by_filename:
             order_by_filename[filename] = len(order_by_filename) + 1
 
-        prev = best_by_filename.get(filename)
-        if prev is None or variant_score(ru) > variant_score(prev):
-            best_by_filename[filename] = ru
-
-        if filename in downloaded_filenames:
-            return
-
-        if best_by_filename.get(filename) != ru:
-            return
-
-        try:
-            body = await response.body()
-        except Exception:
-            return
-
-        ext = Path(urlparse(ru).path).suffix.lower() or ".bin"
-        dest = out / f"{next_index:03d}{ext}"
-        dest.write_bytes(body)
-
-        manifest_fp.write(
-            json.dumps(
-                {
-                    "index": next_index,
-                    "filename": filename,
-                    "url": ru,
-                    "path": dest.name,
-                    "status": "ok",
-                },
-                ensure_ascii=False,
-            )
-            + "\n"
-        )
-        manifest_fp.flush()
-        downloaded_filenames.add(filename)
-        next_index += 1
+        variants = candidates_by_filename.setdefault(filename, [])
+        if ru not in variants:
+            variants.append(ru)
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless, args=["--disable-blink-features=AutomationControlled"])
@@ -152,13 +135,12 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                 ):
                     return
                 captured.append({"url": ru, "status": response.status, "content_type": response.headers.get("content-type", ""), "text": text})
+
+                add_candidate(ru)
+                for candidate in extract_candidate_urls(text):
+                    add_candidate(candidate)
             except Exception:
                 pass
-
-            try:
-                await maybe_download_best(response)
-            except Exception:
-                return
 
         page.on("response", on_response)
         await page.goto(url, wait_until="domcontentloaded", timeout=60000)
@@ -178,6 +160,40 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                         await page.wait_for_timeout(1000)
                 except Exception:
                     pass
+        ranked_filenames = sorted(order_by_filename.keys(), key=lambda name: order_by_filename[name])
+        next_index = 1
+        for filename in ranked_filenames:
+            variants = candidates_by_filename.get(filename, [])
+            if not variants:
+                continue
+            best_url = max(variants, key=variant_score)
+            ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
+            dest = out / f"{next_index:03d}{ext}"
+            status = "ok"
+            try:
+                resp = await context.request.get(best_url)
+                if not resp.ok:
+                    raise RuntimeError(f"HTTP {resp.status}")
+                dest.write_bytes(await resp.body())
+            except Exception as e:
+                status = f"error: {e}"
+
+            manifest_fp.write(
+                json.dumps(
+                    {
+                        "index": next_index,
+                        "filename": filename,
+                        "url": best_url,
+                        "path": dest.name,
+                        "status": status,
+                    },
+                    ensure_ascii=False,
+                )
+                + "\n"
+            )
+            manifest_fp.flush()
+            next_index += 1
+
         await browser.close()
 
     manifest_fp.close()
