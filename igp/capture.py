@@ -3,27 +3,48 @@ import html
 import json
 import re
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from igp.cookies import load_netscape_cookies
 from igp.extract import build_post_model
 
-
 IMAGE_EXTS = {".jpg", ".jpeg", ".webp", ".png"}
 CANDIDATE_PATTERN = r"(?:https?:\\/\\/|https?:\\u002F\\u002F|https?://|//)[^\"'\s<>()]+"
 
 
+@dataclass
+class CaptureRequest:
+    url: str
+    shortcode: str
+    cookie_file: Path
+    outdir: Path
+    requested_start: int | None = None
+    requested_end: int | None = None
+    headless: bool = True
+    rounds: int = 1
+    allow_fallback: bool = True
+
+
+def parse_capture_args(argv):
+    if len(argv) < 4:
+        raise ValueError("usage: capture URL SHORTCODE COOKIE_FILE OUTDIR [START] [END]")
+    start = argv[4] if len(argv) > 4 else None
+    end = argv[5] if len(argv) > 5 else None
+    requested_start, requested_end = _parse_requested_range(start, end)
+    return CaptureRequest(
+        url=argv[0],
+        shortcode=argv[1],
+        cookie_file=Path(argv[2]),
+        outdir=Path(argv[3]),
+        requested_start=requested_start,
+        requested_end=requested_end,
+    )
+
+
 def looks_like_junk(url):
-    junk_bits = [
-        "static.cdninstagram.com",
-        "rsrc.php",
-        "s150x150",
-        "_s150x150",
-        "profile_pic",
-        "t51.2885-19",
-        "t51.82787-19",
-    ]
+    junk_bits = ["static.cdninstagram.com", "rsrc.php", "s150x150", "_s150x150", "profile_pic", "t51.2885-19", "t51.82787-19"]
     return any(bit in url for bit in junk_bits)
 
 
@@ -32,17 +53,9 @@ def media_group_key(url):
 
 
 def normalize_media_url(url):
-    normalized = url.strip()
-    normalized = html.unescape(normalized)
-    normalized = re.sub(
-        r"\\u([0-9a-fA-F]{4})",
-        lambda m: chr(int(m.group(1), 16)),
-        normalized,
-    )
-    normalized = normalized.replace("\\/", "/")
-    normalized = normalized.replace("\\u002F", "/")
-    normalized = normalized.replace("\\u0026", "&")
-    normalized = normalized.replace("\\u003D", "=")
+    normalized = html.unescape(url.strip())
+    normalized = re.sub(r"\\u([0-9a-fA-F]{4})", lambda m: chr(int(m.group(1), 16)), normalized)
+    normalized = normalized.replace("\\/", "/").replace("\\u002F", "/").replace("\\u0026", "&").replace("\\u003D", "=")
     normalized = html.unescape(normalized)
     for _ in range(2):
         if "%" not in normalized:
@@ -69,17 +82,14 @@ def allowed_media_host(host):
 
 def is_media_url(url):
     parsed = urlparse(url)
-    if not allowed_media_host(parsed.netloc):
-        return False
-    if looks_like_junk(url):
+    if not allowed_media_host(parsed.netloc) or looks_like_junk(url):
         return False
     ext = Path(parsed.path).suffix.lower()
     return ext in IMAGE_EXTS or ext == ".mp4"
 
 
 def extract_candidate_urls(text):
-    candidates = []
-    seen = set()
+    candidates, seen = [], set()
     for raw in re.findall(CANDIDATE_PATTERN, text):
         normalized = normalize_media_url(raw)
         if is_media_url(normalized) and normalized not in seen:
@@ -98,38 +108,34 @@ def is_cropped_variant(url):
 
 def parse_square_size(url):
     match = re.search(r"s(\d+)x(\d+)", parse_stp(url))
-    if not match:
-        return None
-    return min(int(match.group(1)), int(match.group(2)))
+    return min(int(match.group(1)), int(match.group(2))) if match else None
 
 
 def variant_score(url):
     path = urlparse(url).path.lower()
-    base = 10000 if path.endswith(".mp4") else 0
-    uncropped_score = 2000 if not is_cropped_variant(url) else 0
-    size = parse_square_size(url)
-    size_score = size if size is not None else 900
-    return base + uncropped_score + size_score
+    return (10000 if path.endswith(".mp4") else 0) + (2000 if not is_cropped_variant(url) else 0) + (parse_square_size(url) or 900)
 
 
 def add_candidate(url, candidates_by_asset, discovery_order):
     normalized = normalize_media_url(url)
     if not is_media_url(normalized):
         return
-
     asset_key = media_group_key(normalized)
-    if not asset_key:
-        return
-
     if asset_key not in discovery_order:
         discovery_order[asset_key] = len(discovery_order) + 1
-
     variants = candidates_by_asset.setdefault(asset_key, [])
     if normalized not in variants:
         variants.append(normalized)
 
 
-def rank_assets(candidates_by_asset, discovery_order):
+def rank_fallback_assets(captured):
+    candidates_by_asset = {}
+    discovery_order = {}
+    for rec in captured:
+        response_url = rec.get("url", "")
+        add_candidate(response_url, candidates_by_asset, discovery_order)
+        for candidate in extract_candidate_urls(rec.get("text", "")):
+            add_candidate(candidate, candidates_by_asset, discovery_order)
     ordered_assets = sorted(discovery_order, key=discovery_order.get)
     ranked = []
     for asset_key in ordered_assets:
@@ -137,13 +143,11 @@ def rank_assets(candidates_by_asset, discovery_order):
         if not variants:
             continue
         best_variant = max(enumerate(variants), key=lambda item: (variant_score(item[1]), -item[0]))[1]
-        ranked.append((asset_key, best_variant, variants))
+        ranked.append({"asset": asset_key, "url": best_variant, "variants": variants})
     return ranked
 
 
-
-
-def _select_structured_assets(post_model, requested_start, requested_end):
+def select_target_assets(post_model, requested_start, requested_end):
     assets = post_model.get("assets", [])
     if requested_start is None and requested_end is None:
         return assets
@@ -183,23 +187,28 @@ def _best_variant_for_asset(asset):
     best = max(enumerate(variants), key=lambda item: (variant_score(item[1]), -item[0]))[1]
     return best, variants
 
-async def run(url, shortcode, cookie_file, outdir, requested_start, requested_end, headless=True, rounds=1):
+
+def find_post_model(captured, shortcode):
+    for rec in captured:
+        text = rec.get("text", "")
+        try:
+            post_model = build_post_model(json.loads(text), shortcode)
+        except Exception:
+            post_model = build_post_model(text, shortcode)
+        if post_model:
+            return post_model
+    return None
+
+
+async def capture_responses(request: CaptureRequest):
     from playwright.async_api import async_playwright
 
     captured = []
-    out = Path(outdir)
-    out.mkdir(parents=True, exist_ok=True)
-
-    candidates_by_asset = {}
-    discovery_order = {}
-
+    request.outdir.mkdir(parents=True, exist_ok=True)
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless, args=["--disable-blink-features=AutomationControlled"])
-        context = await browser.new_context(
-            viewport={"width": 1280, "height": 900},
-            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
-        )
-        cookies = load_netscape_cookies(Path(cookie_file))
+        browser = await p.chromium.launch(headless=request.headless, args=["--disable-blink-features=AutomationControlled"])
+        context = await browser.new_context(viewport={"width": 1280, "height": 900}, user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36")
+        cookies = load_netscape_cookies(request.cookie_file)
         if cookies:
             await context.add_cookies(cookies)
         page = await context.new_page()
@@ -210,36 +219,15 @@ async def run(url, shortcode, cookie_file, outdir, requested_start, requested_en
                 if not ("instagram.com" in response_url or "fbcdn.net" in response_url or "cdninstagram.com" in response_url):
                     return
                 text = await response.text()
-                if not (
-                    shortcode in text
-                    or "image_versions2" in text
-                    or "video_versions" in text
-                    or "xdt_api__v1__media__shortcode__web_info" in text
-                    or ".mp4" in text
-                    or ".jpg" in text
-                    or ".webp" in text
-                ):
+                if not (request.shortcode in text or "image_versions2" in text or "video_versions" in text or "xdt_api__v1__media__shortcode__web_info" in text or ".mp4" in text or ".jpg" in text or ".webp" in text):
                     return
-
-                captured.append(
-                    {
-                        "url": response_url,
-                        "status": response.status,
-                        "content_type": response.headers.get("content-type", ""),
-                        "text": text,
-                    }
-                )
-
-                add_candidate(response_url, candidates_by_asset, discovery_order)
-                for candidate in extract_candidate_urls(text):
-                    add_candidate(candidate, candidates_by_asset, discovery_order)
+                captured.append({"url": response_url, "status": response.status, "content_type": response.headers.get("content-type", ""), "text": text})
             except Exception:
                 pass
 
         page.on("response", on_response)
-        await page.goto(url, wait_until="domcontentloaded", timeout=60000)
-
-        for _ in range(rounds):
+        await page.goto(request.url, wait_until="domcontentloaded", timeout=60000)
+        for _ in range(request.rounds):
             await page.wait_for_timeout(2500)
             try:
                 await page.mouse.wheel(0, 700)
@@ -255,119 +243,99 @@ async def run(url, shortcode, cookie_file, outdir, requested_start, requested_en
                         await page.wait_for_timeout(1000)
                 except Exception:
                     pass
-
-        requested_start, requested_end = _parse_requested_range(requested_start, requested_end)
-        post_model = None
-        for rec in captured:
-            text = rec.get("text", "")
-            try:
-                post_model = build_post_model(json.loads(text), shortcode)
-            except Exception:
-                post_model = build_post_model(text, shortcode)
-            if post_model:
-                break
-
-        ranked_assets = rank_assets(candidates_by_asset, discovery_order)
-
-        manifest_path = out / "manifest.jsonl"
-        metadata_path = out / "post_metadata.json"
-        with manifest_path.open("w", encoding="utf-8") as manifest_fp:
-            if post_model:
-                metadata_path.write_text(json.dumps({
-                    "shortcode": post_model.get("shortcode"),
-                    "caption": post_model.get("caption"),
-                    "owner": post_model.get("owner"),
-                    "collaborators": post_model.get("collaborators", []),
-                    "carousel_count": post_model.get("carousel_count", 0),
-                }, ensure_ascii=False, indent=2))
-
-                selected = _select_structured_assets(post_model, requested_start, requested_end)
-                for asset in selected:
-                    best_url, variants = _best_variant_for_asset(asset)
-                    if not best_url:
-                        continue
-                    idx = asset.get("carousel_index")
-                    ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
-                    label = "img" if asset.get("media_type") == "image" else "vid"
-                    dest = out / f"{idx:03d}{ext}"
-                    status = "ok"
-                    try:
-                        resp = await context.request.get(best_url)
-                        if not resp.ok:
-                            raise RuntimeError(f"HTTP {resp.status}")
-                        dest.write_bytes(await resp.body())
-                    except Exception as e:
-                        status = f"error: {e}"
-
-                    manifest_fp.write(json.dumps({
-                        "shortcode": shortcode,
-                        "requested_start": requested_start,
-                        "requested_end": requested_end,
-                        "carousel_index": idx,
-                        "carousel_count": post_model.get("carousel_count", 0),
-                        "source_shortcode": post_model.get("shortcode"),
-                        "source_media_id": post_model.get("media_id"),
-                        "parent_shortcode": post_model.get("shortcode"),
-                        "media_type": asset.get("media_type"),
-                        "extraction_reason": "target_post_asset",
-                        "path": dest.name,
-                        "selected_url": best_url,
-                        "variants_considered": len(variants),
-                        "owner": post_model.get("owner"),
-                        "collaborators": post_model.get("collaborators", []),
-                        "caption": post_model.get("caption", ""),
-                        "status": status,
-                    }, ensure_ascii=False) + "\n")
-                    manifest_fp.flush()
-            else:
-                if metadata_path.exists():
-                    metadata_path.unlink()
-                if not ranked_assets:
-                    manifest_fp.write(
-                        json.dumps(
-                            {
-                                "status": "no_candidates",
-                                "responses_saved": len(captured),
-                                "extracted_candidates": sum(len(v) for v in candidates_by_asset.values()),
-                            },
-                            ensure_ascii=False,
-                        )
-                        + "\n"
-                    )
-                    manifest_fp.flush()
-
-                for index, (asset_key, best_url, variants) in enumerate(ranked_assets, 1):
-                    ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
-                    dest = out / f"{index:03d}{ext}"
-                    status = "ok"
-                    try:
-                        resp = await context.request.get(best_url)
-                        if not resp.ok:
-                            raise RuntimeError(f"HTTP {resp.status}")
-                        dest.write_bytes(await resp.body())
-                    except Exception as e:
-                        status = f"error: {e}"
-
-                    manifest_fp.write(
-                        json.dumps(
-                            {
-                                "index": index,
-                                "asset": asset_key,
-                                "url": best_url,
-                                "path": dest.name,
-                                "status": status,
-                                "variants_considered": len(variants),
-                            },
-                            ensure_ascii=False,
-                        )
-                        + "\n"
-                    )
-                    manifest_fp.flush()
-
         await browser.close()
+    return captured
 
+
+async def download_structured_assets(context, assets, outdir, request, post_model):
+    rows = []
+    for asset in assets:
+        best_url, variants = _best_variant_for_asset(asset)
+        if not best_url:
+            continue
+        idx = asset.get("carousel_index")
+        ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
+        dest = outdir / f"{idx:03d}{ext}"
+        status = "ok"
+        try:
+            resp = await context.request.get(best_url)
+            if not resp.ok:
+                raise RuntimeError(f"HTTP {resp.status}")
+            dest.write_bytes(await resp.body())
+        except Exception as e:
+            status = f"error: {e}"
+        rows.append({"shortcode": request.shortcode, "requested_start": request.requested_start, "requested_end": request.requested_end, "carousel_index": idx, "carousel_count": post_model.get("carousel_count", 0), "source_shortcode": post_model.get("shortcode"), "source_media_id": post_model.get("media_id"), "parent_shortcode": post_model.get("shortcode"), "media_type": asset.get("media_type"), "extraction_reason": "target_post_asset", "path": dest.name, "selected_url": best_url, "variants_considered": len(variants), "owner": post_model.get("owner"), "collaborators": post_model.get("collaborators", []), "caption": post_model.get("caption", ""), "status": status})
+    return rows
+
+
+async def download_fallback_assets(context, assets, outdir):
+    rows = []
+    for index, asset in enumerate(assets, 1):
+        best_url = asset["url"]
+        ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
+        dest = outdir / f"{index:03d}{ext}"
+        status = "ok"
+        try:
+            resp = await context.request.get(best_url)
+            if not resp.ok:
+                raise RuntimeError(f"HTTP {resp.status}")
+            dest.write_bytes(await resp.body())
+        except Exception as e:
+            status = f"error: {e}"
+        rows.append({"index": index, "asset": asset["asset"], "url": best_url, "path": dest.name, "status": status, "variants_considered": len(asset["variants"])})
+    return rows
+
+
+def write_manifest(rows, manifest_path):
+    with Path(manifest_path).open("w", encoding="utf-8") as fp:
+        for row in rows:
+            fp.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def write_metadata(post_model, metadata_path):
+    Path(metadata_path).write_text(json.dumps({"shortcode": post_model.get("shortcode"), "caption": post_model.get("caption"), "owner": post_model.get("owner"), "collaborators": post_model.get("collaborators", []), "carousel_count": post_model.get("carousel_count", 0)}, ensure_ascii=False, indent=2))
+
+
+async def run_capture(request: CaptureRequest):
+    out = request.outdir
+    out.mkdir(parents=True, exist_ok=True)
+    captured = await capture_responses(request)
+    post_model = find_post_model(captured, request.shortcode)
+
+    context = None
+    browser = None
+    try:
+        from playwright.async_api import async_playwright
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=request.headless, args=["--disable-blink-features=AutomationControlled"])
+            context = await browser.new_context()
+            rows = await _decide_and_download(request, captured, post_model, context, out)
+            await browser.close()
+    except ModuleNotFoundError:
+        rows = await _decide_and_download(request, captured, post_model, context, out)
+
+    write_manifest(rows, out / "manifest.jsonl")
     (out / "captured_responses.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in captured), encoding="utf-8")
 
 
+async def _decide_and_download(request, captured, post_model, context, out):
+    if post_model:
+        selected = select_target_assets(post_model, request.requested_start, request.requested_end)
+        rows = await download_structured_assets(context, selected, out, request, post_model)
+        write_metadata(post_model, out / "post_metadata.json")
+        return rows
+    if request.allow_fallback:
+        fallback_assets = rank_fallback_assets(captured)
+        rows = await download_fallback_assets(context, fallback_assets, out)
+        metadata_path = out / "post_metadata.json"
+        if metadata_path.exists():
+            metadata_path.unlink()
+        if not rows:
+            return [{"status": "no_candidates", "responses_saved": len(captured), "extracted_candidates": 0}]
+        return rows
+    return [{"status": "no_post_model", "shortcode": request.shortcode, "responses_saved": len(captured)}]
+
+
 if __name__ == "__main__":
-    asyncio.run(run(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]))
+    req = parse_capture_args(sys.argv[1:])
+    asyncio.run(run_capture(req))
