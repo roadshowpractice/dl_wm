@@ -1,4 +1,4 @@
-from igp.capture import extract_candidate_urls, is_media_url
+from igp.capture import extract_candidate_urls, is_media_url, response_targets_shortcode
 
 
 def test_extract_candidate_urls_handles_escaped_instagram_json_url():
@@ -22,3 +22,9 @@ def test_static_profile_and_junk_urls_rejected():
     assert not is_media_url("https://static.cdninstagram.com/rsrc.php/v3/yx/r/abc.png")
     assert not is_media_url("https://scontent.cdninstagram.com/v/t51.2885-19/profile_pic.jpg")
     assert not is_media_url("https://instagram.fdel1-3.fna.fbcdn.net/v/t39.30808-6/abc.jpg?stp=s150x150")
+
+
+def test_response_targets_shortcode_requires_shortcode_or_post_markers():
+    assert response_targets_shortcode('{"shortcode":"DWj0dQ4moZ8"}', "DWj0dQ4moZ8")
+    assert response_targets_shortcode('{"xdt_shortcode_media":{}}', "DWj0dQ4moZ8")
+    assert not response_targets_shortcode('{"feed_items":[]}', "DWj0dQ4moZ8")

@@ -87,6 +87,26 @@ def extract_candidate_urls(text):
     return candidates
 
 
+
+
+def response_targets_shortcode(text, shortcode):
+    if shortcode and shortcode in text:
+        return True
+
+    graph_markers = (
+        '"xdt_api__v1__media__shortcode__web_info"',
+        '"xdt_shortcode_media"',
+        '"shortcode_media"',
+    )
+    if any(marker in text for marker in graph_markers):
+        return True
+
+    if shortcode and (f'"code":"{shortcode}"' in text or f'"shortcode":"{shortcode}"' in text):
+        return True
+
+    return False
+
+
 def parse_stp(url):
     return parse_qs(urlparse(url).query).get("stp", [""])[0]
 
@@ -149,6 +169,7 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
 
     candidates_by_asset = {}
     discovery_order = {}
+    excluded_candidates = []
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless, args=["--disable-blink-features=AutomationControlled"])
@@ -167,15 +188,16 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                 if not ("instagram.com" in response_url or "fbcdn.net" in response_url or "cdninstagram.com" in response_url):
                     return
                 text = await response.text()
-                if not (
-                    shortcode in text
-                    or "image_versions2" in text
-                    or "video_versions" in text
-                    or "xdt_api__v1__media__shortcode__web_info" in text
-                    or ".mp4" in text
-                    or ".jpg" in text
-                    or ".webp" in text
-                ):
+                targets_shortcode = response_targets_shortcode(text, shortcode)
+                if not targets_shortcode:
+                    for candidate in extract_candidate_urls(text):
+                        excluded_candidates.append(
+                            {
+                                "url": candidate,
+                                "response_url": response_url,
+                                "reason": "off_post_response_missing_shortcode_or_graphql",
+                            }
+                        )
                     return
 
                 captured.append(
@@ -224,6 +246,7 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                             "status": "no_candidates",
                             "responses_saved": len(captured),
                             "extracted_candidates": sum(len(v) for v in candidates_by_asset.values()),
+                            "excluded_off_post_candidates": len(excluded_candidates),
                         },
                         ensure_ascii=False,
                     )
@@ -262,6 +285,7 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
         await browser.close()
 
     (out / "captured_responses.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in captured), encoding="utf-8")
+    (out / "excluded_candidates.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in excluded_candidates), encoding="utf-8")
 
 
 if __name__ == "__main__":
