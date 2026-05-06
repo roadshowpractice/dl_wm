@@ -1,4 +1,8 @@
-import asyncio, html, json, re, sys
+import asyncio
+import html
+import json
+import re
+import sys
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -7,6 +11,7 @@ from igp.cookies import load_netscape_cookies
 
 ALLOWED_MEDIA_HOSTS = {"instagram.fna.fbcdn.net", "scontent.cdninstagram.com"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".webp", ".png"}
+CANDIDATE_PATTERN = r"https?:\\/\\/[^\"'\\s]+|https?://[^\"'\\s]+|//[^\"'\\s]*cdninstagram[^\"'\\s]*"
 
 
 def looks_like_junk(url):
@@ -27,20 +32,29 @@ def media_group_key(url):
 
 
 def normalize_media_url(url):
-    u = html.unescape(url.strip())
-    u = u.replace("\\/", "/")
-    if u.startswith("//"):
-        u = f"https:{u}"
-    return u
+    normalized = html.unescape(url.strip())
+    normalized = normalized.replace("\\/", "/")
+    if normalized.startswith("//"):
+        normalized = f"https:{normalized}"
+    return normalized
+
+
+def is_media_url(url):
+    parsed = urlparse(url)
+    if parsed.netloc.lower() not in ALLOWED_MEDIA_HOSTS:
+        return False
+    if looks_like_junk(url):
+        return False
+    ext = Path(parsed.path).suffix.lower()
+    return ext in IMAGE_EXTS or ext == ".mp4"
 
 
 def extract_candidate_urls(text):
-    pattern = r"https?:\\/\\/[^\"'\\s]+|https?://[^\"'\\s]+|//[^\"'\\s]*cdninstagram[^\"'\\s]*"
     candidates = []
-    for raw in re.findall(pattern, text):
-        nu = normalize_media_url(raw)
-        if is_media_url(nu):
-            candidates.append(nu)
+    for raw in re.findall(CANDIDATE_PATTERN, text):
+        normalized = normalize_media_url(raw)
+        if is_media_url(normalized):
+            candidates.append(normalized)
     return candidates
 
 
@@ -53,10 +67,10 @@ def is_cropped_variant(url):
 
 
 def parse_square_size(url):
-    m = re.search(r"s(\d+)x(\d+)", parse_stp(url))
-    if not m:
+    match = re.search(r"s(\d+)x(\d+)", parse_stp(url))
+    if not match:
         return None
-    return min(int(m.group(1)), int(m.group(2)))
+    return min(int(match.group(1)), int(match.group(2)))
 
 
 def variant_score(url):
@@ -68,14 +82,33 @@ def variant_score(url):
     return base + uncropped_score + size_score
 
 
-def is_media_url(url):
-    p = urlparse(url)
-    if p.netloc.lower() not in ALLOWED_MEDIA_HOSTS:
-        return False
-    if looks_like_junk(url):
-        return False
-    ext = Path(p.path).suffix.lower()
-    return ext in IMAGE_EXTS or ext == ".mp4"
+def add_candidate(url, candidates_by_asset, discovery_order):
+    normalized = normalize_media_url(url)
+    if not is_media_url(normalized):
+        return
+
+    asset_key = media_group_key(normalized)
+    if not asset_key:
+        return
+
+    if asset_key not in discovery_order:
+        discovery_order[asset_key] = len(discovery_order) + 1
+
+    variants = candidates_by_asset.setdefault(asset_key, [])
+    if normalized not in variants:
+        variants.append(normalized)
+
+
+def rank_assets(candidates_by_asset, discovery_order):
+    ordered_assets = sorted(discovery_order, key=discovery_order.get)
+    ranked = []
+    for asset_key in ordered_assets:
+        variants = candidates_by_asset.get(asset_key, [])
+        if not variants:
+            continue
+        best_variant = max(enumerate(variants), key=lambda item: (variant_score(item[1]), -item[0]))[1]
+        ranked.append((asset_key, best_variant, variants))
+    return ranked
 
 
 async def run(url, shortcode, cookie_file, outdir, headless, rounds):
@@ -85,27 +118,8 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
     out = Path(outdir)
     out.mkdir(parents=True, exist_ok=True)
 
-    candidates_by_filename = {}
-    order_by_filename = {}
-
-    manifest_path = out / "manifest.jsonl"
-    manifest_fp = manifest_path.open("w", encoding="utf-8")
-
-    def add_candidate(url):
-        ru = normalize_media_url(url)
-        if not is_media_url(ru):
-            return
-
-        filename = media_group_key(ru)
-        if not filename:
-            return
-
-        if filename not in order_by_filename:
-            order_by_filename[filename] = len(order_by_filename) + 1
-
-        variants = candidates_by_filename.setdefault(filename, [])
-        if ru not in variants:
-            variants.append(ru)
+    candidates_by_asset = {}
+    discovery_order = {}
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=headless, args=["--disable-blink-features=AutomationControlled"])
@@ -120,8 +134,8 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
 
         async def on_response(response):
             try:
-                ru = response.url
-                if not ("instagram.com" in ru or "fbcdn.net" in ru or "cdninstagram.com" in ru):
+                response_url = response.url
+                if not ("instagram.com" in response_url or "fbcdn.net" in response_url or "cdninstagram.com" in response_url):
                     return
                 text = await response.text()
                 if not (
@@ -134,16 +148,25 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                     or ".webp" in text
                 ):
                     return
-                captured.append({"url": ru, "status": response.status, "content_type": response.headers.get("content-type", ""), "text": text})
 
-                add_candidate(ru)
+                captured.append(
+                    {
+                        "url": response_url,
+                        "status": response.status,
+                        "content_type": response.headers.get("content-type", ""),
+                        "text": text,
+                    }
+                )
+
+                add_candidate(response_url, candidates_by_asset, discovery_order)
                 for candidate in extract_candidate_urls(text):
-                    add_candidate(candidate)
+                    add_candidate(candidate, candidates_by_asset, discovery_order)
             except Exception:
                 pass
 
         page.on("response", on_response)
         await page.goto(url, wait_until="domcontentloaded", timeout=60000)
+
         for _ in range(rounds):
             await page.wait_for_timeout(2500)
             try:
@@ -160,43 +183,41 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                         await page.wait_for_timeout(1000)
                 except Exception:
                     pass
-        ranked_filenames = sorted(order_by_filename.keys(), key=lambda name: order_by_filename[name])
-        next_index = 1
-        for filename in ranked_filenames:
-            variants = candidates_by_filename.get(filename, [])
-            if not variants:
-                continue
-            best_url = max(variants, key=variant_score)
-            ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
-            dest = out / f"{next_index:03d}{ext}"
-            status = "ok"
-            try:
-                resp = await context.request.get(best_url)
-                if not resp.ok:
-                    raise RuntimeError(f"HTTP {resp.status}")
-                dest.write_bytes(await resp.body())
-            except Exception as e:
-                status = f"error: {e}"
 
-            manifest_fp.write(
-                json.dumps(
-                    {
-                        "index": next_index,
-                        "filename": filename,
-                        "url": best_url,
-                        "path": dest.name,
-                        "status": status,
-                    },
-                    ensure_ascii=False,
+        ranked_assets = rank_assets(candidates_by_asset, discovery_order)
+
+        manifest_path = out / "manifest.jsonl"
+        with manifest_path.open("w", encoding="utf-8") as manifest_fp:
+            for index, (asset_key, best_url, variants) in enumerate(ranked_assets, 1):
+                ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
+                dest = out / f"{index:03d}{ext}"
+                status = "ok"
+                try:
+                    resp = await context.request.get(best_url)
+                    if not resp.ok:
+                        raise RuntimeError(f"HTTP {resp.status}")
+                    dest.write_bytes(await resp.body())
+                except Exception as e:
+                    status = f"error: {e}"
+
+                manifest_fp.write(
+                    json.dumps(
+                        {
+                            "index": index,
+                            "asset": asset_key,
+                            "url": best_url,
+                            "path": dest.name,
+                            "status": status,
+                            "variants_considered": len(variants),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
                 )
-                + "\n"
-            )
-            manifest_fp.flush()
-            next_index += 1
+                manifest_fp.flush()
 
         await browser.close()
 
-    manifest_fp.close()
     (out / "captured_responses.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in captured), encoding="utf-8")
 
 
