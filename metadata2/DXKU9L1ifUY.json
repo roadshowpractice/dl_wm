@@ -1,0 +1,28 @@
+{
+    "video_title": "Video_by_fearless.brothers",
+    "video_date": "20260415",
+    "uploader": "Fearless Brothers",
+    "duration": 55.472,
+    "width": 1080,
+    "height": 1920,
+    "id": "DXKU9L1ifUY",
+    "ext": "mp4",
+    "resolution": "1080x1920",
+    "fps": null,
+    "tbr": 1632.1270000000002,
+    "protocol": "https+https",
+    "vcodec": "vp09.00.40.08.00.01.01.01.00",
+    "vbr": 1573.88,
+    "acodec": "mp4a.40.5",
+    "abr": 58.247,
+    "asr": 44100,
+    "url": "https://www.instagram.com/reel/DXKU9L1ifUY/",
+    "default_tasks": {
+        "perform_download": "./outputs/2026-04-21/Fearless_Brothers_20260415_1.mp4",
+        "apply_watermark": "./outputs/2026-04-21/Fearless_Brothers_20260415_1_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": "./outputs/2026-04-21/Fearless_Brothers_20260415_1.srt",
+        "burn_srt": false,
+        "post_processed": false
+    }
+}

@@ -1,0 +1,28 @@
+{
+    "video_title": "IRA_Livestream_113:_Bisexuality,_Polygamy,_and_Ritual_Abuse",
+    "video_date": "20260415",
+    "uploader": "Investigations in Ritual Abuse ",
+    "duration": 5680,
+    "width": 1920,
+    "height": 1080,
+    "id": "GM8dIWY1o5Y",
+    "ext": "webm",
+    "resolution": "1920x1080",
+    "fps": 60,
+    "tbr": 2821.9970000000003,
+    "protocol": "https+https",
+    "vcodec": "vp9",
+    "vbr": 2699.82,
+    "acodec": "opus",
+    "abr": 122.177,
+    "asr": 48000,
+    "url": "https://www.youtube.com/watch?v=GM8dIWY1o5Y",
+    "default_tasks": {
+        "perform_download": "./outputs/2026-04-17/Investigations_in_Ritual_Abuse__20260415.webm",
+        "apply_watermark": true,
+        "extract_audio": false,
+        "generate_srt": true,
+        "burn_srt": true,
+        "post_processed": false
+    }
+}

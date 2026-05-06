@@ -1,0 +1,41 @@
+{
+    "url": "https://www.instagram.com/p/DW9hy3kidPl/",
+    "vendor": "instagram",
+    "vendor_id": "DW9hy3kidPl",
+    "id": "DW9hy3kidPl",
+    "shortcode": "DW9hy3kidPl",
+    "video_title": "Eduardo Ver&#xe1;stegui_fanslau on Instagram: &quot;Los gobiernos de Jalisco, Guadalajara y Zapopan ser&#xe1;n patrocinadores del &#x201c;Fearless Congress&#x201d;, un evento que se promociona como &#x201c;el congreso de masculinidad m&#xe1;s grande de Latinoamerica&#x201d;. \n\nEl evento se llevar&#xe1; a cabo en el Santuario de los M&#xe1;rtires Mexicanos y es convocado principalmente por organizaciones vinculadas con la Iglesia Cat&#xf3;lica, adem&#xe1;s de promocionarse como un evento abiertamente religioso que incluir&#xe1; &#x201c;misa, adoraci&#xf3;n y confesiones&#x201d;. \n\nEntre los ponentes del evento destacan figuras vinculadas con la ultraderecha como Jordan Peterson y Eduardo Ver&#xe1;stegui, quienes entre otros temas abordar&#xe1;n el &#x201c;ataque a la masculinidad&#x201d; y la necesidad de que los hombres retomen papeles tradicionales como &#x201c;defensores, protectores y proveedores&#x201d;. \n\n#noticias \n&#x1f54a;&#xfe0f;&#x1f90d;\n&#064;eduardoverastegui &#x2764;&#xfe0f;\n#EduardoVer&#xe1;stegui_fanslau \n#soyfandeEduardoVer&#xe1;stegui\n#EduardoVer&#xe1;steguifansclub\n#MovimientoVivaM&#xe9;xico &#x1f1f2;&#x1f1fd; \nyolaumi&quot;",
+    "video_date": null,
+    "uploader": null,
+    "duration": null,
+    "width": null,
+    "height": null,
+    "resolution": null,
+    "fps": null,
+    "ext": "jpg",
+    "filesize": null,
+    "view_count": null,
+    "like_count": null,
+    "comment_count": null,
+    "default_tasks": {
+        "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/instagram__DW9hy3kidPl.jpg",
+        "apply_watermark": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/instagram__DW9hy3kidPl_watermarked.jpg",
+        "extract_audio": false,
+        "generate_srt": true,
+        "burn_srt": false,
+        "post_processed": false
+    },
+    "source_url": "https://www.instagram.com/p/DW9hy3kidPl/",
+    "media_type": "image",
+    "downloaded_file": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/instagram__DW9hy3kidPl.jpg",
+    "title": "Eduardo Ver&#xe1;stegui_fanslau on Instagram: &quot;Los gobiernos de Jalisco, Guadalajara y Zapopan ser&#xe1;n patrocinadores del &#x201c;Fearless Congress&#x201d;, un evento que se promociona como &#x201c;el congreso de masculinidad m&#xe1;s grande de Latinoamerica&#x201d;. \n\nEl evento se llevar&#xe1; a cabo en el Santuario de los M&#xe1;rtires Mexicanos y es convocado principalmente por organizaciones vinculadas con la Iglesia Cat&#xf3;lica, adem&#xe1;s de promocionarse como un evento abiertamente religioso que incluir&#xe1; &#x201c;misa, adoraci&#xf3;n y confesiones&#x201d;. \n\nEntre los ponentes del evento destacan figuras vinculadas con la ultraderecha como Jordan Peterson y Eduardo Ver&#xe1;stegui, quienes entre otros temas abordar&#xe1;n el &#x201c;ataque a la masculinidad&#x201d; y la necesidad de que los hombres retomen papeles tradicionales como &#x201c;defensores, protectores y proveedores&#x201d;. \n\n#noticias \n&#x1f54a;&#xfe0f;&#x1f90d;\n&#064;eduardoverastegui &#x2764;&#xfe0f;\n#EduardoVer&#xe1;stegui_fanslau \n#soyfandeEduardoVer&#xe1;stegui\n#EduardoVer&#xe1;steguifansclub\n#MovimientoVivaM&#xe9;xico &#x1f1f2;&#x1f1fd; \nyolaumi&quot;",
+    "caption": null,
+    "items": [
+        {
+            "index": 1,
+            "type": "image",
+            "filename": "instagram__DW9hy3kidPl.jpg"
+        }
+    ],
+    "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/instagram__DW9hy3kidPl/instagram__DW9hy3kidPl.raw.json.gz"
+}

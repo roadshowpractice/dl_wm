@@ -1,0 +1,41 @@
+{
+  "url": "https://www.instagram.com/p/DXw_ZyYiTeo/",
+  "vendor": "instagram",
+  "vendor_id": "DXw_ZyYiTeo",
+  "id": "DXw_ZyYiTeo",
+  "shortcode": "DXw_ZyYiTeo",
+  "video_title": "Fearless Brothers on Instagram: &quot;&#xa1;Feliz D&#xed;a del Ni&#xf1;o! &#x1f388;\n\nConoce al equipo de Fearless: ni&#xf1;os que nunca imaginaron que, a&#xf1;os despu&#xe9;s, estar&#xed;an sirviendo a Cristo con sus propios dones.\n\nHoy celebramos a nuestro ni&#xf1;o interior, y lo mejor: seguimos caminando con Dios &#x1f49b;&#x2728;&quot;",
+  "video_date": null,
+  "uploader": "Fearless Brothers",
+  "duration": null,
+  "width": null,
+  "height": null,
+  "resolution": null,
+  "fps": null,
+  "ext": "jpg",
+  "filesize": null,
+  "view_count": null,
+  "like_count": null,
+  "comment_count": null,
+  "default_tasks": {
+    "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-30/instagram__DXw_ZyYiTeo/instagram__DXw_ZyYiTeo.jpg",
+    "apply_watermark": true,
+    "extract_audio": false,
+    "generate_srt": true,
+    "burn_srt": false,
+    "post_processed": false
+  },
+  "source_url": "https://www.instagram.com/p/DXw_ZyYiTeo/",
+  "media_type": "image",
+  "downloaded_file": "/home/fritz/Desktop/dl_wm/outputs/2026-04-30/instagram__DXw_ZyYiTeo/instagram__DXw_ZyYiTeo.jpg",
+  "title": "Fearless Brothers on Instagram: &quot;&#xa1;Feliz D&#xed;a del Ni&#xf1;o! &#x1f388;\n\nConoce al equipo de Fearless: ni&#xf1;os que nunca imaginaron que, a&#xf1;os despu&#xe9;s, estar&#xed;an sirviendo a Cristo con sus propios dones.\n\nHoy celebramos a nuestro ni&#xf1;o interior, y lo mejor: seguimos caminando con Dios &#x1f49b;&#x2728;&quot;",
+  "caption": null,
+  "items": [
+    {
+      "index": 1,
+      "type": "image",
+      "filename": "instagram__DXw_ZyYiTeo.jpg"
+    }
+  ],
+  "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/instagram__DXw_ZyYiTeo/instagram__DXw_ZyYiTeo.raw.json.gz"
+}

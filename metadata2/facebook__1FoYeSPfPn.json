@@ -1,0 +1,29 @@
+{
+    "url": "https://www.facebook.com/share/v/1FoYeSPfPn/",
+    "vendor": "facebook",
+    "vendor_id": "1FoYeSPfPn",
+    "id": "1406312564380174",
+    "shortcode": null,
+    "video_title": "22K views \u00b7 1K reactions | \u0644\u0642\u0627\u0621 \u0645\u0639 \u0627\u0644\u0633\u064a\u062f \u0645\u0627\u062b\u064a\u0648 \u0643\u0648\u0628\u0631 \u0646\u0627\u0634\u0637 \u0645\u062f\u0646\u064a \u0648 \u0645\u062f\u064a\u0631 \u0639\u0627\u0645 \u062c\u0645\u0639\u064a\u0629 \u062a\u064a\u0645 \u0628\u0627\u0644\u0627\u0631\u062f \u0627\u0644\u0623\u0645\u0631\u064a\u0643\u064a\u0629.. \u0648\u0627\u0644\u0644\u0630\u064a \u0642\u0627\u0645 \u0628 \u0632\u064a\u0627\u0631\u0629 \u0627\u0644\u0633\u0648\u064a\u062f\u0627\u0621 \u0628\u0639\u062f \u0627\u0644\u0623\u062d\u062f\u0627\u062b \u0627\u0644\u062f\u0627\u0645\u064a\u0629 \u0628\u0631\u0641\u0642\u0629 \u0627\u0644\u0646\u0627\u0634\u0637 \u062a\u064a\u0645 \u0628\u0627\u0644\u0627\u0631\u062f. | Sharif Farashi",
+    "video_date": "20260208",
+    "uploader": "Sharif Farashi",
+    "duration": 99.666,
+    "width": 1920,
+    "height": 1080,
+    "resolution": "1920x1080",
+    "fps": null,
+    "ext": "mp4",
+    "filesize": null,
+    "view_count": 12955,
+    "like_count": null,
+    "comment_count": null,
+    "default_tasks": {
+        "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-07/facebook__1FoYeSPfPn.mp4",
+        "apply_watermark": "/home/fritz/Desktop/dl_wm/outputs/2026-04-07/facebook__1FoYeSPfPn_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": false,
+        "burn_srt": false,
+        "post_processed": false
+    },
+    "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/facebook__1FoYeSPfPn.raw.json.gz"
+}
