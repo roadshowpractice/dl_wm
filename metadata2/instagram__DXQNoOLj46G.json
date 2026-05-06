@@ -1,0 +1,42 @@
+{
+    "url": "https://www.instagram.com/p/DXQNoOLj46G/",
+    "vendor": "instagram",
+    "vendor_id": "DXQNoOLj46G",
+    "id": "DXQNoOLj46G",
+    "shortcode": "DXQNoOLj46G",
+    "video_title": "Video by ajplusespanol",
+    "video_date": "20260418",
+    "uploader": "AJ+ Espa\u00f1ol",
+    "duration": 102.93299865722656,
+    "width": 720,
+    "height": 1280,
+    "resolution": "720x1280",
+    "fps": null,
+    "ext": "mp4",
+    "filesize": null,
+    "view_count": null,
+    "like_count": 11688,
+    "comment_count": 1157,
+    "default_tasks": {
+        "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/001.mp4",
+        "apply_watermark": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/instagram__DXTI-ljDjVj/001_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/instagram__DXTI-ljDjVj/001.srt",
+        "burn_srt": false,
+        "post_processed": false
+    },
+    "source_url": "https://www.instagram.com/p/DXQNoOLj46G/",
+    "media_type": "video",
+    "downloaded_file": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/001.mp4",
+    "title": "Video by ajplusespanol",
+    "caption": null,
+    "items": [
+        {
+            "index": 1,
+            "type": "video",
+            "filename": "001.mp4",
+            "duration": 102.93299865722656
+        }
+    ],
+    "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/instagram__DXQNoOLj46G/instagram__DXQNoOLj46G.raw.json.gz"
+}

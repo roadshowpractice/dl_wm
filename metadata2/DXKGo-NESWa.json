@@ -1,0 +1,28 @@
+{
+    "video_title": "Video_by_fearless.brothers",
+    "video_date": "20260415",
+    "uploader": "Fearless Brothers",
+    "duration": 62.346,
+    "width": 1080,
+    "height": 1920,
+    "id": "DXKGo-NESWa",
+    "ext": "mp4",
+    "resolution": "1080x1920",
+    "fps": null,
+    "tbr": 2189.3379999999997,
+    "protocol": "https+https",
+    "vcodec": "vp09.00.40.08.00.01.01.01.00",
+    "vbr": 2121.397,
+    "acodec": "mp4a.40.5",
+    "abr": 67.941,
+    "asr": 44100,
+    "url": "https://www.instagram.com/reel/DXKGo-NESWa/",
+    "default_tasks": {
+        "perform_download": "./outputs/2026-04-22/Fearless_Brothers_20260415.mp4",
+        "apply_watermark": "./outputs/2026-04-22/Fearless_Brothers_20260415_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": "./outputs/2026-04-22/Fearless_Brothers_20260415.srt",
+        "burn_srt": false,
+        "post_processed": false
+    }
+}

@@ -1,0 +1,42 @@
+{
+  "url": "https://www.instagram.com/p/DXTI-ljDjVj/",
+  "vendor": "instagram",
+  "vendor_id": "DXTI-ljDjVj",
+  "id": "DXTI-ljDjVj",
+  "shortcode": "DXTI-ljDjVj",
+  "video_title": "Video by nuevofuturo_noticias",
+  "video_date": "20260419",
+  "uploader": "NUEVO FUTURO",
+  "duration": 18.900999069213867,
+  "width": 540,
+  "height": 960,
+  "resolution": "540x960",
+  "fps": null,
+  "ext": "mp4",
+  "filesize": 613721,
+  "view_count": null,
+  "like_count": 1045,
+  "comment_count": 125,
+  "default_tasks": {
+    "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/instagram__DXTI-ljDjVj/001.mp4",
+    "apply_watermark": true,
+    "extract_audio": false,
+    "generate_srt": true,
+    "burn_srt": false,
+    "post_processed": false
+  },
+  "source_url": "https://www.instagram.com/p/DXTI-ljDjVj/",
+  "media_type": "video",
+  "downloaded_file": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/instagram__DXTI-ljDjVj/001.mp4",
+  "title": "Video by nuevofuturo_noticias",
+  "caption": null,
+  "items": [
+    {
+      "index": 1,
+      "type": "video",
+      "filename": "001.mp4",
+      "duration": 18.900999069213867
+    }
+  ],
+  "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/instagram__DXTI-ljDjVj/instagram__DXTI-ljDjVj.raw.json.gz"
+}
