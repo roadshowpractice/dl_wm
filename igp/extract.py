@@ -2,6 +2,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 
 def extract_shortcode(url):
@@ -11,70 +12,126 @@ def extract_shortcode(url):
     return m.group(1)
 
 
-def best_image(obj):
-    candidates = obj.get("image_versions2", {}).get("candidates", [])
+def parse_requested_img_index(url):
+    vals = parse_qs(urlparse(url).query).get("img_index", [])
+    if not vals:
+        return None
+    try:
+        parsed = int(vals[0])
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _best_candidate(candidates):
     if not candidates:
         return None
-    best = max(candidates, key=lambda x: (x.get("width", 0) or 0) * (x.get("height", 0) or 0))
-    return best.get("url")
+    return max(candidates, key=lambda x: (x.get("width", 0) or 0) * (x.get("height", 0) or 0))
 
 
-def best_video(obj):
-    versions = obj.get("video_versions", [])
-    if not versions:
-        return None
-    best = max(versions, key=lambda x: (x.get("width", 0) or 0) * (x.get("height", 0) or 0))
-    return best.get("url")
+def _extract_caption(item):
+    caption = (item.get("caption") or {}).get("text")
+    if caption:
+        return caption
+    edges = (((item.get("edge_media_to_caption") or {}).get("edges")) or [])
+    for edge in edges:
+        text = ((edge or {}).get("node") or {}).get("text")
+        if text:
+            return text
+    return ""
 
 
-def structured_extract(obj, target):
-    structured_items = []
+def _extract_owner(item):
+    return item.get("user") or item.get("owner") or {}
 
-    def add_structured_media(item):
-        u = best_video(item)
-        if u:
-            structured_items.append(("video", u))
+
+def _extract_collaborators(item):
+    out = []
+    for k in ["coauthor_producers", "invited_coauthor_producers"]:
+        for user in item.get(k) or []:
+            if isinstance(user, dict):
+                out.append(user)
+    deduped = []
+    seen = set()
+    for user in out:
+        key = user.get("id") or user.get("username") or json.dumps(user, sort_keys=True)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(user)
+    return deduped
+
+
+def _asset_from_item(child, idx):
+    videos = child.get("video_versions") or []
+    images = ((child.get("image_versions2") or {}).get("candidates")) or []
+    media_type = "video" if videos else "image"
+    return {
+        "carousel_index": idx,
+        "media_type": media_type,
+        "candidates": {"video_versions": videos, "image_candidates": images},
+    }
+
+
+def build_post_model(obj, shortcode):
+    post = None
+
+    def maybe_extract(item):
+        nonlocal post
+        if not isinstance(item, dict) or post is not None:
             return
-        u = best_image(item)
-        if u:
-            structured_items.append(("image", u))
-
-    def handle_item(item):
-        if not isinstance(item, dict):
+        if item.get("code") != shortcode:
             return
-        if item.get("code") != target:
-            return
-        carousel = item.get("carousel_media")
-        if isinstance(carousel, list) and carousel:
-            for child in carousel:
-                if isinstance(child, dict):
-                    add_structured_media(child)
-        else:
-            add_structured_media(item)
+        carousel = item.get("carousel_media") if isinstance(item.get("carousel_media"), list) else None
+        children = carousel or [item]
+        assets = [_asset_from_item(child, i) for i, child in enumerate(children, 1) if isinstance(child, dict)]
+        post = {
+            "shortcode": shortcode,
+            "taken_at": item.get("taken_at") or item.get("taken_at_timestamp"),
+            "owner": _extract_owner(item),
+            "caption": _extract_caption(item),
+            "collaborators": _extract_collaborators(item),
+            "carousel_count": item.get("carousel_media_count") or len(assets),
+            "assets": assets,
+        }
 
     def walk(x):
         if isinstance(x, dict):
             if "xdt_api__v1__media__shortcode__web_info" in x:
-                info = x["xdt_api__v1__media__shortcode__web_info"]
+                info = x["xdt_api__v1__media__shortcode__web_info"] or {}
                 for item in info.get("items", []):
-                    handle_item(item)
+                    maybe_extract(item)
             if "xdt_shortcode_media" in x:
-                handle_item(x["xdt_shortcode_media"])
-            handle_item(x)
+                maybe_extract(x["xdt_shortcode_media"])
+            maybe_extract(x)
             for v in x.values():
                 walk(v)
         elif isinstance(x, list):
             for y in x:
                 walk(y)
         elif isinstance(x, str):
-            if x.startswith("{") and (target in x or "image_versions2" in x or "video_versions" in x or "xdt_api__v1__media__shortcode__web_info" in x):
+            if x.startswith("{") and shortcode in x:
                 try:
                     walk(json.loads(x))
                 except Exception:
                     pass
 
     walk(obj)
-    return structured_items
+    return post
+
+
+def structured_extract(obj, target):
+    model = build_post_model(obj, target)
+    if not model:
+        return []
+    out = []
+    for asset in model["assets"]:
+        vids = asset["candidates"]["video_versions"]
+        imgs = asset["candidates"]["image_candidates"]
+        best = _best_candidate(vids) if vids else _best_candidate(imgs)
+        if best and best.get("url"):
+            out.append((asset["media_type"], best["url"]))
+    return out
 
 
 def loose_extract_from_text(text):

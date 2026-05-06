@@ -7,6 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from igp.cookies import load_netscape_cookies
+from igp.extract import build_post_model, parse_requested_img_index
 
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".webp", ".png"}
@@ -140,6 +141,26 @@ def rank_assets(candidates_by_asset, discovery_order):
     return ranked
 
 
+
+
+def _select_structured_assets(post_model, requested_img_index):
+    assets = post_model.get("assets", [])
+    if requested_img_index is None:
+        return assets
+    return [a for a in assets if a.get("carousel_index") == requested_img_index]
+
+
+def _best_variant_for_asset(asset):
+    vids = asset.get("candidates", {}).get("video_versions", [])
+    imgs = asset.get("candidates", {}).get("image_candidates", [])
+    media_type = asset.get("media_type")
+    preferred = vids if media_type == "video" and vids else imgs
+    variants = [v.get("url") for v in preferred if isinstance(v, dict) and v.get("url")]
+    if not variants:
+        return None, []
+    best = max(enumerate(variants), key=lambda item: (variant_score(item[1]), -item[0]))[1]
+    return best, variants
+
 async def run(url, shortcode, cookie_file, outdir, headless, rounds):
     from playwright.async_api import async_playwright
 
@@ -213,51 +234,108 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                 except Exception:
                     pass
 
+        requested_img_index = parse_requested_img_index(url)
+        post_model = None
+        for rec in captured:
+            text = rec.get("text", "")
+            try:
+                post_model = build_post_model(json.loads(text), shortcode)
+            except Exception:
+                post_model = build_post_model(text, shortcode)
+            if post_model:
+                break
+
         ranked_assets = rank_assets(candidates_by_asset, discovery_order)
 
         manifest_path = out / "manifest.jsonl"
+        metadata_path = out / "post_metadata.json"
         with manifest_path.open("w", encoding="utf-8") as manifest_fp:
-            if not ranked_assets:
-                manifest_fp.write(
-                    json.dumps(
-                        {
-                            "status": "no_candidates",
-                            "responses_saved": len(captured),
-                            "extracted_candidates": sum(len(v) for v in candidates_by_asset.values()),
-                        },
-                        ensure_ascii=False,
-                    )
-                    + "\n"
-                )
-                manifest_fp.flush()
+            if post_model:
+                metadata_path.write_text(json.dumps({
+                    "shortcode": post_model.get("shortcode"),
+                    "caption": post_model.get("caption"),
+                    "owner": post_model.get("owner"),
+                    "collaborators": post_model.get("collaborators", []),
+                    "carousel_count": post_model.get("carousel_count", 0),
+                }, ensure_ascii=False, indent=2))
 
-            for index, (asset_key, best_url, variants) in enumerate(ranked_assets, 1):
-                ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
-                dest = out / f"{index:03d}{ext}"
-                status = "ok"
-                try:
-                    resp = await context.request.get(best_url)
-                    if not resp.ok:
-                        raise RuntimeError(f"HTTP {resp.status}")
-                    dest.write_bytes(await resp.body())
-                except Exception as e:
-                    status = f"error: {e}"
+                selected = _select_structured_assets(post_model, requested_img_index)
+                for asset in selected:
+                    best_url, variants = _best_variant_for_asset(asset)
+                    if not best_url:
+                        continue
+                    idx = asset.get("carousel_index")
+                    ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
+                    label = "img" if asset.get("media_type") == "image" else "vid"
+                    dest = out / f"instagram__{shortcode}__{label}{idx:03d}{ext}"
+                    status = "ok"
+                    try:
+                        resp = await context.request.get(best_url)
+                        if not resp.ok:
+                            raise RuntimeError(f"HTTP {resp.status}")
+                        dest.write_bytes(await resp.body())
+                    except Exception as e:
+                        status = f"error: {e}"
 
-                manifest_fp.write(
-                    json.dumps(
-                        {
-                            "index": index,
-                            "asset": asset_key,
-                            "url": best_url,
-                            "path": dest.name,
-                            "status": status,
-                            "variants_considered": len(variants),
-                        },
-                        ensure_ascii=False,
+                    manifest_fp.write(json.dumps({
+                        "shortcode": shortcode,
+                        "requested_img_index": requested_img_index,
+                        "carousel_index": idx,
+                        "carousel_count": post_model.get("carousel_count", 0),
+                        "media_type": asset.get("media_type"),
+                        "path": dest.name,
+                        "selected_url": best_url,
+                        "variants_considered": len(variants),
+                        "owner": post_model.get("owner"),
+                        "collaborators": post_model.get("collaborators", []),
+                        "caption": post_model.get("caption", ""),
+                        "status": status,
+                    }, ensure_ascii=False) + "\n")
+                    manifest_fp.flush()
+            else:
+                if metadata_path.exists():
+                    metadata_path.unlink()
+                if not ranked_assets:
+                    manifest_fp.write(
+                        json.dumps(
+                            {
+                                "status": "no_candidates",
+                                "responses_saved": len(captured),
+                                "extracted_candidates": sum(len(v) for v in candidates_by_asset.values()),
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n"
                     )
-                    + "\n"
-                )
-                manifest_fp.flush()
+                    manifest_fp.flush()
+
+                for index, (asset_key, best_url, variants) in enumerate(ranked_assets, 1):
+                    ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
+                    dest = out / f"{index:03d}{ext}"
+                    status = "ok"
+                    try:
+                        resp = await context.request.get(best_url)
+                        if not resp.ok:
+                            raise RuntimeError(f"HTTP {resp.status}")
+                        dest.write_bytes(await resp.body())
+                    except Exception as e:
+                        status = f"error: {e}"
+
+                    manifest_fp.write(
+                        json.dumps(
+                            {
+                                "index": index,
+                                "asset": asset_key,
+                                "url": best_url,
+                                "path": dest.name,
+                                "status": status,
+                                "variants_considered": len(variants),
+                            },
+                            ensure_ascii=False,
+                        )
+                        + "\n"
+                    )
+                    manifest_fp.flush()
 
         await browser.close()
 
