@@ -87,6 +87,7 @@ def build_post_model(obj, shortcode):
         assets = [_asset_from_item(child, i) for i, child in enumerate(children, 1) if isinstance(child, dict)]
         post = {
             "shortcode": shortcode,
+            "media_id": item.get("pk") or item.get("id"),
             "taken_at": item.get("taken_at") or item.get("taken_at_timestamp"),
             "owner": _extract_owner(item),
             "caption": _extract_caption(item),
