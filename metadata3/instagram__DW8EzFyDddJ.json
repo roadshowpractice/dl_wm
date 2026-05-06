@@ -1,0 +1,42 @@
+{
+    "url": "https://www.instagram.com/p/DW8EzFyDddJ/",
+    "vendor": "instagram",
+    "vendor_id": "DW8EzFyDddJ",
+    "id": "DW8EzFyDddJ",
+    "shortcode": "DW8EzFyDddJ",
+    "video_title": "Video by sof.otero",
+    "video_date": "20260410",
+    "uploader": "Sofi\u0301a Otero",
+    "duration": 209.1179962158203,
+    "width": 716,
+    "height": 1280,
+    "resolution": "716x1280",
+    "fps": null,
+    "ext": "mp4",
+    "filesize": null,
+    "view_count": null,
+    "like_count": 4904,
+    "comment_count": 806,
+    "default_tasks": {
+        "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-27/instagram__DW8EzFyDddJ/instagram__DW8EzFyDddJ.mp4",
+        "apply_watermark": "/home/fritz/Desktop/dl_wm/outputs/2026-04-27/instagram__DW8EzFyDddJ/instagram__DW8EzFyDddJ_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": "/home/fritz/Desktop/dl_wm/outputs/2026-04-27/instagram__DW8EzFyDddJ/instagram__DW8EzFyDddJ.srt",
+        "burn_srt": false,
+        "post_processed": false
+    },
+    "source_url": "https://www.instagram.com/p/DW8EzFyDddJ/",
+    "media_type": "video",
+    "downloaded_file": "/home/fritz/Desktop/dl_wm/outputs/2026-04-27/instagram__DW8EzFyDddJ/instagram__DW8EzFyDddJ.mp4",
+    "title": "Video by sof.otero",
+    "caption": null,
+    "items": [
+        {
+            "index": 1,
+            "type": "video",
+            "filename": "instagram__DW8EzFyDddJ.mp4",
+            "duration": 209.1179962158203
+        }
+    ],
+    "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/instagram__DW8EzFyDddJ/instagram__DW8EzFyDddJ.raw.json.gz"
+}

@@ -1,0 +1,42 @@
+{
+    "url": "https://www.instagram.com/p/DXhhm0sCS2L/",
+    "vendor": "instagram",
+    "vendor_id": "DXhhm0sCS2L",
+    "id": "DXhhm0sCS2L",
+    "shortcode": "DXhhm0sCS2L",
+    "video_title": "Video by fearless.brothers",
+    "video_date": "20260424",
+    "uploader": "Fearless Brothers",
+    "duration": 112.8479995727539,
+    "width": 1916,
+    "height": 1080,
+    "resolution": "1916x1080",
+    "fps": null,
+    "ext": "mp4",
+    "filesize": 24906258,
+    "view_count": null,
+    "like_count": 1131,
+    "comment_count": 54,
+    "default_tasks": {
+        "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-27/instagram__DXhhm0sCS2L/instagram__DXhhm0sCS2L.mp4",
+        "apply_watermark": "/home/fritz/Desktop/dl_wm/outputs/2026-04-27/instagram__DXhhm0sCS2L/instagram__DXhhm0sCS2L_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": true,
+        "burn_srt": false,
+        "post_processed": false
+    },
+    "source_url": "https://www.instagram.com/p/DXhhm0sCS2L/",
+    "media_type": "video",
+    "downloaded_file": "/home/fritz/Desktop/dl_wm/outputs/2026-04-27/instagram__DXhhm0sCS2L/instagram__DXhhm0sCS2L.mp4",
+    "title": "Video by fearless.brothers",
+    "caption": null,
+    "items": [
+        {
+            "index": 1,
+            "type": "video",
+            "filename": "instagram__DXhhm0sCS2L.mp4",
+            "duration": 112.8479995727539
+        }
+    ],
+    "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/instagram__DXhhm0sCS2L/instagram__DXhhm0sCS2L.raw.json.gz"
+}

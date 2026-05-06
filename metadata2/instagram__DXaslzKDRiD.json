@@ -1,0 +1,41 @@
+{
+  "url": "https://www.instagram.com/p/DXaslzKDRiD/",
+  "vendor": "instagram",
+  "vendor_id": "DXaslzKDRiD",
+  "id": "DXaslzKDRiD",
+  "shortcode": "DXaslzKDRiD",
+  "video_title": "Eduardo Ver&#xe1;stegui_fanslau on Instagram: &quot;&#x1f534;|&#x1f1fa;&#x1f1f8;&#xa1;LA CIA! Aduladores del r&#xe9;gimen de la transformaci&#xf3;n de cuarta, parte de un grupo de defensores ac&#xe9;rrimos y propagandistas, han comenzado a afirmar que la CIA est&#xe1; implicada en el tiroteo en las pir&#xe1;mides de Teotihuac&#xe1;n, asegurando que los videos difundidos son montajes del gobierno estadounidense para desestabilizar al r&#xe9;gimen mexicano.\n&#x1f90d;&#x1f54a;&#xfe0f;\n&#064;eduardoverastegui &#x2665;&#xfe0f;\n#laultra #laultraderecha \n#laultraderecha&#x1f449;\n#movimientovivam&#xe9;xico &#x1f1f2;&#x1f1fd;&quot;",
+  "video_date": null,
+  "uploader": null,
+  "duration": null,
+  "width": null,
+  "height": null,
+  "resolution": null,
+  "fps": null,
+  "ext": "jpg",
+  "filesize": null,
+  "view_count": null,
+  "like_count": null,
+  "comment_count": null,
+  "default_tasks": {
+    "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/instagram__DXaslzKDRiD.jpg",
+    "apply_watermark": true,
+    "extract_audio": false,
+    "generate_srt": true,
+    "burn_srt": false,
+    "post_processed": false
+  },
+  "source_url": "https://www.instagram.com/p/DXaslzKDRiD/",
+  "media_type": "image",
+  "downloaded_file": "/home/fritz/Desktop/dl_wm/outputs/2026-04-26/instagram__DXaslzKDRiD.jpg",
+  "title": "Eduardo Ver&#xe1;stegui_fanslau on Instagram: &quot;&#x1f534;|&#x1f1fa;&#x1f1f8;&#xa1;LA CIA! Aduladores del r&#xe9;gimen de la transformaci&#xf3;n de cuarta, parte de un grupo de defensores ac&#xe9;rrimos y propagandistas, han comenzado a afirmar que la CIA est&#xe1; implicada en el tiroteo en las pir&#xe1;mides de Teotihuac&#xe1;n, asegurando que los videos difundidos son montajes del gobierno estadounidense para desestabilizar al r&#xe9;gimen mexicano.\n&#x1f90d;&#x1f54a;&#xfe0f;\n&#064;eduardoverastegui &#x2665;&#xfe0f;\n#laultra #laultraderecha \n#laultraderecha&#x1f449;\n#movimientovivam&#xe9;xico &#x1f1f2;&#x1f1fd;&quot;",
+  "caption": null,
+  "items": [
+    {
+      "index": 1,
+      "type": "image",
+      "filename": "instagram__DXaslzKDRiD.jpg"
+    }
+  ],
+  "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/instagram__DXaslzKDRiD/instagram__DXaslzKDRiD.raw.json.gz"
+}

@@ -1,0 +1,29 @@
+{
+    "url": "https://fb.watch/GppRoM7w2R/",
+    "vendor": "facebook",
+    "vendor_id": "GppRoM7w2R",
+    "id": "892718670412081",
+    "shortcode": null,
+    "video_title": "Somewhere in Mexico #heirveelagua | Kahea Kamauu",
+    "video_date": "20260405",
+    "uploader": "Kahea Kamauu",
+    "duration": 20.105,
+    "width": 540,
+    "height": 960,
+    "resolution": "540x960",
+    "fps": null,
+    "ext": "mp4",
+    "filesize": null,
+    "view_count": 117,
+    "like_count": null,
+    "comment_count": null,
+    "default_tasks": {
+        "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-10/facebook__GppRoM7w2R.mp4",
+        "apply_watermark": "/home/fritz/Desktop/dl_wm/outputs/2026-04-10/facebook__GppRoM7w2R_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": false,
+        "burn_srt": false,
+        "post_processed": false
+    },
+    "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/facebook__GppRoM7w2R.raw.json.gz"
+}

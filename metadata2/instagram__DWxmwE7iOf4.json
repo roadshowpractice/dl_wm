@@ -1,0 +1,29 @@
+{
+    "url": "https://www.instagram.com/reel/DWxmwE7iOf4/",
+    "vendor": "instagram",
+    "vendor_id": "DWxmwE7iOf4",
+    "id": "DWxmwE7iOf4",
+    "shortcode": "DWxmwE7iOf4",
+    "video_title": "Video by timballard89",
+    "video_date": "20260406",
+    "uploader": "Tim Ballard",
+    "duration": 28.782,
+    "width": 480,
+    "height": 854,
+    "resolution": "480x854",
+    "fps": null,
+    "ext": "mp4",
+    "filesize": 4307787,
+    "view_count": null,
+    "like_count": 1904,
+    "comment_count": 109,
+    "default_tasks": {
+        "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-07/instagram__DWxmwE7iOf4.mp4",
+        "apply_watermark": "/home/fritz/Desktop/dl_wm/outputs/2026-04-07/instagram__DWxmwE7iOf4_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": false,
+        "burn_srt": false,
+        "post_processed": false
+    },
+    "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/instagram__DWxmwE7iOf4.raw.json.gz"
+}

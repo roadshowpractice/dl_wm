@@ -1,0 +1,29 @@
+{
+    "url": "https://www.youtube.com/watch?v=z_rob1U9AhI",
+    "vendor": "youtube",
+    "vendor_id": "z_rob1U9AhI",
+    "id": "z_rob1U9AhI",
+    "shortcode": null,
+    "video_title": "Gina Exposes Utah SRA and LDS Ped0phile Cover-up!",
+    "video_date": "20260401",
+    "uploader": "We Are The People Utah",
+    "duration": 9430,
+    "width": 1920,
+    "height": 1080,
+    "resolution": "1920x1080",
+    "fps": 30,
+    "ext": "mp4",
+    "filesize": 1653150273,
+    "view_count": 7993,
+    "like_count": 594,
+    "comment_count": 499,
+    "default_tasks": {
+        "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-04-02/youtube__z_rob1U9AhI.mp4",
+        "apply_watermark": "/home/fritz/Desktop/dl_wm/outputs/2026-04-02/youtube__z_rob1U9AhI_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": false,
+        "burn_srt": false,
+        "post_processed": false
+    },
+    "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/youtube__z_rob1U9AhI.raw.json.gz"
+}

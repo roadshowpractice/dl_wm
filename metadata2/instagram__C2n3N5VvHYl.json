@@ -1,0 +1,29 @@
+{
+    "url": "https://www.instagram.com/reel/C2n3N5VvHYl/",
+    "vendor": "instagram",
+    "vendor_id": "C2n3N5VvHYl",
+    "id": "C2n3N5VvHYl",
+    "shortcode": "C2n3N5VvHYl",
+    "video_title": "Video by kaheakamauu",
+    "video_date": "20240127",
+    "uploader": "Kahea Kamauu",
+    "duration": 88.433,
+    "width": 360,
+    "height": 640,
+    "resolution": "360x640",
+    "fps": null,
+    "ext": "mp4",
+    "filesize": 7821467,
+    "view_count": null,
+    "like_count": 589,
+    "comment_count": 57,
+    "default_tasks": {
+        "perform_download": "/home/fritz/Desktop/dl_wm/outputs/2026-03-30/instagram__C2n3N5VvHYl.mp4",
+        "apply_watermark": "/home/fritz/Desktop/dl_wm/outputs/2026-03-30/instagram__C2n3N5VvHYl_watermarked.mp4",
+        "extract_audio": false,
+        "generate_srt": false,
+        "burn_srt": false,
+        "post_processed": false
+    },
+    "raw_metadata_path": "/home/fritz/Desktop/dl_wm/metadata/raw/instagram__C2n3N5VvHYl.raw.json.gz"
+}
