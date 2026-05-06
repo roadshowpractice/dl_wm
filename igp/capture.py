@@ -7,7 +7,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from igp.cookies import load_netscape_cookies
-from igp.extract import build_post_model, parse_requested_img_index
+from igp.extract import build_post_model
 
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".webp", ".png"}
@@ -143,11 +143,33 @@ def rank_assets(candidates_by_asset, discovery_order):
 
 
 
-def _select_structured_assets(post_model, requested_img_index):
+def _select_structured_assets(post_model, requested_start, requested_end):
     assets = post_model.get("assets", [])
-    if requested_img_index is None:
+    if requested_start is None and requested_end is None:
         return assets
-    return [a for a in assets if a.get("carousel_index") == requested_img_index]
+    start = requested_start if requested_start is not None else 1
+    end = requested_end if requested_end is not None else len(assets)
+    if end < start:
+        return []
+    return [a for a in assets if start <= (a.get("carousel_index") or 0) <= end]
+
+
+def _parse_requested_range(start_arg, end_arg):
+    def _coerce(val):
+        if val is None:
+            return None
+        iv = int(val)
+        return iv if iv > 0 else None
+
+    start = _coerce(start_arg)
+    end = _coerce(end_arg)
+    if start is None and end is None:
+        return None, None
+    if start is None:
+        start = end
+    if end is None:
+        end = start
+    return start, end
 
 
 def _best_variant_for_asset(asset):
@@ -161,7 +183,7 @@ def _best_variant_for_asset(asset):
     best = max(enumerate(variants), key=lambda item: (variant_score(item[1]), -item[0]))[1]
     return best, variants
 
-async def run(url, shortcode, cookie_file, outdir, headless, rounds):
+async def run(url, shortcode, cookie_file, outdir, requested_start, requested_end, headless=True, rounds=1):
     from playwright.async_api import async_playwright
 
     captured = []
@@ -234,7 +256,7 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                 except Exception:
                     pass
 
-        requested_img_index = parse_requested_img_index(url)
+        requested_start, requested_end = _parse_requested_range(requested_start, requested_end)
         post_model = None
         for rec in captured:
             text = rec.get("text", "")
@@ -259,7 +281,7 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                     "carousel_count": post_model.get("carousel_count", 0),
                 }, ensure_ascii=False, indent=2))
 
-                selected = _select_structured_assets(post_model, requested_img_index)
+                selected = _select_structured_assets(post_model, requested_start, requested_end)
                 for asset in selected:
                     best_url, variants = _best_variant_for_asset(asset)
                     if not best_url:
@@ -267,7 +289,7 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
                     idx = asset.get("carousel_index")
                     ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
                     label = "img" if asset.get("media_type") == "image" else "vid"
-                    dest = out / f"instagram__{shortcode}__{label}{idx:03d}{ext}"
+                    dest = out / f"{idx:03d}{ext}"
                     status = "ok"
                     try:
                         resp = await context.request.get(best_url)
@@ -279,10 +301,15 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
 
                     manifest_fp.write(json.dumps({
                         "shortcode": shortcode,
-                        "requested_img_index": requested_img_index,
+                        "requested_start": requested_start,
+                        "requested_end": requested_end,
                         "carousel_index": idx,
                         "carousel_count": post_model.get("carousel_count", 0),
+                        "source_shortcode": post_model.get("shortcode"),
+                        "source_media_id": post_model.get("media_id"),
+                        "parent_shortcode": post_model.get("shortcode"),
                         "media_type": asset.get("media_type"),
+                        "extraction_reason": "target_post_asset",
                         "path": dest.name,
                         "selected_url": best_url,
                         "variants_considered": len(variants),
@@ -343,4 +370,4 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
 
 
 if __name__ == "__main__":
-    asyncio.run(run(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5] == "1", int(sys.argv[6])))
+    asyncio.run(run(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]))
