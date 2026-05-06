@@ -4,14 +4,13 @@ import json
 import re
 import sys
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from igp.cookies import load_netscape_cookies
 
 
-ALLOWED_MEDIA_HOSTS = {"instagram.fna.fbcdn.net", "scontent.cdninstagram.com"}
 IMAGE_EXTS = {".jpg", ".jpeg", ".webp", ".png"}
-CANDIDATE_PATTERN = r"https?:\\/\\/[^\"'\\s]+|https?://[^\"'\\s]+|//[^\"'\\s]*cdninstagram[^\"'\\s]*"
+CANDIDATE_PATTERN = r"(?:https?:\\/\\/|https?:\\u002F\\u002F|https?://|//)[^\"'\s<>()]+"
 
 
 def looks_like_junk(url):
@@ -32,16 +31,44 @@ def media_group_key(url):
 
 
 def normalize_media_url(url):
-    normalized = html.unescape(url.strip())
+    normalized = url.strip()
+    normalized = html.unescape(normalized)
+    normalized = re.sub(
+        r"\\u([0-9a-fA-F]{4})",
+        lambda m: chr(int(m.group(1), 16)),
+        normalized,
+    )
     normalized = normalized.replace("\\/", "/")
+    normalized = normalized.replace("\\u002F", "/")
+    normalized = normalized.replace("\\u0026", "&")
+    normalized = normalized.replace("\\u003D", "=")
+    normalized = html.unescape(normalized)
+    for _ in range(2):
+        if "%" not in normalized:
+            break
+        decoded = unquote(normalized)
+        if decoded == normalized:
+            break
+        normalized = decoded
     if normalized.startswith("//"):
         normalized = f"https:{normalized}"
     return normalized
 
 
+def allowed_media_host(host):
+    host = host.lower()
+    if host == "scontent.cdninstagram.com":
+        return True
+    if host.endswith(".cdninstagram.com"):
+        return True
+    if host.endswith(".fbcdn.net") and (host.startswith("instagram.") or host.startswith("scontent.")):
+        return True
+    return False
+
+
 def is_media_url(url):
     parsed = urlparse(url)
-    if parsed.netloc.lower() not in ALLOWED_MEDIA_HOSTS:
+    if not allowed_media_host(parsed.netloc):
         return False
     if looks_like_junk(url):
         return False
@@ -51,9 +78,11 @@ def is_media_url(url):
 
 def extract_candidate_urls(text):
     candidates = []
+    seen = set()
     for raw in re.findall(CANDIDATE_PATTERN, text):
         normalized = normalize_media_url(raw)
-        if is_media_url(normalized):
+        if is_media_url(normalized) and normalized not in seen:
+            seen.add(normalized)
             candidates.append(normalized)
     return candidates
 
@@ -188,6 +217,20 @@ async def run(url, shortcode, cookie_file, outdir, headless, rounds):
 
         manifest_path = out / "manifest.jsonl"
         with manifest_path.open("w", encoding="utf-8") as manifest_fp:
+            if not ranked_assets:
+                manifest_fp.write(
+                    json.dumps(
+                        {
+                            "status": "no_candidates",
+                            "responses_saved": len(captured),
+                            "extracted_candidates": sum(len(v) for v in candidates_by_asset.values()),
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
+                )
+                manifest_fp.flush()
+
             for index, (asset_key, best_url, variants) in enumerate(ranked_assets, 1):
                 ext = Path(urlparse(best_url).path).suffix.lower() or ".bin"
                 dest = out / f"{index:03d}{ext}"
