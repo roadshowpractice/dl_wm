@@ -74,6 +74,20 @@ def _asset_from_item(child, idx):
 
 
 def build_post_model(obj, shortcode):
+    print("\nEXTRACT DEBUG build_post_model")
+    print("TYPE:", type(obj).__name__)
+    if isinstance(obj, dict):
+        print("TOP KEYS:", list(obj.keys())[:25])
+    elif isinstance(obj, str):
+        print("STRING LEN:", len(obj))
+        print("STRING SAMPLE:", obj[:300].replace("\n", " "))
+    print("\nEXTRACT DEBUG build_post_model")
+    print("TYPE:", type(obj).__name__)
+    if isinstance(obj, dict):
+        print("TOP KEYS:", list(obj.keys())[:25])
+    elif isinstance(obj, str):
+        print("STRING LEN:", len(obj))
+        print("STRING SAMPLE:", obj[:300].replace("\n", " "))
     post = None
 
     def maybe_extract(item):

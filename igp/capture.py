@@ -23,7 +23,7 @@ class CaptureRequest:
     requested_start: int | None = None
     requested_end: int | None = None
     headless: bool = True
-    rounds: int = 1
+    rounds: int = 3
     allow_fallback: bool = True
 
 
@@ -189,14 +189,49 @@ def _best_variant_for_asset(asset):
 
 
 def find_post_model(captured, shortcode):
-    for rec in captured:
+    print("DEBUG find_post_model shortcode=", shortcode)
+    print("DEBUG captured responses =", len(captured))
+
+    for i, rec in enumerate(captured):
         text = rec.get("text", "")
+
+        print()
+        print("DEBUG response", i)
+        print("URL:", rec.get("url"))
+        print("STATUS:", rec.get("status"))
+        print("CONTENT_TYPE:", rec.get("content_type"))
+        print("TEXT_LEN:", len(text))
+        print("HAS_SHORTCODE:", shortcode in text)
+        print("HAS_WEB_INFO:", "xdt_api__v1__media__shortcode__web_info" in text)
+        print("HAS_IMAGE_VERSIONS2:", "image_versions2" in text)
+        print("HAS_VIDEO_VERSIONS:", "video_versions" in text)
+
         try:
-            post_model = build_post_model(json.loads(text), shortcode)
-        except Exception:
+            obj = json.loads(text)
+            print("JSON_LOAD: ok")
+            post_model = build_post_model(obj, shortcode)
+        except Exception as e:
+            print("JSON_LOAD_FAILED:", repr(e))
             post_model = build_post_model(text, shortcode)
+
+        print("POST_MODEL:", bool(post_model))
+
+        if (
+            "graphql" in str(rec.get("url", ""))
+            and len(text) > 10000
+            and not post_model
+        ):
+            dump_path = Path("outputs/graphql_debug.json")
+            dump_path.write_text(text[:200000])
+            print("WROTE_GRAPHQL_DEBUG:", dump_path)
+
         if post_model:
+            print("FOUND_POST_MODEL_IN_RESPONSE:", i)
+            print("POST_MODEL_KEYS:", sorted(post_model.keys()))
+            print("ASSET_COUNT:", len(post_model.get("assets", [])))
             return post_model
+
+    print("NO_POST_MODEL_FOUND")
     return None
 
 
@@ -219,7 +254,30 @@ async def capture_responses(request: CaptureRequest):
                 if not ("instagram.com" in response_url or "fbcdn.net" in response_url or "cdninstagram.com" in response_url):
                     return
                 text = await response.text()
-                if not (request.shortcode in text or "image_versions2" in text or "video_versions" in text or "xdt_api__v1__media__shortcode__web_info" in text or ".mp4" in text or ".jpg" in text or ".webp" in text):
+                interesting = (
+                    request.shortcode in text
+                    or "image_versions2" in text
+                    or "video_versions" in text
+                    or "xdt_api__v1__media__shortcode__web_info" in text
+                    or "xdt_shortcode_media" in text
+                    or "graphql" in response_url
+                    or "/api/" in response_url
+                    or ".mp4" in text
+                    or ".jpg" in text
+                    or ".webp" in text
+                )
+
+                print(
+                    "CAPTURE_CHECK",
+                    "interesting=",
+                    interesting,
+                    "url=",
+                    response_url[:140],
+                    "len=",
+                    len(text),
+                )
+
+                if not interesting:
                     return
                 captured.append({"url": response_url, "status": response.status, "content_type": response.headers.get("content-type", ""), "text": text})
             except Exception:
