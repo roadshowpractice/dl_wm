@@ -24,7 +24,20 @@ class CaptureRequest:
     requested_end: int | None = None
     headless: bool = True
     rounds: int = 1
-    allow_fallback: bool = True
+    allow_fallback: bool = False
+
+
+POST_QUERY_MARKERS = {
+    "xdt_shortcode_media",
+    "xdt_api__v1__media__shortcode__web_info",
+    "PolarisPostActionLoadPostQueryQuery",
+}
+
+NON_POST_GRAPHQL_MARKERS = {
+    "lightspeed",
+    "inbox",
+    "messaging",
+}
 
 
 def parse_capture_args(argv):
@@ -191,6 +204,12 @@ def _best_variant_for_asset(asset):
 def find_post_model(captured, shortcode):
     for rec in captured:
         text = rec.get("text", "")
+        lowered = text.lower()
+        has_target_marker = any(marker in text for marker in POST_QUERY_MARKERS) or shortcode in text
+        if not has_target_marker:
+            continue
+        if any(marker in lowered for marker in NON_POST_GRAPHQL_MARKERS):
+            continue
         try:
             post_model = build_post_model(json.loads(text), shortcode)
         except Exception:
