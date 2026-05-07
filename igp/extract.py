@@ -79,14 +79,25 @@ def build_post_model(obj, shortcode):
     def _item_shortcode(item):
         return item.get("code") or item.get("shortcode")
 
+    def _item_permalink_shortcode(item):
+        permalink = item.get("permalink") or item.get("link")
+        if not isinstance(permalink, str):
+            return ""
+        return extract_shortcode(permalink)
+
     def _item_matches_shortcode(item):
         if not isinstance(item, dict):
             return False
-        if _item_shortcode(item) == shortcode:
+        item_shortcode = _item_shortcode(item)
+        if item_shortcode == shortcode:
+            return True
+        if _item_permalink_shortcode(item) == shortcode:
             return True
         # Newer payloads sometimes nest the canonical media object.
         media = item.get("media") or item.get("node")
-        return isinstance(media, dict) and _item_shortcode(media) == shortcode
+        if not isinstance(media, dict):
+            return False
+        return _item_shortcode(media) == shortcode or _item_permalink_shortcode(media) == shortcode
 
     def maybe_extract(item):
         nonlocal post
