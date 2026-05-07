@@ -76,17 +76,36 @@ def _asset_from_item(child, idx):
 def build_post_model(obj, shortcode):
     post = None
 
+    def _item_shortcode(item):
+        return item.get("code") or item.get("shortcode")
+
+    def _item_matches_shortcode(item):
+        if not isinstance(item, dict):
+            return False
+        if _item_shortcode(item) == shortcode:
+            return True
+        # Newer payloads sometimes nest the canonical media object.
+        media = item.get("media") or item.get("node")
+        return isinstance(media, dict) and _item_shortcode(media) == shortcode
+
     def maybe_extract(item):
         nonlocal post
         if not isinstance(item, dict) or post is not None:
             return
-        if item.get("code") != shortcode:
+        if not _item_matches_shortcode(item):
             return
+        if isinstance(item.get("media"), dict):
+            item = item["media"]
+        elif isinstance(item.get("node"), dict):
+            item = item["node"]
         carousel = item.get("carousel_media") if isinstance(item.get("carousel_media"), list) else None
+        if not carousel:
+            edges = (((item.get("edge_sidecar_to_children") or {}).get("edges")) or [])
+            carousel = [((edge or {}).get("node") or {}) for edge in edges if isinstance(edge, dict)]
         children = carousel or [item]
         assets = [_asset_from_item(child, i) for i, child in enumerate(children, 1) if isinstance(child, dict)]
         post = {
-            "shortcode": shortcode,
+            "shortcode": _item_shortcode(item) or shortcode,
             "media_id": item.get("pk") or item.get("id"),
             "taken_at": item.get("taken_at") or item.get("taken_at_timestamp"),
             "owner": _extract_owner(item),
@@ -102,6 +121,8 @@ def build_post_model(obj, shortcode):
                 info = x["xdt_api__v1__media__shortcode__web_info"] or {}
                 for item in info.get("items", []):
                     maybe_extract(item)
+                if isinstance(info.get("item"), dict):
+                    maybe_extract(info.get("item"))
             if "xdt_shortcode_media" in x:
                 maybe_extract(x["xdt_shortcode_media"])
             maybe_extract(x)

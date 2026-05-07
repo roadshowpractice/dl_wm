@@ -60,3 +60,24 @@ def test_collaborators_extraction():
 def test_fallback_loose_extraction_still_works():
     t = '"https://cdninstagram.com/x.jpg?x=1&y=2"'
     assert loose_extract_from_text(t) == ["https://cdninstagram.com/x.jpg?x=1&y=2"]
+
+
+def test_modern_graphql_shortcode_field_and_sidecar_edges():
+    obj = {
+        "data": {
+            "xdt_api__v1__media__shortcode__web_info": {
+                "item": {
+                    "shortcode": "DWj0dQ4moZ8",
+                    "edge_sidecar_to_children": {
+                        "edges": [
+                            {"node": {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/1.jpg"}]}}},
+                            {"node": {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/2.jpg"}]}}},
+                        ]
+                    },
+                }
+            }
+        }
+    }
+    model = build_post_model(obj, "DWj0dQ4moZ8")
+    assert model is not None
+    assert [a["carousel_index"] for a in model["assets"]] == [1, 2]
