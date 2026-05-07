@@ -1,4 +1,5 @@
 import json
+import html
 import re
 import sys
 from pathlib import Path
@@ -149,7 +150,25 @@ def build_post_model(obj, shortcode):
                 except Exception:
                     pass
 
+    def _extract_embedded_json_blobs(text):
+        blobs = []
+        for attrs, body in re.findall(r"(<script[^>]*>)(.*?)</script>", text, flags=re.IGNORECASE | re.DOTALL):
+            if "application/json" in attrs or "__NEXT_DATA__" in attrs or "data-sjs" in attrs:
+                body = (body or "").strip()
+                if body.startswith("{") or body.startswith("["):
+                    blobs.append(body)
+        for marker in ["window._sharedData", "window.__additionalDataLoaded"]:
+            for m in re.finditer(rf"{re.escape(marker)}\s*=\s*(\{{.*?\}});", text, flags=re.DOTALL):
+                blobs.append(m.group(1))
+        return blobs
+
     walk(obj)
+    if post is None and isinstance(obj, str) and "<script" in obj and shortcode in obj:
+        for blob in _extract_embedded_json_blobs(obj):
+            try:
+                walk(json.loads(html.unescape(blob)))
+            except Exception:
+                continue
     return post
 
 
