@@ -81,3 +81,37 @@ def test_modern_graphql_shortcode_field_and_sidecar_edges():
     model = build_post_model(obj, "DWj0dQ4moZ8")
     assert model is not None
     assert [a["carousel_index"] for a in model["assets"]] == [1, 2]
+
+
+def test_permalink_match_with_carousel_media_without_sidecar_edges():
+    obj = {
+        "data": {
+            "xdt_api__v1__media__shortcode__web_info": {
+                "items": [
+                    {
+                        "code": "OTHER1",
+                        "carousel_media": [
+                            {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/unrelated.jpg"}]}}
+                        ],
+                    },
+                    {
+                        "permalink": "https://www.instagram.com/p/DWj0dQ4moZ8/",
+                        "caption": {"text": "target caption"},
+                        "coauthor_producers": [{"id": "42", "username": "collab_target"}],
+                        "carousel_media": [
+                            {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/t1.jpg"}]}},
+                            {"video_versions": [{"url": "https://instagram.fna.fbcdn.net/t2.mp4"}], "image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/t2.jpg"}]}},
+                            {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/t3.jpg"}]}},
+                        ],
+                    },
+                ]
+            }
+        }
+    }
+    model = build_post_model(obj, "DWj0dQ4moZ8")
+    assert model is not None
+    assert model["shortcode"] == "DWj0dQ4moZ8"
+    assert model["caption"] == "target caption"
+    assert model["collaborators"][0]["username"] == "collab_target"
+    assert [a["media_type"] for a in model["assets"]] == ["image", "video", "image"]
+    assert [a["carousel_index"] for a in model["assets"]] == [1, 2, 3]
