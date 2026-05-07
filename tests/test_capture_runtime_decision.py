@@ -1,6 +1,7 @@
 import asyncio
+import json
 
-from igp.capture import CaptureRequest, run_capture
+from igp.capture import CaptureRequest, find_post_model, run_capture
 
 
 def test_runtime_skips_fallback_when_post_model_found(monkeypatch, tmp_path):
@@ -161,3 +162,27 @@ def test_integration_range_1_1_emits_exactly_one_row(monkeypatch, tmp_path):
     asyncio.run(run_capture(req))
     rows = (tmp_path / "o" / "manifest.jsonl").read_text().strip().splitlines()
     assert len(rows) == 1
+
+
+def test_find_post_model_ignores_lightspeed_inbox_payloads():
+    payload = {
+        "data": {
+            "viewer": {
+                "inbox": {
+                    "lightspeed_threads": [
+                        {
+                            "id": "thread1",
+                            "preview_image": "https://instagram.fna.fbcdn.net/v/t51.2885-15/001.jpg",
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    captured = [
+        {
+            "url": "https://www.instagram.com/graphql/query/",
+            "text": json.dumps(payload),
+        }
+    ]
+    assert find_post_model(captured, "SC123") is None
