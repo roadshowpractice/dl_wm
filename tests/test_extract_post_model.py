@@ -115,3 +115,68 @@ def test_permalink_match_with_carousel_media_without_sidecar_edges():
     assert model["collaborators"][0]["username"] == "collab_target"
     assert [a["media_type"] for a in model["assets"]] == ["image", "video", "image"]
     assert [a["carousel_index"] for a in model["assets"]] == [1, 2, 3]
+
+
+def test_prefers_stronger_carousel_match_over_weak_single_asset_match():
+    obj = {
+        "data": {
+            "xdt_api__v1__media__shortcode__web_info": {
+                "items": [
+                    {
+                        "permalink": "https://www.instagram.com/p/DWj0dQ4moZ8/",
+                        "image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/weak.jpg"}]},
+                    },
+                    {
+                        "shortcode": "DWj0dQ4moZ8",
+                        "carousel_media_count": 3,
+                        "carousel_media": [
+                            {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/c1.jpg"}]}},
+                            {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/c2.jpg"}]}},
+                            {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/c3.jpg"}]}},
+                        ],
+                    },
+                ]
+            }
+        }
+    }
+    model = build_post_model(obj, "DWj0dQ4moZ8")
+    assert model is not None
+    assert len(model["assets"]) == 3
+    assert model["carousel_count"] == 3
+
+
+def test_html_multiple_json_scripts_selects_best_shortcode_match():
+    weak = {
+        "xdt_api__v1__media__shortcode__web_info": {
+            "items": [
+                {
+                    "permalink": "https://www.instagram.com/p/DWj0dQ4moZ8/",
+                    "image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/weak.jpg"}]},
+                }
+            ]
+        }
+    }
+    strong = {
+        "xdt_api__v1__media__shortcode__web_info": {
+            "items": [
+                {
+                    "shortcode": "DWj0dQ4moZ8",
+                    "carousel_media_count": 3,
+                    "carousel_media": [
+                        {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/a1.jpg"}]}},
+                        {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/a2.jpg"}]}},
+                        {"image_versions2": {"candidates": [{"url": "https://instagram.fna.fbcdn.net/a3.jpg"}]}},
+                    ],
+                }
+            ]
+        }
+    }
+    html = (
+        "<html><body>"
+        f"<script type='application/json' data-sjs>{weak}</script>"
+        f"<script type='application/json' data-sjs>{strong}</script>"
+        "</body></html>"
+    ).replace("'", '"')
+    model = build_post_model(html, "DWj0dQ4moZ8")
+    assert model is not None
+    assert len(model["assets"]) == 3
