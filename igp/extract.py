@@ -127,16 +127,31 @@ def build_post_model(obj, shortcode):
             "assets": assets,
         }
 
+    def _extract_info_items(node):
+        if isinstance(node, dict):
+            items = node.get("items")
+            if isinstance(items, list):
+                for item in items:
+                    maybe_extract(item)
+            item = node.get("item")
+            if isinstance(item, dict):
+                maybe_extract(item)
+            media = node.get("xdt_shortcode_media")
+            if isinstance(media, dict):
+                maybe_extract(media)
+            for v in node.values():
+                _extract_info_items(v)
+        elif isinstance(node, list):
+            for v in node:
+                _extract_info_items(v)
+
     def walk(x):
         if isinstance(x, dict):
-            if "xdt_api__v1__media__shortcode__web_info" in x:
-                info = x["xdt_api__v1__media__shortcode__web_info"] or {}
-                for item in info.get("items", []):
-                    maybe_extract(item)
-                if isinstance(info.get("item"), dict):
-                    maybe_extract(info.get("item"))
-            if "xdt_shortcode_media" in x:
-                maybe_extract(x["xdt_shortcode_media"])
+            for k, v in x.items():
+                if "xdt_api__v1__media__shortcode__web_info" in k:
+                    _extract_info_items(v)
+                elif "xdt_shortcode_media" in k and isinstance(v, dict):
+                    maybe_extract(v)
             maybe_extract(x)
             for v in x.values():
                 walk(v)
@@ -144,9 +159,10 @@ def build_post_model(obj, shortcode):
             for y in x:
                 walk(y)
         elif isinstance(x, str):
-            if x.startswith("{") and shortcode in x:
+            s = x.strip()
+            if (s.startswith("{") or s.startswith("[")) and shortcode in s:
                 try:
-                    walk(json.loads(x))
+                    walk(json.loads(s))
                 except Exception:
                     pass
 
