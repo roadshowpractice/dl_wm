@@ -1,7 +1,7 @@
 import json
 
 from igp.capture import find_post_model, parse_capture_args, select_target_assets
-from igp.extract import build_post_model
+from igp.extract import build_post_model, structured_extract
 
 
 def _post_with_assets(shortcode="SC"):
@@ -89,3 +89,22 @@ def test_find_post_model_from_real_permalink_html_fixture_extracts_assets_for_ra
     selected = select_target_assets(model, 1, 3)
     assert [a["carousel_index"] for a in selected] == [1, 2, 3]
     assert [a["media_type"] for a in selected] == ["image", "video", "image"]
+
+
+def test_find_post_model_from_reduced_sjs_fixture_extracts_expected_assets_and_video_preference():
+    fixture_path = "fixtures/instagram/DWj0dQ4moZ8_reduced_one_response.jsonl"
+    captured = [json.loads(line) for line in open(fixture_path, "r", encoding="utf-8") if line.strip()]
+    model = find_post_model(captured, "DWj0dQ4moZ8")
+    assert model is not None
+    assert model["shortcode"] == "DWj0dQ4moZ8"
+    assert len(model["assets"]) == 3
+
+    selected = select_target_assets(model, 1, 3)
+    assert [a["carousel_index"] for a in selected] == [1, 2, 3]
+
+    urls = [u for _, u in structured_extract(captured[0]["text"], "DWj0dQ4moZ8")]
+    assert urls == [
+        "https://instagram.fna.fbcdn.net/1.jpg",
+        "https://instagram.fna.fbcdn.net/2.mp4",
+        "https://instagram.fna.fbcdn.net/3.jpg",
+    ]
