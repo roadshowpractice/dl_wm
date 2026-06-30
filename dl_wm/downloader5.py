@@ -12,8 +12,8 @@ import time
 import logging
 import gzip
 
-from teton_utils import load_app_config, resolve_repo_path
-from vendor_router import (
+from dl_wm.teton_utils import load_app_config, resolve_repo_path
+from dl_wm.vendor_router import (
     detect_vendor,
     extract_vendor_id,
     infer_kind,

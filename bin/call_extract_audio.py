@@ -2,14 +2,13 @@
 import os
 import sys
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(current_dir)
-lib_path = os.path.join(root_dir, "lib")
-if lib_path not in sys.path:
-    sys.path.append(lib_path)
+import pathlib
+_root = str(pathlib.Path(__file__).resolve().parents[1])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
-from teton_utils import initialize_logging, load_app_config
-from transcription_caller import run_transcription, update_task_for_media
+from dl_wm.teton_utils import initialize_logging, load_app_config
+from dl_wm.transcription_caller import run_transcription, update_task_for_media
 
 
 def main() -> int:

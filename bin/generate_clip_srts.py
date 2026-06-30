@@ -10,14 +10,12 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-CURRENT_DIR = Path(__file__).resolve().parent
-ROOT_DIR = CURRENT_DIR.parent
-LIB_DIR = ROOT_DIR / "lib"
-if str(LIB_DIR) not in sys.path:
-    sys.path.append(str(LIB_DIR))
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
 def run_transcription_for_clip(clip_path: Path, output_path: Path) -> bool:
-    from transcription_caller import run_transcription
+    from dl_wm.transcription_caller import run_transcription
 
     return run_transcription(str(clip_path), str(output_path), "srt")
 

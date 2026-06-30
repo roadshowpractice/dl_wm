@@ -10,13 +10,11 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 # Ensure local imports work when script is run directly
-CURRENT_DIR = Path(__file__).resolve().parent
-ROOT_DIR = CURRENT_DIR.parent
-LIB_DIR = ROOT_DIR / "lib"
-if str(LIB_DIR) not in sys.path:
-    sys.path.append(str(LIB_DIR))
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-from tasks_lib import load_app_config  # noqa: E402
+from dl_wm.tasks_lib import load_app_config
 
 
 

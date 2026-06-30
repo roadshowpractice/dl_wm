@@ -5,7 +5,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from tasks_lib import load_default_tasks
+from dl_wm.tasks_lib import load_default_tasks
 
 
 logger = logging.getLogger(__name__)

@@ -2,11 +2,7 @@ import os
 import sys
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-if HERE not in sys.path:
-    sys.path.insert(0, HERE)
-
-from vendor_router import canonicalize_vendor_url, detect_vendor, extract_vendor_id, format_shortcode, infer_kind
+from dl_wm.vendor_router import canonicalize_vendor_url, detect_vendor, extract_vendor_id, format_shortcode, infer_kind
 
 
 class VendorRouterTests(unittest.TestCase):

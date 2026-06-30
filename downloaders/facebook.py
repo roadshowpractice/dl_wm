@@ -3,9 +3,9 @@ import os
 
 import yt_dlp
 
-from lib.metadata_compactor import build_compact_metadata, write_raw_metadata
-from lib.teton_utils import load_app_config
-from lib.vendor_router import VENDOR_FACEBOOK, extract_vendor_id, metadata_filename
+from dl_wm.metadata_compactor import build_compact_metadata, write_raw_metadata
+from dl_wm.teton_utils import load_app_config
+from dl_wm.vendor_router import VENDOR_FACEBOOK, extract_vendor_id, metadata_filename
 
 
 def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_download=None):

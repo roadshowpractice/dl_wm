@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "dl_wm"
+version = "0.1.0"
+description = "Download social media video and run watermark/transcription/clip pipeline"
+requires-python = ">=3.10"
+
+[project.scripts]
+dl-wm-route         = "bin.call_router:main"
+dl-wm-download      = "bin.call_download:main"
+dl-wm-watermark     = "bin.call_watermark:main"
+dl-wm-captions      = "bin.call_captions:main"
+dl-wm-burn-srt      = "bin.call_burn_srt:main"
+dl-wm-extract-audio = "bin.call_extract_audio:main"
+dl-wm-cleanup-url   = "bin.cleanup_failed_url:main"
+dl-wm-clip-whisper  = "bin.clip_from_whisper:main"
+dl-wm-render-clips  = "bin.render_clips:main"
+dl-wm-gen-srts      = "bin.generate_clip_srts:main"
+dl-wm-transcribe    = "bin.transcribe_media:main"
+dl-wm-doctor        = "bin.doctor:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["dl_wm*", "downloaders*", "igp*", "pipeline*", "bin*"]

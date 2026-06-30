@@ -6,9 +6,9 @@ from urllib.request import Request, urlopen
 
 import yt_dlp
 
-from lib.metadata_compactor import build_compact_metadata, write_raw_metadata
-from lib.teton_utils import load_app_config
-from lib.vendor_router import VENDOR_INSTAGRAM, extract_vendor_id, metadata_filename
+from dl_wm.metadata_compactor import build_compact_metadata, write_raw_metadata
+from dl_wm.teton_utils import load_app_config
+from dl_wm.vendor_router import VENDOR_INSTAGRAM, extract_vendor_id, metadata_filename
 
 
 logger = logging.getLogger(__name__)

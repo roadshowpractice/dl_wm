@@ -4,8 +4,11 @@ import sys
 import types
 from pathlib import Path
 
+_root = str(Path(__file__).resolve().parents[1])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
 sys.modules.setdefault("yt_dlp", types.SimpleNamespace(YoutubeDL=None))
-sys.modules.setdefault("tasks_lib", types.SimpleNamespace(load_default_tasks=lambda: {}))
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "downloaders" / "instagram.py"
 spec = importlib.util.spec_from_file_location("ig_downloader_test", MODULE_PATH)

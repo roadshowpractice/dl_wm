@@ -7,16 +7,16 @@ import types
 
 
 def _load_youtube_module():
-    lib_pkg = types.ModuleType("lib")
-    lib_pkg.__path__ = []
-    sys.modules.setdefault("lib", lib_pkg)
+    dl_wm_pkg = types.ModuleType("dl_wm")
+    dl_wm_pkg.__path__ = []
+    sys.modules.setdefault("dl_wm", dl_wm_pkg)
 
-    metadata_compactor = types.ModuleType("lib.metadata_compactor")
+    metadata_compactor = types.ModuleType("dl_wm.metadata_compactor")
     metadata_compactor.build_compact_metadata = lambda *args, **kwargs: {"ok": True}
     metadata_compactor.write_raw_metadata = lambda *args, **kwargs: None
-    sys.modules["lib.metadata_compactor"] = metadata_compactor
+    sys.modules["dl_wm.metadata_compactor"] = metadata_compactor
 
-    teton_utils = types.ModuleType("lib.teton_utils")
+    teton_utils = types.ModuleType("dl_wm.teton_utils")
     teton_utils.load_app_config = lambda: {
         "youtube_download": {
             "strategies": [
@@ -37,13 +37,13 @@ def _load_youtube_module():
             "browser_cookie_order": ["firefox"],
         }
     }
-    sys.modules["lib.teton_utils"] = teton_utils
+    sys.modules["dl_wm.teton_utils"] = teton_utils
 
-    vendor_router = types.ModuleType("lib.vendor_router")
+    vendor_router = types.ModuleType("dl_wm.vendor_router")
     vendor_router.VENDOR_YOUTUBE = "youtube"
     vendor_router.extract_vendor_id = lambda *_args, **_kwargs: "abc123"
     vendor_router.metadata_filename = lambda *_args, **_kwargs: "dummy.json"
-    sys.modules["lib.vendor_router"] = vendor_router
+    sys.modules["dl_wm.vendor_router"] = vendor_router
 
     module_path = pathlib.Path(__file__).resolve().parents[1] / "downloaders" / "youtube.py"
     spec = importlib.util.spec_from_file_location("youtube_module", module_path)

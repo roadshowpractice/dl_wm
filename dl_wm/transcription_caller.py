@@ -7,8 +7,8 @@ import json
 from importlib import import_module
 from typing import Optional
 
-from tasks_lib import update_task_output_path
-from teton_utils import load_app_config
+from dl_wm.tasks_lib import update_task_output_path
+from dl_wm.teton_utils import load_app_config
 
 logger = logging.getLogger(__name__)
 

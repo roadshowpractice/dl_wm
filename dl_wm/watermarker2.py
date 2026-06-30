@@ -87,6 +87,18 @@ def _timestamp_filter(color, font, font_size, position, box=True):
 
     return base
 
+def _truncate_for_label(text: str, max_chars: int = 120) -> str:
+    clean = " ".join(str(text or "").split())
+    if len(clean) <= max_chars:
+        return clean
+    return clean[: max_chars - 1].rstrip() + "…"
+
+
+def build_source_label(uploader: str, upload_date: str, title: str, max_chars: int = 160) -> str:
+    pieces = [piece.strip() for piece in [uploader, upload_date, title] if str(piece or "").strip()]
+    return _truncate_for_label(" | ".join(pieces), max_chars=max_chars)
+
+
 def add_watermark(params):
     """Add watermarks using ffmpeg drawtext for low-memory processing."""
     logger.debug("Received parameters for watermarking.")

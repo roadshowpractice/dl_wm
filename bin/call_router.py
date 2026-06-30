@@ -8,16 +8,14 @@ import traceback
 import subprocess
 import time
 
-# Add lib path to sys.path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(current_dir)
-lib_path = os.path.join(root_dir, "lib")
-sys.path.append(lib_path)
+import pathlib
+_root = str(pathlib.Path(__file__).resolve().parents[1])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
-# Import utilities
-from teton_utils import initialize_logging, load_config, load_app_config, resolve_repo_path
-from tasks_lib import find_url_json
-from vendor_router import detect_vendor, canonicalize_vendor_url
+from dl_wm.teton_utils import initialize_logging, load_config, load_app_config, resolve_repo_path
+from dl_wm.tasks_lib import find_url_json
+from dl_wm.vendor_router import detect_vendor, canonicalize_vendor_url
 
 # Map tasks to their respective scripts
 TASK_DISPATCH = {

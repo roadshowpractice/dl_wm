@@ -5,11 +5,7 @@ import sys
 import tempfile
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-if HERE not in sys.path:
-    sys.path.insert(0, HERE)
-
-from watermarker2 import _timestamp_filter
+from dl_wm.watermarker2 import _timestamp_filter
 
 
 class WatermarkerTests(unittest.TestCase):

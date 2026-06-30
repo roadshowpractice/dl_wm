@@ -5,22 +5,9 @@ import types
 
 
 def _load_call_download_module():
-    teton_utils = types.ModuleType("teton_utils")
-    teton_utils.load_config = lambda: {}
-    teton_utils.load_app_config = lambda: {}
-    teton_utils.initialize_logging_from_config = lambda *_args, **_kwargs: None
-    teton_utils.resolve_repo_path = lambda p: p
-    sys.modules["teton_utils"] = teton_utils
-
-    vendor_router = types.ModuleType("vendor_router")
-    vendor_router.detect_vendor = lambda *_args, **_kwargs: "instagram"
-    vendor_router.VENDOR_FACEBOOK = "facebook"
-    vendor_router.VENDOR_INSTAGRAM = "instagram"
-    vendor_router.VENDOR_YOUTUBE = "youtube"
-    vendor_router.extract_vendor_id = lambda *_args, **_kwargs: "id"
-    vendor_router.metadata_filename = lambda *_args, **_kwargs: "id.json"
-    vendor_router.canonicalize_vendor_url = lambda _vendor, url: url
-    sys.modules["vendor_router"] = vendor_router
+    root = str(pathlib.Path(__file__).resolve().parents[1])
+    if root not in sys.path:
+        sys.path.insert(0, root)
 
     dl_pkg = types.ModuleType("downloaders")
     dl_pkg.__path__ = []
@@ -37,6 +24,12 @@ def _load_call_download_module():
     fb = types.ModuleType("downloaders.facebook")
     fb.download = lambda *_args, **_kwargs: {}
     sys.modules["downloaders.facebook"] = fb
+
+    cookies_path = pathlib.Path(__file__).resolve().parents[1] / "downloaders" / "cookies.py"
+    cookies_spec = importlib.util.spec_from_file_location("downloaders.cookies", cookies_path)
+    cookies_mod = importlib.util.module_from_spec(cookies_spec)
+    cookies_spec.loader.exec_module(cookies_mod)
+    sys.modules["downloaders.cookies"] = cookies_mod
 
     module_path = pathlib.Path(__file__).resolve().parents[1] / "bin" / "call_download.py"
     spec = importlib.util.spec_from_file_location("call_download_module", module_path)
@@ -71,7 +64,7 @@ def test_resolve_cookie_paths_prefers_hierarchy_then_discovers_conf_files(tmp_pa
         return str(tmp_path / path)
 
     monkeypatch.setattr(call_download, "resolve_repo_path", fake_resolve_repo_path)
-    monkeypatch.setattr(call_download, "root_dir", str(tmp_path))
+    monkeypatch.setattr(call_download, "_root", str(tmp_path))
 
     video_download_cfg = {
         "cookie_hierarchy": {
@@ -101,7 +94,7 @@ def test_resolve_cookie_paths_uses_vendor_specific_facebook_cookie_path(tmp_path
         return str(tmp_path / path)
 
     monkeypatch.setattr(call_download, "resolve_repo_path", fake_resolve_repo_path)
-    monkeypatch.setattr(call_download, "root_dir", str(tmp_path))
+    monkeypatch.setattr(call_download, "_root", str(tmp_path))
 
     resolved = call_download.resolve_cookie_paths(
         {},

@@ -4,16 +4,12 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-if HERE not in sys.path:
-    sys.path.insert(0, HERE)
-
 import types
 
 if "yt_dlp" not in sys.modules:
     sys.modules["yt_dlp"] = types.ModuleType("yt_dlp")
 
-import transcription_caller
+import dl_wm.transcription_caller as transcription_caller
 
 
 class TranscriptionCallerTests(unittest.TestCase):

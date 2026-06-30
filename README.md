@@ -2,6 +2,8 @@
 
 `dl_wm` is a small Python workflow for downloading media and running follow-up tasks (like watermarking) through script entrypoints in `bin/`.
 
+For code architecture, module relationships, and agent conventions see [AGENTS.md](AGENTS.md).
+
 ## Setup (Conda via `.yml`)
 
 This project ships an `environment.yml` file you can use directly.

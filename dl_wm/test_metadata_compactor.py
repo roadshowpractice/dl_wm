@@ -4,11 +4,7 @@ import sys
 import tempfile
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-if HERE not in sys.path:
-    sys.path.insert(0, HERE)
-
-from metadata_compactor import build_compact_metadata, write_raw_metadata
+from dl_wm.metadata_compactor import build_compact_metadata, write_raw_metadata
 
 
 class MetadataCompactorTests(unittest.TestCase):

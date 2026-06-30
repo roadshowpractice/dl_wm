@@ -50,7 +50,7 @@ import shutil
 import traceback
 from urllib.parse import urlparse
 
-from vendor_router import VENDOR_INSTAGRAM, detect_vendor, extract_vendor_id, format_shortcode
+from dl_wm.vendor_router import VENDOR_INSTAGRAM, detect_vendor, extract_vendor_id, format_shortcode
 
 # Initialize the logger
 logger = logging.getLogger(__name__)
@@ -616,6 +616,34 @@ def update_task_output_path(metadata_path: str, task: str, output_path: str) -> 
         logger.error(f"❌ Failed to update task output path: {e}")
         logger.debug(traceback.format_exc())
         return {"updated_metadata": None}
+
+
+def upsert_index_record(index_path, record):
+    """Write or update a record in index.jsonl, keyed on vendor + vendor_id."""
+    os.makedirs(os.path.dirname(index_path), exist_ok=True)
+
+    rows = []
+    if os.path.exists(index_path):
+        with open(index_path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                rows.append(json.loads(line))
+
+    updated = False
+    for i, row in enumerate(rows):
+        if row.get("vendor") == record.get("vendor") and row.get("vendor_id") == record.get("vendor_id"):
+            rows[i] = {**row, **record}
+            updated = True
+            break
+
+    if not updated:
+        rows.append(record)
+
+    with open(index_path, "w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 def get_task_states(url, metadata_dir="./metadata"):

@@ -1,20 +1,16 @@
-import json
+#!/usr/bin/env python
 import os
 import sys
 import traceback
-from glob import glob
 from datetime import datetime
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(current_dir)
-lib_path = os.path.join(root_dir, "lib")
-if root_dir not in sys.path:
-    sys.path.append(root_dir)
-if lib_path not in sys.path:
-    sys.path.append(lib_path)
+import pathlib
+_root = str(pathlib.Path(__file__).resolve().parents[1])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
-from teton_utils import load_config, load_app_config, initialize_logging_from_config, resolve_repo_path
-from vendor_router import (
+from dl_wm.teton_utils import load_config, load_app_config, initialize_logging_from_config, resolve_repo_path
+from dl_wm.vendor_router import (
     detect_vendor,
     VENDOR_FACEBOOK,
     VENDOR_INSTAGRAM,
@@ -26,134 +22,13 @@ from vendor_router import (
 from downloaders.instagram import download as download_instagram
 from downloaders.facebook import download as download_facebook
 from downloaders.youtube import download as download_youtube
-
-
-def _normalize_cookie_list(value):
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, list):
-        return [item for item in value if isinstance(item, str)]
-    return []
-
-
-def _cookie_discovery_patterns(vendor):
-    if vendor == VENDOR_INSTAGRAM:
-        return ["*instagram*cookie*.txt", "*insta*cookie*.txt", "*instagram*.txt", "*insta*.txt"]
-    if vendor == VENDOR_FACEBOOK:
-        return ["*facebook*cookie*.txt", "*fb*cookie*.txt", "*facebook*.txt", "*fb*.txt"]
-    if vendor == VENDOR_YOUTUBE:
-        return ["*youtube*cookie*.txt", "*yt*cookie*.txt", "*youtube*.txt", "*yt*.txt"]
-    return []
-
-
-def resolve_cookie_paths(platform_config, video_download_cfg, vendor):
-    if not isinstance(video_download_cfg, dict):
-        video_download_cfg = {}
-
-    candidates = []
-    cookie_hierarchy = video_download_cfg.get("cookie_hierarchy")
-    if isinstance(cookie_hierarchy, dict):
-        candidates.extend(_normalize_cookie_list(cookie_hierarchy.get(vendor)))
-
-    plural_key = f"{vendor}_cookie_paths"
-    candidates.extend(_normalize_cookie_list(video_download_cfg.get(plural_key)))
-
-    cookie_path = None
-    if vendor == VENDOR_INSTAGRAM:
-        cookie_path = video_download_cfg.get("instagram_cookie_path")
-    elif vendor == VENDOR_FACEBOOK:
-        cookie_path = video_download_cfg.get("facebook_cookie_path")
-    elif vendor == VENDOR_YOUTUBE:
-        cookie_path = video_download_cfg.get("youtube_cookie_path")
-    if cookie_path:
-        candidates.append(cookie_path)
-
-    # Backward compatibility for old nested cookie mapping.
-    vendor_cookie_map = video_download_cfg.get("cookie_paths")
-    if isinstance(vendor_cookie_map, dict):
-        candidates.extend(_normalize_cookie_list(vendor_cookie_map.get(vendor)))
-
-    fallback_cookie = platform_config.get("cookie_path") or video_download_cfg.get("cookie_path")
-    if fallback_cookie:
-        candidates.append(fallback_cookie)
-
-    conf_dir = resolve_repo_path("conf")
-    if os.path.isdir(conf_dir):
-        for pattern in _cookie_discovery_patterns(vendor):
-            candidates.extend(
-                os.path.relpath(path, root_dir)
-                for path in sorted(glob(os.path.join(conf_dir, pattern)))
-            )
-
-    resolved = []
-    seen = set()
-    for candidate in candidates:
-        path = resolve_repo_path(candidate) if candidate else None
-        if not path or path in seen:
-            continue
-        seen.add(path)
-        if os.path.exists(path):
-            resolved.append(path)
-
-    return resolved
-
-
-def is_cookie_identity_blocked_error(exc):
-    message_parts = [str(exc)]
-
-    if hasattr(exc, "stderr") and exc.stderr:
-        message_parts.append(str(exc.stderr))
-
-    if hasattr(exc, "msg") and exc.msg:
-        message_parts.append(str(exc.msg))
-
-    text = "\n".join(message_parts).lower()
-    block_markers = [
-        "http error 429",
-        "too many requests",
-        "temporarily blocked",
-        "rate limit",
-        "rate-limit",
-        "challenge_required",
-        "checkpoint required",
-        "login required",
-        "sign in to",
-        "instagram api is not granting access",
-        "instagram sent an empty media response",
-    ]
-    return any(marker in text for marker in block_markers)
-
-
-def upsert_index_record(index_path, record):
-    os.makedirs(os.path.dirname(index_path), exist_ok=True)
-
-    rows = []
-    if os.path.exists(index_path):
-        with open(index_path, "r", encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                rows.append(json.loads(line))
-
-    updated = False
-    for i, row in enumerate(rows):
-        if row.get("vendor") == record.get("vendor") and row.get("vendor_id") == record.get("vendor_id"):
-            rows[i] = {**row, **record}
-            updated = True
-            break
-
-    if not updated:
-        rows.append(record)
-
-    with open(index_path, "w", encoding="utf-8") as fh:
-        for row in rows:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+from downloaders.cookies import resolve_cookie_paths, is_cookie_identity_blocked_error
+from dl_wm.tasks_lib import upsert_index_record
 
 
 def main():
     try:
-        os.chdir(root_dir)
+        os.chdir(_root)
         platform_config = load_config()
         app_config = load_app_config()
         logging_config = {
@@ -179,8 +54,7 @@ def main():
             sys.exit(1)
 
         output_root = resolve_repo_path(output_root)
-        download_date = datetime.now().strftime("%Y-%m-%d")
-        download_path = os.path.join(output_root, download_date)
+        download_path = os.path.join(output_root, datetime.now().strftime("%Y-%m-%d"))
         metadata_dir = resolve_repo_path(app_config.get("metadata_dir", "./metadata"))
         os.makedirs(download_path, exist_ok=True)
         os.makedirs(metadata_dir, exist_ok=True)

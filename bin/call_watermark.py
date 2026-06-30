@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import os
 import sys
 import json
@@ -5,86 +6,15 @@ import traceback
 import argparse
 from datetime import datetime
 
-# Ensure we can import shared utilities
-current_dir = os.path.dirname(os.path.abspath(__file__))
-root_dir = os.path.dirname(current_dir)
-lib_path = os.path.join(root_dir, "lib")
-if lib_path not in sys.path:
-    sys.path.append(lib_path)
+import pathlib
+_root = str(pathlib.Path(__file__).resolve().parents[1])
+if _root not in sys.path:
+    sys.path.insert(0, _root)
 
-from tasks_lib import update_task_output_path
-from teton_utils import load_app_config, load_config, initialize_logging_from_config
-from watermarker2 import add_watermark, looks_like_filename
-
-
-def _paths_match(path_a: str, path_b: str) -> bool:
-    if not path_a or not path_b:
-        return False
-
-    norm_a = os.path.abspath(os.path.normpath(path_a))
-    norm_b = os.path.abspath(os.path.normpath(path_b))
-    if norm_a == norm_b:
-        return True
-
-    return os.path.basename(norm_a) == os.path.basename(norm_b)
-
-
-def _metadata_path_for_media(input_video_path: str, metadata_dir: str) -> str:
-    base_name = os.path.splitext(input_video_path)[0]
-    sidecar_path = f"{base_name}.json"
-    if os.path.isfile(sidecar_path):
-        try:
-            with open(sidecar_path, "r", encoding="utf-8") as file:
-                sidecar_data = json.load(file)
-            if isinstance(sidecar_data.get("default_tasks"), dict):
-                return sidecar_path
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    if not os.path.isdir(metadata_dir):
-        return ""
-
-    for filename in sorted(os.listdir(metadata_dir)):
-        if not filename.endswith(".json"):
-            continue
-
-        metadata_path = os.path.join(metadata_dir, filename)
-        try:
-            with open(metadata_path, "r", encoding="utf-8") as file:
-                data = json.load(file)
-        except (json.JSONDecodeError, OSError):
-            continue
-
-        default_tasks = data.get("default_tasks", {})
-        if isinstance(default_tasks, dict):
-            perform_download = default_tasks.get("perform_download")
-            if isinstance(perform_download, str) and _paths_match(perform_download, input_video_path):
-                return metadata_path
-
-            apply_watermark = default_tasks.get("apply_watermark")
-            if isinstance(apply_watermark, str) and _paths_match(apply_watermark, input_video_path):
-                return metadata_path
-
-        file_path = data.get("file_path")
-        if isinstance(file_path, str) and _paths_match(file_path, input_video_path):
-            return metadata_path
-
-    if os.path.isfile(sidecar_path):
-        return sidecar_path
-
-    return ""
-
-
-def _truncate_for_label(text: str, max_chars: int = 120) -> str:
-    clean = " ".join(str(text or "").split())
-    if len(clean) <= max_chars:
-        return clean
-    return clean[: max_chars - 1].rstrip() + "…"
-
-
-def _build_source_label(uploader: str, upload_date: str, title: str, max_chars: int = 160) -> str:
-    pieces = [piece.strip() for piece in [uploader, upload_date, title] if str(piece or "").strip()]
-    return _truncate_for_label(" | ".join(pieces), max_chars=max_chars)
+from dl_wm.tasks_lib import update_task_output_path
+from dl_wm.teton_utils import load_app_config, load_config, initialize_logging_from_config
+from dl_wm.watermarker2 import add_watermark, build_source_label, looks_like_filename
+from dl_wm.transcription_caller import _metadata_path_for_media
 
 
 def _parse_args(argv):
@@ -121,12 +51,12 @@ def main():
     try:
         platform_config = load_config()
         app_config = load_app_config()
-        watermark_config = app_config.get("watermark_config", {})
         logging_config = {
             **platform_config.get("logging", {}),
             **app_config.get("logging", {}),
         }
         logger = initialize_logging_from_config(logging_config)
+        watermark_config = app_config.get("watermark_config", {})
 
         args = _parse_args(sys.argv[1:])
         input_video_path = args.input_video
@@ -136,17 +66,13 @@ def main():
 
         logger.info(f"Processing video file: {input_video_path}")
 
-        json_path = ""
         username = args.uploader or ""
         video_date = args.upload_date or datetime.now().strftime("%Y-%m-%d")
         video_title = args.title or ""
+        json_path = ""
 
         if not (args.uploader and args.upload_date and args.title):
-            metadata_dir = app_config.get("metadata_dir", "./metadata")
-            if not os.path.isabs(metadata_dir):
-                metadata_dir = os.path.join(root_dir, metadata_dir)
-
-            json_path = _metadata_path_for_media(input_video_path, metadata_dir)
+            json_path = _metadata_path_for_media(input_video_path) or ""
             if json_path:
                 logger.info(f"Loaded metadata from: {json_path}")
                 try:
@@ -169,7 +95,7 @@ def main():
             logger.warning("Uploader looks like a filename; skipping username watermark.")
             username = ""
 
-        source_label = _build_source_label(username, video_date, video_title) if video_title else ""
+        source_label = build_source_label(username, video_date, video_title) if video_title else ""
 
         params = {
             **dict(watermark_config),
