@@ -56,9 +56,9 @@ class TranscriptionCallerTests(unittest.TestCase):
                 open(output_file, "w", encoding="utf-8").close()
                 return True
 
-            with patch("transcription_caller.os.path.isfile", return_value=True), patch(
-                "transcription_caller._python_executable", return_value="python3"
-            ), patch("transcription_caller._run_and_validate", side_effect=fake_run_and_validate):
+            with patch("dl_wm.transcription_caller.os.path.isfile", return_value=True), patch(
+                "dl_wm.transcription_caller._python_executable", return_value="python3"
+            ), patch("dl_wm.transcription_caller._run_and_validate", side_effect=fake_run_and_validate):
                 ok = transcription_caller._auto_transcribe_with_local_script(
                     input_path=input_path,
                     output_path=output_path,

@@ -7,6 +7,8 @@ import unittest
 
 from dl_wm.watermarker2 import _timestamp_filter
 
+HERE = os.path.dirname(os.path.abspath(__file__))
+
 
 class WatermarkerTests(unittest.TestCase):
 
