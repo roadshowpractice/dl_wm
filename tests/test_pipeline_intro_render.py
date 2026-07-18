@@ -20,6 +20,9 @@ from pipeline.utils import (
 )
 
 
+REPO_FONT_PATH = Path(__file__).resolve().parents[1] / "fonts" / "Inter-Bold.otf"
+
+
 def assert_has_subsequence(testcase: unittest.TestCase, cmd: list[str], expected: list[str]) -> None:
     for idx in range(0, len(cmd) - len(expected) + 1):
         if cmd[idx : idx + len(expected)] == expected:
@@ -54,8 +57,7 @@ class IntroStageTests(unittest.TestCase):
             source_clip.parent.mkdir(parents=True, exist_ok=True)
             source_clip.write_bytes(b"clip")
 
-            font_path = tmpdir / "font.ttf"
-            font_path.write_bytes(b"font")
+            font_path = REPO_FONT_PATH
 
             manifest = ClipsManifest(
                 source_video="source.mp4",
@@ -106,8 +108,7 @@ class IntroStageTests(unittest.TestCase):
             source_clip.parent.mkdir(parents=True, exist_ok=True)
             source_clip.write_bytes(b"clip")
 
-            font_path = tmpdir / "font.ttf"
-            font_path.write_bytes(b"font")
+            font_path = REPO_FONT_PATH
 
             manifest = ClipsManifest(
                 source_video="source.mp4",

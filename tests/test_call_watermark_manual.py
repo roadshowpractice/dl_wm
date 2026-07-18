@@ -10,8 +10,19 @@ CALL_WATERMARK_PATH = REPO_ROOT / "bin" / "call_watermark.py"
 
 spec = importlib.util.spec_from_file_location("call_watermark", CALL_WATERMARK_PATH)
 call_watermark = importlib.util.module_from_spec(spec)
-sys.modules.setdefault("yt_dlp", types.SimpleNamespace())
-spec.loader.exec_module(call_watermark)
+
+# Only stub yt_dlp (a heavy, unrelated import pulled in transitively via
+# teton_utils) if it isn't already the real module — and restore whatever
+# was there afterward, so this doesn't leak a fake yt_dlp into sys.modules
+# for the rest of the pytest session.
+_had_yt_dlp = "yt_dlp" in sys.modules
+if not _had_yt_dlp:
+    sys.modules["yt_dlp"] = types.SimpleNamespace()
+try:
+    spec.loader.exec_module(call_watermark)
+finally:
+    if not _had_yt_dlp:
+        sys.modules.pop("yt_dlp", None)
 
 
 class CallWatermarkManualTests(unittest.TestCase):

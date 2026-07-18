@@ -10,10 +10,18 @@ if HERE not in sys.path:
 
 import types
 
-if "yt_dlp" not in sys.modules:
+# Only stub yt_dlp if it isn't already the real module, and restore whatever
+# was there afterward — otherwise this leaks a fake yt_dlp into sys.modules
+# for the rest of the pytest session and breaks other tests that need the
+# real package (e.g. downloaders/instagram.py's `yt_dlp.YoutubeDL`).
+_had_yt_dlp = "yt_dlp" in sys.modules
+if not _had_yt_dlp:
     sys.modules["yt_dlp"] = types.ModuleType("yt_dlp")
-
-import transcription_caller
+try:
+    import transcription_caller
+finally:
+    if not _had_yt_dlp:
+        sys.modules.pop("yt_dlp", None)
 
 
 class TranscriptionCallerTests(unittest.TestCase):
