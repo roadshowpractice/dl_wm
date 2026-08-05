@@ -1,0 +1,138 @@
+{
+  "generated_at": "2026-08-04T16:50:00Z",
+  "topic": "Tim Ballard speech, CPAC-adjacent event in London/Netherlands, 2026-07-18",
+  "sources": [
+    {
+      "id": "001",
+      "vendor": "instagram",
+      "vendor_id": "Da7-1LpIR89",
+      "url": "https://www.instagram.com/reel/Da7-1LpIR89/",
+      "uploader": "Maryam",
+      "video_title": "Video by dr.venus_sh",
+      "video_date": "20260718",
+      "duration_seconds": 180,
+      "resolution": "540x960",
+      "view_count": null,
+      "like_count": 340,
+      "comment_count": 24,
+      "metadata_file": "metadata/instagram__Da7-1LpIR89.json"
+    },
+    {
+      "id": "youtube__RS7GTQQMBnw",
+      "vendor": "youtube",
+      "vendor_id": "RS7GTQQMBnw",
+      "uploader": "Prayer Scrappers",
+      "video_title": "Tim Ballard speech at CPAC Event in London after movie Premier of \"hidden war\".",
+      "video_date": "20260718",
+      "duration_seconds": 849,
+      "resolution": "360x640",
+      "view_count": 72,
+      "like_count": 9,
+      "comment_count": 1,
+      "metadata_file": "metadata/youtube__RS7GTQQMBnw.json"
+    },
+    {
+      "id": "youtube__nqwKaDoyY4Q",
+      "vendor": "youtube",
+      "vendor_id": "nqwKaDoyY4Q",
+      "uploader": "Danny Tommo",
+      "video_title": "Sound of Freedom to Hidden War: Tim Ballard Declares: UK Frontline in the Fight Against Child Abuse",
+      "video_date": "20260721",
+      "duration_seconds": 877,
+      "resolution": "640x360",
+      "view_count": 11318,
+      "like_count": 973,
+      "comment_count": 83,
+      "metadata_file": "metadata/youtube__nqwKaDoyY4Q.json"
+    },
+    {
+      "id": "youtube__EA9tE6KDj7U",
+      "vendor": "youtube",
+      "vendor_id": "EA9tE6KDj7U",
+      "uploader": "Danny Tommo",
+      "video_title": "Tim Ballard LIVE in London Tomorrow: FREE Premiere of His Powerful New Film (After Sound of Freedom)",
+      "video_date": "20260718",
+      "duration_seconds": 157,
+      "resolution": "640x360",
+      "view_count": 7080,
+      "like_count": 792,
+      "comment_count": 57,
+      "metadata_file": "metadata/youtube__EA9tE6KDj7U.json",
+      "note": "unrelated promo clip -- 0 transcript overlap with the reel or RS7GTQQMBnw/nqwKaDoyY4Q"
+    }
+  ],
+  "relationship_summary": {
+    "same_delivery_group": ["001", "youtube__RS7GTQQMBnw", "youtube__nqwKaDoyY4Q"],
+    "unrelated": ["youtube__EA9tE6KDj7U"],
+    "pairwise": [
+      {
+        "a": "001",
+        "b": "youtube__RS7GTQQMBnw",
+        "verbatim_word_total": 410,
+        "fuzzy_match_count": 41,
+        "offset_mean_seconds": 22.63,
+        "offset_stdev_seconds": 0.32,
+        "verdict": "consistent single timeline (likely the same event, e.g. a re-clip or a second recording of the same delivery)"
+      },
+      {
+        "a": "001",
+        "b": "youtube__nqwKaDoyY4Q",
+        "verbatim_word_total": 415,
+        "fuzzy_match_count": 40,
+        "offset_mean_seconds": 37.01,
+        "offset_stdev_seconds": 0.22,
+        "verdict": "consistent single timeline (likely the same event, e.g. a re-clip or a second recording of the same delivery)"
+      },
+      {
+        "a": "001",
+        "b": "youtube__EA9tE6KDj7U",
+        "verbatim_word_total": 0,
+        "fuzzy_match_count": 0,
+        "verdict": "no overlap"
+      },
+      {
+        "a": "youtube__RS7GTQQMBnw",
+        "b": "youtube__nqwKaDoyY4Q",
+        "verbatim_word_total": 1966,
+        "fuzzy_match_count": 225,
+        "offset_mean_seconds": 14.49,
+        "offset_stdev_seconds": 0.61,
+        "verdict": "consistent single timeline (likely the same event, e.g. a re-clip or a second recording of the same delivery)"
+      }
+    ],
+    "offset_triangle_check": {
+      "description": "001->RS7GTQQMBnw offset + RS7GTQQMBnw->nqwKaDoyY4Q offset should equal 001->nqwKaDoyY4Q offset if all three share one timeline",
+      "001_to_RS7GTQQMBnw_plus_RS7GTQQMBnw_to_nqwKaDoyY4Q": 37.12,
+      "measured_001_to_nqwKaDoyY4Q": 37.01,
+      "discrepancy_seconds": 0.11,
+      "conclusion": "closes within noise (offset stdevs 0.22-0.61s) -- independent confirmation all three share one continuous timeline"
+    },
+    "insta_reel_word_coverage": {
+      "reel_total_words": 452,
+      "reel_span_seconds": [6.82, 180.0],
+      "verbatim_matched_words_vs_RS7GTQQMBnw": 410,
+      "verbatim_matched_words_vs_RS7GTQQMBnw_pct": 91,
+      "verbatim_matched_words_vs_nqwKaDoyY4Q": 415,
+      "verbatim_matched_words_vs_nqwKaDoyY4Q_pct": 92,
+      "conclusion": "reel content is essentially a proper subset of both longer recordings; the small uncovered remainder is consistent with ASR/seam noise, not unique content"
+    },
+    "splice_check": {
+      "method": "sorted per-run timed_verbatim_runs by reel timestamp (a_start) and checked whether offset (b_start - a_start) stays flat across the reel's full duration; a splice/jump-cut inside the reel would show up as a step change in offset at the cut point",
+      "vs_RS7GTQQMBnw": {
+        "reel_timestamps_covered_seconds": [8.2, 177.1],
+        "offset_range_seconds": [21.48, 23.16],
+        "offset_spread_seconds": 1.68
+      },
+      "vs_nqwKaDoyY4Q": {
+        "reel_timestamps_covered_seconds": [8.2, 159.0],
+        "offset_range_seconds": [36.30, 37.30],
+        "offset_spread_seconds": 1.0
+      },
+      "conclusion": "no step changes found; offset stays flat (sub-2s wobble, consistent with ASR/word-boundary jitter) from near the start to near the end of the 180s reel -- the reel is a single continuous excerpt, not spliced together from non-contiguous parts of the source"
+    }
+  },
+  "source_files": {
+    "comparison_bundle": "outputs/compare/insta_Da7-1LpIR89_vs_cpac_gb/",
+    "manifest": "outputs/compare/insta_Da7-1LpIR89_vs_cpac_gb/manifest.json"
+  }
+}
