@@ -2,12 +2,12 @@
 
 **Tim Ballard** — founder and former CEO of Operation Underground Railroad (O.U.R.), a
 nonprofit organized around anti-child-trafficking "rescue" operations; former U.S. Department
-of Homeland Security agent. Subject of the 2023 film *Sound of Freedom* (Angel Studios), and of
-*Hidden War* — which actually premiered 2025-11-14 in a limited release Ballard himself called a
-"fake launch" (minimal publicity, reported worldwide gross ~$4,561; per Wikipedia). The London
-CPAC-UK screening this repo's `docs/comparisons/` sources document (2026-07-18) was a later
-promotional appearance, not the premiere — the film had already come and gone with essentially
-no audience by then.
+of Homeland Security agent. Subject of the 2023 film *Sound of Freedom* (Angel Studios) and of
+*Hidden War*, which premiered 2025-11-14 in a limited release Ballard himself called a "fake
+launch" (minimal publicity; reported worldwide gross ~$4,561) — per
+[Wikipedia](https://en.wikipedia.org/wiki/Tim_Ballard). The London CPAC-UK screening this
+repo's `docs/comparisons/` sources document (2026-07-18) is a separate, later appearance, ~8
+months after that premiere.
 
 ## Primary source
 
@@ -18,10 +18,7 @@ American Crime Journal, investigative archive: *"DERAILED: Operation Underground
 The page is an index into ACJ's ongoing reporting, not a single narrative article. It aggregates,
 per ACJ: court records and police reports, depositions/declarations, internal communications,
 public-records-request results, witness interviews, IRS Form 990 financial disclosures, and
-media-portrayal analysis. ACJ's own framing: **"Inclusion of such material does not constitute
-a finding of fact."** Treat every claim as sourced-to-ACJ, not independently verified by this
-repo, unless a specific underlying document (court filing, deposition, etc.) is pulled and cited
-directly.
+media-portrayal analysis.
 
 ## Categories covered by the ACJ archive
 
