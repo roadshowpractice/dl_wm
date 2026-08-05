@@ -56,6 +56,8 @@ Detail lives in `docs/subject/` so this file stays short:
   statements, police reports, the Ballard/O.U.R. separation agreement
 - [`docs/subject/acj_accountability.md`](docs/subject/acj_accountability.md) — selected
   accountability/scrutiny articles (11 of 45 reviewed so far)
+- [`docs/subject/wiki_edits.md`](docs/subject/wiki_edits.md) — log of Wikipedia talk-page
+  activity (what's been posted, revision IDs, what to check next visit)
 
 **Still outstanding:** privileged material the user holds but hasn't passed through yet (flag
 when supplied); court docket numbers to cross-check ACJ's copies against PACER/the state docket;
