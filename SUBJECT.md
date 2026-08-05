@@ -2,9 +2,12 @@
 
 **Tim Ballard** — founder and former CEO of Operation Underground Railroad (O.U.R.), a
 nonprofit organized around anti-child-trafficking "rescue" operations; former U.S. Department
-of Homeland Security agent. Subject of the 2023 film *Sound of Freedom* (Angel Studios), and
-of *Hidden War* (premiered London, 2026-07-18, the CPAC-UK-adjacent event this repo's
-`docs/comparisons/` sources document).
+of Homeland Security agent. Subject of the 2023 film *Sound of Freedom* (Angel Studios), and of
+*Hidden War* — which actually premiered 2025-11-14 in a limited release Ballard himself called a
+"fake launch" (minimal publicity, reported worldwide gross ~$4,561; per Wikipedia). The London
+CPAC-UK screening this repo's `docs/comparisons/` sources document (2026-07-18) was a later
+promotional appearance, not the premiere — the film had already come and gone with essentially
+no audience by then.
 
 ## Primary source
 
