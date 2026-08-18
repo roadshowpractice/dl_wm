@@ -5,6 +5,11 @@ import types
 
 
 def _load_call_router_module():
+    # These stubs would otherwise leak into sys.modules for the rest of the
+    # test session, shadowing the real modules for later test files.
+    stub_names = ("teton_utils", "tasks_lib", "vendor_router")
+    previous_modules = {name: sys.modules.get(name) for name in stub_names}
+
     teton_utils = types.ModuleType("teton_utils")
     teton_utils.load_config = lambda: {}
     teton_utils.load_app_config = lambda: {"metadata_dir": "./metadata"}
@@ -29,7 +34,14 @@ def _load_call_router_module():
     spec = importlib.util.spec_from_file_location("call_router_module", module_path)
     module = importlib.util.module_from_spec(spec)
     assert spec and spec.loader
-    spec.loader.exec_module(module)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        for name, previous in previous_modules.items():
+            if previous is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = previous
     return module
 
 

@@ -10,10 +10,16 @@ if HERE not in sys.path:
 
 import types
 
-if "yt_dlp" not in sys.modules:
+# Stub only if yt_dlp isn't already present, and remove the stub afterward so
+# it doesn't leak into sys.modules for other test files collected later.
+_had_yt_dlp = "yt_dlp" in sys.modules
+if not _had_yt_dlp:
     sys.modules["yt_dlp"] = types.ModuleType("yt_dlp")
 
 import transcription_caller
+
+if not _had_yt_dlp:
+    del sys.modules["yt_dlp"]
 
 
 class TranscriptionCallerTests(unittest.TestCase):

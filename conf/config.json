@@ -24,7 +24,7 @@
     ]
   },
   "Linux": {
-    "python_path": "$HOME/miniconda3/envs/dl_wm/bin/python",
+    "python_path": "$HOME/miniforge3/envs/dl_wm/bin/python",
     "base_dir": "$HOME/Desktop/dl_wm",
     "output_dir": "./outputs/",
     "logging": {
