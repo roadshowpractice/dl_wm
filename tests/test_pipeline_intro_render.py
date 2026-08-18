@@ -5,6 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+REAL_FONT_BYTES = (REPO_ROOT / "fonts" / "Inter-Bold.otf").read_bytes()
+
 from pipeline import render as render_module
 from pipeline.intro import _resolve_output_dimensions, render_intro_manifest
 from pipeline.render import prepare_make_final_film_inputs
@@ -55,7 +58,7 @@ class IntroStageTests(unittest.TestCase):
             source_clip.write_bytes(b"clip")
 
             font_path = tmpdir / "font.ttf"
-            font_path.write_bytes(b"font")
+            font_path.write_bytes(REAL_FONT_BYTES)
 
             manifest = ClipsManifest(
                 source_video="source.mp4",
@@ -107,7 +110,7 @@ class IntroStageTests(unittest.TestCase):
             source_clip.write_bytes(b"clip")
 
             font_path = tmpdir / "font.ttf"
-            font_path.write_bytes(b"font")
+            font_path.write_bytes(REAL_FONT_BYTES)
 
             manifest = ClipsManifest(
                 source_video="source.mp4",

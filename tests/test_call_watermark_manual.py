@@ -10,8 +10,15 @@ CALL_WATERMARK_PATH = REPO_ROOT / "bin" / "call_watermark.py"
 
 spec = importlib.util.spec_from_file_location("call_watermark", CALL_WATERMARK_PATH)
 call_watermark = importlib.util.module_from_spec(spec)
-sys.modules.setdefault("yt_dlp", types.SimpleNamespace())
+
+# Stub only if yt_dlp isn't already present, and remove the stub afterward so
+# it doesn't leak into sys.modules for other test files collected later.
+_had_yt_dlp = "yt_dlp" in sys.modules
+if not _had_yt_dlp:
+    sys.modules["yt_dlp"] = types.SimpleNamespace()
 spec.loader.exec_module(call_watermark)
+if not _had_yt_dlp:
+    del sys.modules["yt_dlp"]
 
 
 class CallWatermarkManualTests(unittest.TestCase):
