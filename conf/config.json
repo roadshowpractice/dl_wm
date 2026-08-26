@@ -44,6 +44,28 @@
       "brave"
     ]
   },
+  "Windows": {
+    "python_path": "%USERPROFILE%/miniforge3/envs/dl_wm/python.exe",
+    "output_dir": "./outputs/",
+    "logging": {
+      "level": "DEBUG",
+      "log_to_file": true,
+      "log_filename": "./logs/dl.log",
+      "log_to_console": true,
+      "console_level": "INFO"
+    },
+    "metadata_dir": "%USERPROFILE%/Desktop/dl_wm/metadata",
+    "youtube_cookie_files": [
+      "%USERPROFILE%/.config/dl_wm/cookies/youtube.cookies.txt",
+      "%USERPROFILE%/Desktop/dl_wm/conf/youtube.cookies.1.txt"
+    ],
+    "browser_cookie_order": [
+      "edge",
+      "chrome",
+      "firefox",
+      "brave"
+    ]
+  },
   "default": {
     "output_dir": "$HOME/Desktop/dl_wm/outputs",
     "metadata_dir": "$HOME/Desktop/dl_wm/metadata",
