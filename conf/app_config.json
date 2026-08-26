@@ -82,6 +82,10 @@
       "MarginR": 60
     }
   },
+  "vimeo_download": {
+    "referer": "https://tbfrescue.org/recent-rescue-updates/",
+    "impersonate": "chrome"
+  },
   "youtube_download": {
     "strategies": [
       {

@@ -1,0 +1,16 @@
+{
+  "source_page": "https://tbfrescue.org/recent-rescue-updates/",
+  "source_page_title": "The Tim Ballard Foundation (DBA of RED ROCK FOUNDATION INC, EIN 99-1999715) — Recent Rescue Updates",
+  "discovered": "2026-08-25",
+  "vendor": "vimeo",
+  "vendor_supported_in_downloaders": false,
+  "note": "vendor_router.py currently only detects youtube/instagram/facebook — vimeo needs to be added before call_download.py can pull these automatically. See tbfrescue-mirror/findings/2026-08-25-video-embeds.md for access-blocker detail (401, needs curl_cffi impersonation).",
+  "videos": [
+    {"id": "1109252893", "section": "Haitian-Dominican Border", "embed_url": "https://player.vimeo.com/video/1109252893"},
+    {"id": "1109193765", "section": "Brazil", "embed_url": "https://player.vimeo.com/video/1109193765"},
+    {"id": "1109254777", "section": "Brazil", "embed_url": "https://player.vimeo.com/video/1109254777"},
+    {"id": "1109255041", "section": "Brazil", "embed_url": "https://player.vimeo.com/video/1109255041"},
+    {"id": "1109254647", "section": "Brazil", "embed_url": "https://player.vimeo.com/video/1109254647"},
+    {"id": "1109253570", "section": "Recent Rescue Updates", "embed_url": "https://player.vimeo.com/video/1109253570"}
+  ]
+}
