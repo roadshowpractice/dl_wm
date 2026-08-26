@@ -5,9 +5,11 @@ from urllib.parse import parse_qs, urlparse
 INSTAGRAM_HOSTS = {"instagram.com", "www.instagram.com"}
 FACEBOOK_HOSTS = {"facebook.com", "www.facebook.com", "m.facebook.com", "fb.watch"}
 YOUTUBE_HOSTS = {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be"}
+VIMEO_HOSTS = {"vimeo.com", "www.vimeo.com", "player.vimeo.com"}
 VENDOR_INSTAGRAM = "instagram"
 VENDOR_FACEBOOK = "facebook"
 VENDOR_YOUTUBE = "youtube"
+VENDOR_VIMEO = "vimeo"
 
 
 def detect_vendor(url: str):
@@ -39,6 +41,13 @@ def detect_vendor(url: str):
             return VENDOR_YOUTUBE
         if path.startswith("watch") or path.startswith("shorts/"):
             return VENDOR_YOUTUBE
+
+    if host in VIMEO_HOSTS:
+        if host == "player.vimeo.com":
+            if path.startswith("video/"):
+                return VENDOR_VIMEO
+        elif re.match(r"^\d+", path):
+            return VENDOR_VIMEO
 
     return None
 
@@ -91,6 +100,10 @@ def extract_vendor_id(vendor: str, url: str):
         match = re.match(r"^shorts/([^/?#]+)/?", path)
         return match.group(1) if match else None
 
+    if vendor == VENDOR_VIMEO:
+        match = re.match(r"^(?:video/)?(\d+)", path)
+        return match.group(1) if match else None
+
     return None
 
 
@@ -116,6 +129,9 @@ def infer_kind(vendor: str, url: str):
             return "short"
         if path.startswith("watch") or (parsed.hostname or "").lower() == "youtu.be":
             return "video"
+
+    if vendor == VENDOR_VIMEO:
+        return "video"
 
     return None
 

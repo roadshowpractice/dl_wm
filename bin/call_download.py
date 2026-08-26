@@ -20,6 +20,7 @@ from vendor_router import (
     VENDOR_FACEBOOK,
     VENDOR_INSTAGRAM,
     VENDOR_YOUTUBE,
+    VENDOR_VIMEO,
     extract_vendor_id,
     metadata_filename,
     canonicalize_vendor_url,
@@ -27,6 +28,7 @@ from vendor_router import (
 from downloaders.instagram import download as download_instagram
 from downloaders.facebook import download as download_facebook
 from downloaders.youtube import download as download_youtube
+from downloaders.vimeo import download as download_vimeo
 
 
 def _normalize_cookie_list(value):
@@ -191,8 +193,8 @@ def main():
 
         url = sys.argv[1].strip()
         vendor = detect_vendor(url)
-        if vendor not in {VENDOR_INSTAGRAM, VENDOR_FACEBOOK, VENDOR_YOUTUBE}:
-            logger.error("Unsupported URL vendor. Supported vendors are Instagram, Facebook, and YouTube.")
+        if vendor not in {VENDOR_INSTAGRAM, VENDOR_FACEBOOK, VENDOR_YOUTUBE, VENDOR_VIMEO}:
+            logger.error("Unsupported URL vendor. Supported vendors are Instagram, Facebook, YouTube, and Vimeo.")
             sys.exit(1)
         url = canonicalize_vendor_url(vendor, url)
 
@@ -231,7 +233,7 @@ def main():
             )
             sys.exit(1)
 
-        if vendor == VENDOR_YOUTUBE and not cookie_paths:
+        if vendor in {VENDOR_YOUTUBE, VENDOR_VIMEO} and not cookie_paths:
             cookie_paths = [None]
 
         last_error = None
@@ -249,6 +251,9 @@ def main():
                 elif vendor == VENDOR_FACEBOOK:
                     logger.info("Facebook download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
                     result = download_facebook(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                elif vendor == VENDOR_VIMEO:
+                    logger.info("Vimeo download attempt %s/%s", idx, len(cookie_paths))
+                    result = download_vimeo(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
                 else:
                     logger.info("Instagram download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
                     result = download_instagram(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
