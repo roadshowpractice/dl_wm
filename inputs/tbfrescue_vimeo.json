@@ -3,14 +3,25 @@
   "source_page_title": "The Tim Ballard Foundation (DBA of RED ROCK FOUNDATION INC, EIN 99-1999715) — Recent Rescue Updates",
   "discovered": "2026-08-25",
   "vendor": "vimeo",
-  "vendor_supported_in_downloaders": false,
-  "note": "vendor_router.py currently only detects youtube/instagram/facebook — vimeo needs to be added before call_download.py can pull these automatically. See tbfrescue-mirror/findings/2026-08-25-video-embeds.md for access-blocker detail (401, needs curl_cffi impersonation).",
+  "vendor_supported_in_downloaders": true,
+  "note": "UPDATED 2026-08-26: vimeo support has since landed in downloaders/vimeo.py (dl_wm commit c760633, 'Add Vimeo downloader support, switch Instagram to instaloader sessions') — vendor_router.py now detects player.vimeo.com/vimeo.com and call_router.py/call_download.py dispatch these directly, no manual handling needed. This superseded the original note here (vimeo was unsupported when this file was first written on 2026-08-25). Confirmed working end-to-end for the 6 videos below: metadata/vimeo__<id>.json + metadata/raw/vimeo__<id>/ + outputs/2026-08-25/vimeo__<id>/ (download, watermark, whisper transcript, srt) all exist for each. Requires conf/app_config.json's vimeo_download.impersonate ('chrome', via curl_cffi — plain yt-dlp gets HTTP 401 on the player config endpoint regardless of Referer) and vimeo_download.referer (currently 'https://tbfrescue.org/recent-rescue-updates/').",
   "videos": [
     {"id": "1109252893", "section": "Haitian-Dominican Border", "embed_url": "https://player.vimeo.com/video/1109252893"},
     {"id": "1109193765", "section": "Brazil", "embed_url": "https://player.vimeo.com/video/1109193765"},
     {"id": "1109254777", "section": "Brazil", "embed_url": "https://player.vimeo.com/video/1109254777"},
     {"id": "1109255041", "section": "Brazil", "embed_url": "https://player.vimeo.com/video/1109255041"},
     {"id": "1109254647", "section": "Brazil", "embed_url": "https://player.vimeo.com/video/1109254647"},
-    {"id": "1109253570", "section": "Recent Rescue Updates", "embed_url": "https://player.vimeo.com/video/1109253570"}
+    {"id": "1109253570", "section": "Recent Rescue Updates", "embed_url": "https://player.vimeo.com/video/1109253570"},
+    {
+      "id": "1109501243",
+      "section": "In The News",
+      "caption": "Noticias caracol: Colombia",
+      "embed_url": "https://player.vimeo.com/video/1109501243",
+      "source_page": "https://tbfrescue.org/in-the-news/",
+      "discovered": "2026-08-26",
+      "fetch_status": "fetched",
+      "fetched_at": "2026-08-27",
+      "note": "UPDATED 2026-08-27: fetched successfully via bin/call_router.py, full pipeline complete. Different source page than the other 6 (in-the-news, not recent-rescue-updates) — the referer-mismatch risk noted below (conf/app_config.json's vimeo_download.referer is hardcoded to the recent-rescue-updates URL) turned out not to block the fetch; whether that's because Vimeo's referer check is origin-level or something else changed was not root-caused, just confirmed working end-to-end. Outputs: metadata/vimeo__1109501243.json + metadata/raw/vimeo__1109501243/1109501243.raw.json.gz + outputs/2026-08-26/vimeo__1109501243/ (vimeo__1109501243.mp4, _watermarked.mp4, .whisper.json, .srt, .txt, .manifest.json — manifest created_at 2026-08-27T04:31:34Z) all exist. Per John's explicit instruction (2026-08-26), this was deliberately left un-fetched at staging time — staged for him to run through bin/call_router.py himself rather than fetched directly by Claude; he has since run it. See tbfrescue-mirror/findings/2026-08-26-in-the-news-video.md for discovery detail, tbfrescue-mirror/findings/2026-08-26-staging-log.md for the staging step-by-step, and tbfrescue-mirror/findings/2026-08-27-fetch-confirmed.md for the fetch confirmation."
+    }
   ]
 }
