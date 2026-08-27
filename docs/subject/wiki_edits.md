@@ -35,11 +35,17 @@ subject_pattern_fake_premieres.md` for full detail. Box Office Mojo's granular w
 (two distinct release events, 91.7% week-2 decline) are a useful additional citation but don't
 clear WP:NFILM notability alone.
 
-**In progress**: transcribing a Good Newsroom/Archdiocese-of-New-York interview video
+**Done**: transcribed the Good Newsroom/Archdiocese-of-New-York interview video
 (`vimeo.com/1139346138`, embedded in their Hidden War piece) via `dl_wm`'s Vimeo
-downloader/Whisper pipeline — the article text is an empty teaser, real content (if any) is
-spoken in the video. If it has usable Ballard quotes, citable as WP:ABOUTSELF-attributed primary
-source (same treatment as the existing Jade Warwick interview citation), not for notability.
+downloader/Whisper pipeline — `outputs/2026-08-27/vimeo__1139346138/vimeo__1139346138.txt`.
+Not an empty teaser like the article text: real, specific claims from Ballard on camera —
+an origin story ("aerial recovery" claiming 3,000 children/people rescued across 6 countries,
+prompted by his wife's Ukraine-adoption foundation), an explicit self-comparison to Sound of
+Freedom ("one country, Colombia... this is six countries"), and an unverified statistic ("80%
+of kids who disappear... recruited from their own cell phones"). Citable only as
+WP:ABOUTSELF-attributed claims ("Ballard said..."), same treatment as the existing Jade Warwick
+interview citation — not for notability, not stated as fact. Deliberately not drafted into
+article text yet; see `veritastimmy/docs/TODO.md` for the open decision.
 
 ## 2026-08-05
 
