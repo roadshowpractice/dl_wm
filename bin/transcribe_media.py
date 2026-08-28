@@ -518,8 +518,17 @@ def main(argv: list[str] | None = None) -> int:
     else:
         source_url = resolve_source_url(input_path, args.jsonl)
 
-    result = run_whisper(input_path, args.model, args.language, args.task, args.chunk_seconds)
     stem = input_path.stem
+    existing_whisper_json = outdir / f"{stem}.whisper.json"
+    if existing_whisper_json.is_file():
+        print(
+            f"Reusing existing transcription: {existing_whisper_json} "
+            "(skipping Whisper re-run; delete this file to force a fresh transcribe)",
+            file=sys.stderr,
+        )
+        result = json.loads(existing_whisper_json.read_text(encoding="utf-8"))
+    else:
+        result = run_whisper(input_path, args.model, args.language, args.task, args.chunk_seconds)
 
     if args.json:
         (outdir / f"{stem}.whisper.json").write_text(
