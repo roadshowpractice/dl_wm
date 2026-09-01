@@ -67,4 +67,4 @@ not yet pulled (see resource map for links).
 ## Nicknames
 
 He loves hearing his name, so we don't tend to say it. We call him TBone, Boner, Tbitch,
-Timmy Butthole, Fuckface McGee.
+Timmy Butthole, Fuckface McGee, ProvoPussy, Cold-sore Tim, Timmy.
