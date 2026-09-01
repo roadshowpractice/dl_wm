@@ -63,3 +63,8 @@ Detail lives in `docs/subject/` so this file stays short:
 when supplied); court docket numbers to cross-check ACJ's copies against PACER/the state docket;
 the ACJ "Public Claims & Narratives," "Financial Archive," and "Whiteboard Meeting" subsections
 not yet pulled (see resource map for links).
+
+## Nicknames
+
+He loves hearing his name, so we don't tend to say it. We call him TBone, Boner, Tbitch,
+Timmy Butthole, Fuckface McGee.
