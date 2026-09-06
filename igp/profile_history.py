@@ -10,6 +10,7 @@ Writes <outdir>/<username>_timeline.jsonl, one record per post, oldest first.
 """
 import asyncio
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -60,10 +61,21 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6):
     stall_rounds = 0
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--disable-gpu", "--single-process", "--no-zygote"],
+        )
         context = await browser.new_context(
-            viewport={"width": 1280, "height": 2200},
+            viewport={"width": 1024, "height": 800},
             user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36",
+        )
+        # We only read JSON network responses, never render anything visually —
+        # blocking image/media/font/stylesheet loads cuts memory drastically
+        # (this machine has 3.2GB RAM total and a full Chromium render of IG's
+        # image-heavy grid was OOM-killing the scrape).
+        await context.route(
+            re.compile(r".*\.(png|jpg|jpeg|webp|gif|svg|woff2?|ttf|mp4|css)(\?.*)?$"),
+            lambda route: route.abort(),
         )
         cookies = load_netscape_cookies(cookie_file)
         if cookies:
