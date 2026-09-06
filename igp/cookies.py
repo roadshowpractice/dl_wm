@@ -31,6 +31,16 @@ def load_netscape_cookies(path: Path):
         except Exception:
             expires_i = -1
 
+        # Some browser cookie exports (e.g. yt-dlp --cookies-from-browser) leak
+        # a raw, unconverted epoch value for a handful of fields (seen: a "wd"
+        # cookie with expires=13433699653000000 — several orders of magnitude
+        # past any real date). Playwright rejects any positive expires that
+        # isn't a plausible Unix timestamp, so clamp anything past ~year 2100
+        # down to a session cookie rather than failing the whole batch.
+        MAX_REASONABLE_EXPIRES = 4102444800  # 2100-01-01T00:00:00Z
+        if expires_i > MAX_REASONABLE_EXPIRES:
+            expires_i = -1
+
         cookies.append(
             {
                 "name": name,
