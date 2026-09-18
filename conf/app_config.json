@@ -1,7 +1,7 @@
 {
   "_comment": "Application-wide defaults for download, metadata, watermarking and rendering.",
   "video_download": {
-    "format": "bestvideo[height<=?1080]+bestaudio/best",
+    "format": "bestvideo[height<=?480]+bestaudio/best",
     "bitrate": "5000k",
     "noplaylist": true,
     "instagram_cookie_path": "conf/instagram.cookies.txt",
@@ -9,9 +9,9 @@
     "youtube_cookie_path": "conf/youtube.cookies.1.txt",
     "cookie_hierarchy": {
       "instagram": [
+        "conf/insta.justin.txt",
         "conf/instagram.cookies.txt",
-        "conf/instagram.cookies.2.txt",
-        "conf/insta.justin.txt"
+        "conf/instagram.cookies.2.txt"
       ],
       "facebook": [
         "conf/facebook.cookies.txt"
@@ -92,14 +92,14 @@
         "name": "web_cookie_file",
         "use_remote_components": true,
         "cookies_mode": "file",
-        "format": "bestvideo[height<=?1080]+bestaudio/best"
+        "format": "bestvideo[height<=?480]+bestaudio/best"
       },
       {
         "name": "web_browser_firefox",
         "use_remote_components": true,
         "cookies_mode": "browser",
         "browser": "firefox",
-        "format": "bestvideo[height<=?1080]+bestaudio/best"
+        "format": "bestvideo[height<=?480]+bestaudio/best"
       },
       {
         "name": "android_fallback",

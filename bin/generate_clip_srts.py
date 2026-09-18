@@ -84,6 +84,11 @@ def load_clips(jsonl_path: Path) -> list[dict[str, Any]]:
 
             if not isinstance(clip_id, str) or not clip_id.strip():
                 raise ValueError(f"Clip row at line {lineno} is missing a valid clip_id")
+
+            if row.get("card_only"):
+                # No underlying footage to caption for a standalone reaction card.
+                continue
+
             try:
                 clip_start = float(start)
                 clip_end = float(end)

@@ -87,16 +87,43 @@ def frame_diff_scores(frames: list[Path], fps: float) -> list[tuple[float, float
     return scores
 
 
-def find_cut_bounds(scores: list[tuple[float, float]], duration: float, threshold: float, min_gap: float) -> list[float]:
+def raw_segments_from_scores(scores: list[tuple[float, float]], duration: float, threshold: float) -> list[tuple[float, float]]:
     cuts = [t for t, s in scores if s > threshold]
     bounds = [0.0] + cuts + [duration]
-    merged = [bounds[0]]
-    for b in bounds[1:]:
-        if b - merged[-1] >= min_gap:
-            merged.append(b)
+    return list(zip(bounds[:-1], bounds[1:]))
+
+
+def merge_flicker_runs(
+    segments: list[tuple[float, float]], flicker_threshold: float
+) -> list[tuple[float, float, list[int]]]:
+    """Collapse runs of consecutive short segments (e.g. a title card whose
+    text fades in over several rapid sub-cuts, each scoring above the diff
+    threshold on its own) into one segment per run.
+
+    A segment only joins the current run if it AND its immediate predecessor
+    are both shorter than flicker_threshold - so an isolated short segment
+    sandwiched between two long ones (a brief but real cutaway: a screenshot
+    insert, a quick B-roll photo) has no short neighbor on at least one side
+    and is left standing on its own, not merged away. This is what a single
+    "merge anything closer than min_gap to the last kept boundary" rule
+    (the previous approach) got wrong - it could absorb a real 1-4s cutaway
+    into a neighboring talking-head segment with no way to tell afterward
+    that it had ever been its own scene.
+
+    Returns (start, end, raw_indices) per merged group - raw_indices lets
+    the caller still take one screenshot per ORIGINAL raw segment even
+    inside a merged group, so nothing that was its own segment pre-merge
+    ever loses its own screenshot.
+    """
+    groups: list[list[int]] = [[0]]
+    for i in range(1, len(segments)):
+        prev_dur = segments[i - 1][1] - segments[i - 1][0]
+        this_dur = segments[i][1] - segments[i][0]
+        if prev_dur < flicker_threshold and this_dur < flicker_threshold:
+            groups[-1].append(i)
         else:
-            merged[-1] = b
-    return merged
+            groups.append([i])
+    return [(segments[g[0]][0], segments[g[-1]][1], g) for g in groups]
 
 
 def extract_segment(video: Path, start: float, end: float, out_path: Path) -> None:
@@ -116,22 +143,51 @@ def extract_screenshot(video: Path, timestamp: float, out_path: Path) -> None:
     )
 
 
-def write_gallery(screenshots_dir: Path, title: str) -> Path:
-    files = sorted(screenshots_dir.glob("clip_*.jpg"))
-    cells = "".join(
-        f'<div class="cell"><img src="file://{f}" loading="lazy"><div class="cap">{f.name}</div></div>'
-        for f in files
-    )
+def format_timestamp(seconds: float) -> str:
+    m, s = divmod(seconds, 60)
+    return f"{int(m):02d}:{s:05.2f}"
+
+
+def sub_label(i: int) -> str:
+    """0 -> '', 1 -> 'a', 2 -> 'b', ... for naming raw sub-segments within a merged clip."""
+    return "" if i == 0 else chr(ord("a") + i - 1)
+
+
+def write_gallery(
+    screenshots_dir: Path,
+    title: str,
+    raw_segments: list[tuple[float, float]],
+    groups: list[tuple[float, float, list[int]]],
+) -> Path:
+    group_html = []
+    for gi, (gs, ge, raw_indices) in enumerate(groups, start=1):
+        clip_id = f"clip_{gi:02d}"
+        flicker_note = f" &mdash; {len(raw_indices)} sub-frames (merged, likely one animated card)" if len(raw_indices) > 1 else ""
+        cells = []
+        for k, ri in enumerate(raw_indices):
+            rs, re_ = raw_segments[ri]
+            fname = f"{clip_id}{sub_label(k)}.jpg"
+            f = screenshots_dir / fname
+            cells.append(
+                f'<div class="cell"><img src="file://{f}" loading="lazy">'
+                f'<div class="cap">{fname} &mdash; {format_timestamp(rs)}-{format_timestamp(re_)}</div></div>'
+            )
+        group_html.append(
+            f'<div class="group"><h4>{clip_id} &mdash; {format_timestamp(gs)}-{format_timestamp(ge)}{flicker_note}</h4>'
+            f'<div class="grid">{"".join(cells)}</div></div>'
+        )
     html = f"""<!doctype html><html><head><meta charset="utf-8">
 <title>{title}</title>
 <style>
 body{{background:#111;color:#eee;font-family:sans-serif;margin:0;padding:12px}}
+.group{{margin-bottom:18px;border-top:1px solid #333;padding-top:8px}}
+.group h4{{margin:0 0 6px 0;font-size:14px;color:#9cf}}
 .grid{{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}}
 .cell img{{width:100%;display:block;border:1px solid #333}}
 .cap{{font-size:12px;text-align:center;padding:2px}}
 </style></head><body>
-<h3>{title} &mdash; {len(files)} scene(s)</h3>
-<div class="grid">{cells}</div>
+<h3>{title} &mdash; {len(groups)} scene(s), {len(raw_segments)} raw sub-frame(s)</h3>
+{"".join(group_html)}
 </body></html>"""
     out = screenshots_dir / "gallery.html"
     out.write_text(html)
@@ -140,36 +196,54 @@ body{{background:#111;color:#eee;font-family:sans-serif;margin:0;padding:12px}}
 
 @dataclass
 class SceneSplitResult:
-    segments: list[tuple[float, float]]
+    groups: list[tuple[float, float, list[int]]]
+    raw_segments: list[tuple[float, float]]
     clips_dir: Path
     screenshots_dir: Path
     gallery: Path
 
 
-def run(video: Path, out_dir: Path, fps: float, threshold: float, min_gap: float) -> SceneSplitResult:
+def run(video: Path, out_dir: Path, fps: float, threshold: float, flicker_threshold: float) -> SceneSplitResult:
     duration = ffprobe_duration(video)
     frames_dir = out_dir / "_diff_frames"
     frames = extract_sample_frames(video, frames_dir, fps)
     scores = frame_diff_scores(frames, fps)
-    bounds = find_cut_bounds(scores, duration, threshold, min_gap)
+    raw_segments = raw_segments_from_scores(scores, duration, threshold)
+    groups = merge_flicker_runs(raw_segments, flicker_threshold)
 
     clips_dir = out_dir / "clips"
     screenshots_dir = out_dir / "screenshots"
     clips_dir.mkdir(parents=True, exist_ok=True)
     screenshots_dir.mkdir(parents=True, exist_ok=True)
 
-    segments = list(zip(bounds[:-1], bounds[1:]))
-    for i, (s, e) in enumerate(segments, start=1):
-        idx = f"{i:02d}"
-        mid = (s + e) / 2
-        extract_segment(video, s, e, clips_dir / f"clip_{idx}.mp4")
-        extract_screenshot(video, mid, screenshots_dir / f"clip_{idx}.jpg")
+    for gi, (gs, ge, raw_indices) in enumerate(groups, start=1):
+        clip_id = f"clip_{gi:02d}"
+        extract_segment(video, gs, ge, clips_dir / f"{clip_id}.mp4")
+        # One screenshot per RAW sub-segment, not per merged group - a real
+        # cutaway that got merged into a flicker run (see merge_flicker_runs)
+        # still gets its own screenshot instead of being hidden behind the
+        # group's single midpoint frame.
+        for k, ri in enumerate(raw_indices):
+            rs, re_ = raw_segments[ri]
+            mid = (rs + re_) / 2
+            extract_screenshot(video, mid, screenshots_dir / f"{clip_id}{sub_label(k)}.jpg")
 
-    gallery = write_gallery(screenshots_dir, video.name)
+    gallery = write_gallery(screenshots_dir, video.name, raw_segments, groups)
 
     segments_json = out_dir / "segments.json"
     segments_json.write_text(json.dumps(
-        [{"clip_id": f"clip_{i:02d}", "start": s, "end": e} for i, (s, e) in enumerate(segments, start=1)],
+        [
+            {
+                "clip_id": f"clip_{gi:02d}",
+                "start": gs,
+                "end": ge,
+                "raw": [
+                    {"screenshot": f"clip_{gi:02d}{sub_label(k)}.jpg", "start": raw_segments[ri][0], "end": raw_segments[ri][1]}
+                    for k, ri in enumerate(raw_indices)
+                ],
+            }
+            for gi, (gs, ge, raw_indices) in enumerate(groups, start=1)
+        ],
         indent=2,
     ))
 
@@ -178,7 +252,7 @@ def run(video: Path, out_dir: Path, fps: float, threshold: float, min_gap: float
         f.unlink()
     frames_dir.rmdir()
 
-    return SceneSplitResult(segments, clips_dir, screenshots_dir, gallery)
+    return SceneSplitResult(groups, raw_segments, clips_dir, screenshots_dir, gallery)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -187,7 +261,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out-dir", default=None, help="Output dir (default: <video_dir>/scene_clips)")
     parser.add_argument("--fps", type=float, default=5.0, help="Sampling rate for diffing (default: 5)")
     parser.add_argument("--threshold", type=float, default=50.0, help="Mean-abs-diff cut threshold on a 0-255 scale, 64x64 grayscale (default: 50)")
-    parser.add_argument("--min-gap", type=float, default=1.0, help="Merge cuts closer than this many seconds (default: 1.0)")
+    parser.add_argument(
+        "--flicker-threshold", type=float, default=2.0,
+        help="Segments shorter than this many seconds only merge with an equally-short neighbor "
+             "(collapses a title card's multi-cut fade-in animation into one clip) - an isolated "
+             "short segment between two longer ones (a real brief cutaway) is left standing on its "
+             "own and still gets its own screenshot either way (default: 2.0)",
+    )
     return parser.parse_args(argv)
 
 
@@ -200,8 +280,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     out_dir = Path(args.out_dir).expanduser().resolve() if args.out_dir else video.parent / "scene_clips"
 
-    result = run(video, out_dir, args.fps, args.threshold, args.min_gap)
-    print(f"segments: {len(result.segments)}")
+    result = run(video, out_dir, args.fps, args.threshold, args.flicker_threshold)
+    print(f"scenes: {len(result.groups)} (from {len(result.raw_segments)} raw sub-frames)")
     print(f"clips: {result.clips_dir}")
     print(f"screenshots: {result.screenshots_dir}")
     print(f"gallery: {result.gallery}")

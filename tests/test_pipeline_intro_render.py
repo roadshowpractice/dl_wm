@@ -9,7 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 REAL_FONT_BYTES = (REPO_ROOT / "fonts" / "Inter-Bold.otf").read_bytes()
 
 from pipeline import render as render_module
-from pipeline.intro import _resolve_output_dimensions, render_intro_manifest
+from pipeline.intro import _card_duration_seconds, _resolve_output_dimensions, render_intro_manifest
 from pipeline.render import prepare_make_final_film_inputs
 from pipeline.utils import (
     ClipEntry,
@@ -36,6 +36,35 @@ def read_png_dimensions(path: Path) -> tuple[int, int]:
         raise ValueError(f"Not a PNG file: {path}")
     width, height = struct.unpack(">II", data[16:24])
     return width, height
+
+
+class CardDurationTests(unittest.TestCase):
+    def test_short_comment_uses_floor(self):
+        self.assertEqual(
+            _card_duration_seconds("Break", min_seconds=2.0, seconds_per_word=0.45, max_seconds=20.0),
+            2.0,
+        )
+
+    def test_long_comment_scales_past_floor(self):
+        text = " ".join(["word"] * 20)
+        self.assertAlmostEqual(
+            _card_duration_seconds(text, min_seconds=2.0, seconds_per_word=0.45, max_seconds=20.0),
+            9.0,
+        )
+
+    def test_long_comment_is_capped(self):
+        text = " ".join(["word"] * 200)
+        self.assertEqual(
+            _card_duration_seconds(text, min_seconds=2.0, seconds_per_word=0.45, max_seconds=20.0),
+            20.0,
+        )
+
+    def test_uncapped_when_max_seconds_is_none(self):
+        text = " ".join(["word"] * 200)
+        self.assertEqual(
+            _card_duration_seconds(text, min_seconds=2.0, seconds_per_word=0.45, max_seconds=None),
+            90.0,
+        )
 
 
 class IntroStageTests(unittest.TestCase):
@@ -101,6 +130,235 @@ class IntroStageTests(unittest.TestCase):
                 (tmpdir / "intro" / "clip01__concat.txt").read_text(encoding="utf-8"),
             )
             self.assertEqual(read_png_dimensions(tmpdir / "intro" / "clip01.card.png"), (1920, 1080))
+
+    def test_render_intro_manifest_scales_card_duration_with_comment_length(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            source_clip = tmpdir / "subbed" / "clip01.mp4"
+            source_clip.parent.mkdir(parents=True, exist_ok=True)
+            source_clip.write_bytes(b"clip")
+
+            font_path = tmpdir / "font.ttf"
+            font_path.write_bytes(REAL_FONT_BYTES)
+
+            long_comment = " ".join(["word"] * 20)
+            manifest = ClipsManifest(
+                source_video="source.mp4",
+                clips=[
+                    ClipEntry(clip_id="clip01", start=0.0, end=5.0, path=str(source_clip), comment=long_comment)
+                ],
+            )
+
+            commands: list[list[str]] = []
+
+            def fake_run(cmd: list[str]) -> None:
+                commands.append(cmd)
+                Path(cmd[-1]).write_bytes(b"video")
+
+            with patch("pipeline.intro.probe_video_dimensions", return_value=(1920, 1080)), patch(
+                "pipeline.intro.run_cmd", side_effect=fake_run
+            ):
+                render_intro_manifest(
+                    manifest,
+                    output_dir=tmpdir / "intro",
+                    font=font_path,
+                    intro_seconds=2.0,
+                    seconds_per_word=0.45,
+                    max_intro_seconds=20.0,
+                )
+
+            _, card_cmd, _ = commands
+            assert_has_subsequence(self, card_cmd, ["-t", "9.0"])
+
+    def test_render_intro_manifest_card_only_skips_source_clip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            font_path = tmpdir / "font.ttf"
+            font_path.write_bytes(REAL_FONT_BYTES)
+
+            manifest = ClipsManifest(
+                source_video="source.mp4",
+                clips=[
+                    ClipEntry(
+                        clip_id="beat01",
+                        start=0.0,
+                        end=0.0,
+                        path="",
+                        comment="A standalone reaction card, no underlying clip.",
+                        card_only=True,
+                    )
+                ],
+                render=RenderSettings(width=1920, height=1080),
+            )
+
+            commands: list[list[str]] = []
+
+            def fake_run(cmd: list[str]) -> None:
+                commands.append(cmd)
+                Path(cmd[-1]).write_bytes(b"video")
+
+            with patch("pipeline.intro.run_cmd", side_effect=fake_run):
+                updated = render_intro_manifest(
+                    manifest,
+                    output_dir=tmpdir / "intro",
+                    font=font_path,
+                    intro_seconds=2.0,
+                )
+
+            # Only the card ffmpeg call should run - no source normalize/concat steps.
+            self.assertEqual(len(commands), 1)
+            assert_has_subsequence(self, commands[0], ["-loop", "1"])
+
+            clip = updated.clips[0]
+            self.assertTrue(clip.card_only)
+            self.assertEqual(clip.path, str(tmpdir / "intro" / "beat01.mp4"))
+            self.assertTrue((tmpdir / "intro" / "beat01.mp4").exists())
+
+    def test_render_intro_manifest_card_only_uses_real_image_and_fixed_duration(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            font_path = tmpdir / "font.ttf"
+            font_path.write_bytes(REAL_FONT_BYTES)
+
+            source_image = tmpdir / "evidence.png"
+            source_image.write_bytes(b"fake-png-bytes")
+
+            manifest = ClipsManifest(
+                source_video="source.mp4",
+                clips=[
+                    ClipEntry(
+                        clip_id="beat01",
+                        start=0.0,
+                        end=0.0,
+                        path="",
+                        comment="",
+                        card_only=True,
+                        image_path=str(source_image),
+                        duration_seconds=6.0,
+                    )
+                ],
+                render=RenderSettings(width=1920, height=1080),
+            )
+
+            commands: list[list[str]] = []
+
+            def fake_run(cmd: list[str]) -> None:
+                commands.append(cmd)
+                Path(cmd[-1]).write_bytes(b"video")
+
+            with patch("pipeline.intro.run_cmd", side_effect=fake_run):
+                updated = render_intro_manifest(
+                    manifest,
+                    output_dir=tmpdir / "intro",
+                    font=font_path,
+                    intro_seconds=2.0,
+                )
+
+            # Only one ffmpeg call - it loops the real image directly, no generated text card.
+            self.assertEqual(len(commands), 1)
+            assert_has_subsequence(self, commands[0], ["-i", str(source_image)])
+            assert_has_subsequence(self, commands[0], ["-t", "6.0"])
+            self.assertFalse((tmpdir / "intro" / "beat01.card.png").exists())
+
+            clip = updated.clips[0]
+            self.assertEqual(clip.image_path, str(source_image))
+            self.assertEqual(clip.duration_seconds, 6.0)
+            self.assertTrue((tmpdir / "intro" / "beat01.mp4").exists())
+
+    def test_render_intro_manifest_card_only_uses_real_voiceover_audio(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            font_path = tmpdir / "font.ttf"
+            font_path.write_bytes(REAL_FONT_BYTES)
+
+            source_image = tmpdir / "evidence.png"
+            source_image.write_bytes(b"fake-png-bytes")
+            voiceover = tmpdir / "voiceover.mp3"
+            voiceover.write_bytes(b"fake-mp3-bytes")
+
+            manifest = ClipsManifest(
+                source_video="source.mp4",
+                clips=[
+                    ClipEntry(
+                        clip_id="beat01",
+                        start=0.0,
+                        end=0.0,
+                        path="",
+                        comment="",
+                        card_only=True,
+                        image_path=str(source_image),
+                        audio_path=str(voiceover),
+                    )
+                ],
+                render=RenderSettings(width=1920, height=1080),
+            )
+
+            commands: list[list[str]] = []
+
+            def fake_run(cmd: list[str]) -> None:
+                commands.append(cmd)
+                Path(cmd[-1]).write_bytes(b"video")
+
+            with patch("pipeline.intro.probe_audio_duration", return_value=11.5), patch(
+                "pipeline.intro.run_cmd", side_effect=fake_run
+            ):
+                updated = render_intro_manifest(
+                    manifest,
+                    output_dir=tmpdir / "intro",
+                    font=font_path,
+                    intro_seconds=2.0,
+                )
+
+            self.assertEqual(len(commands), 1)
+            # Real voiceover audio is used as the second ffmpeg input instead of anullsrc.
+            assert_has_subsequence(self, commands[0], ["-i", str(source_image), "-i", str(voiceover)])
+            self.assertNotIn(normalized_anullsrc(), commands[0])
+            # Card duration comes from the audio's own probed length, not a manual override.
+            assert_has_subsequence(self, commands[0], ["-t", "11.5"])
+
+            clip = updated.clips[0]
+            self.assertEqual(clip.audio_path, str(voiceover))
+
+    def test_render_intro_manifest_empty_comment_skips_card(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            source_clip = tmpdir / "subbed" / "clip01.mp4"
+            source_clip.parent.mkdir(parents=True, exist_ok=True)
+            source_clip.write_bytes(b"clip")
+
+            font_path = tmpdir / "font.ttf"
+            font_path.write_bytes(REAL_FONT_BYTES)
+
+            manifest = ClipsManifest(
+                source_video="source.mp4",
+                clips=[
+                    ClipEntry(clip_id="clip01", start=0.0, end=5.0, path=str(source_clip), comment="")
+                ],
+                render=RenderSettings(width=1920, height=1080),
+            )
+
+            commands: list[list[str]] = []
+
+            def fake_run(cmd: list[str]) -> None:
+                commands.append(cmd)
+                Path(cmd[-1]).write_bytes(b"video")
+
+            with patch("pipeline.intro.run_cmd", side_effect=fake_run):
+                updated = render_intro_manifest(
+                    manifest,
+                    output_dir=tmpdir / "intro",
+                    font=font_path,
+                    intro_seconds=2.0,
+                )
+
+            # Only one ffmpeg call (plain normalize) - no card/concat steps.
+            self.assertEqual(len(commands), 1)
+            self.assertNotIn("-loop", commands[0])
+
+            clip = updated.clips[0]
+            self.assertEqual(clip.path, str(tmpdir / "intro" / "clip01.mp4"))
+            self.assertFalse((tmpdir / "intro" / "clip01.card.png").exists())
+            self.assertTrue((tmpdir / "intro" / "clip01.mp4").exists())
 
     def test_render_intro_manifest_normalizes_audio_for_card_black_and_concat(self):
         with tempfile.TemporaryDirectory() as tmp:
