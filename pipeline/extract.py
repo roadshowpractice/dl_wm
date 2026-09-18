@@ -72,6 +72,8 @@ def main() -> None:
         if not clip_id:
             raise ValueError(f"JSONL row {idx} missing clip_id/id")
 
+        card_only = bool(row.get("card_only", False))
+
         try:
             start = parse_timecode(row["start"])
         except KeyError:
@@ -86,7 +88,7 @@ def main() -> None:
         except ValueError as exc:
             raise ValueError(f"JSONL row {idx} has invalid end: {row.get('end')!r}") from exc
 
-        if end <= start:
+        if end <= start and not card_only:
             raise ValueError(f"JSONL row {idx} has end <= start")
 
         comment = str(row.get("comment") or row.get("caption") or "")
@@ -108,34 +110,51 @@ def main() -> None:
             elif row_title_seconds != title_seconds:
                 raise ValueError("JSONL rows contain inconsistent title_seconds values")
 
-        clip_path = output_dir / f"{clip_id}.mp4"
-        run_cmd(
-            [
-                "ffmpeg",
-                "-y",
-                "-ss",
-                str(start),
-                "-to",
-                str(end),
-                "-i",
-                str(source_video),
-                *normalized_video_codec_args(fps=args.fps, crf=args.crf),
-                *normalized_audio_codec_args(),
-                "-af",
-                normalized_concat_audio_filter(),
-                "-movflags",
-                "+faststart",
-                str(clip_path),
-            ]
-        )
+        if card_only:
+            clip_path = ""
+        else:
+            clip_path_obj = output_dir / f"{clip_id}.mp4"
+            run_cmd(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    str(start),
+                    "-to",
+                    str(end),
+                    "-i",
+                    str(source_video),
+                    *normalized_video_codec_args(fps=args.fps, crf=args.crf),
+                    *normalized_audio_codec_args(),
+                    "-af",
+                    normalized_concat_audio_filter(),
+                    "-movflags",
+                    "+faststart",
+                    str(clip_path_obj),
+                ]
+            )
+            clip_path = str(clip_path_obj)
+
+        row_image_path = row.get("image_path")
+        image_path = str(row_image_path) if row_image_path not in (None, "") else None
+
+        row_duration_seconds = row.get("duration_seconds")
+        duration_seconds = float(row_duration_seconds) if row_duration_seconds not in (None, "") else None
+
+        row_audio_path = row.get("audio_path")
+        audio_path = str(row_audio_path) if row_audio_path not in (None, "") else None
 
         manifest_clips.append(
             ClipEntry(
                 clip_id=clip_id,
                 start=start,
                 end=end,
-                path=str(clip_path),
+                path=clip_path,
                 comment=comment,
+                card_only=card_only,
+                image_path=image_path,
+                duration_seconds=duration_seconds,
+                audio_path=audio_path,
             )
         )
 

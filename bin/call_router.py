@@ -27,7 +27,9 @@ TASK_DISPATCH = {
     "generate_srt": "bin/call_captions.py",
     "burn_srt": "bin/call_burn_srt.py",
     # Convert screenshot timestamps after all other tasks
-    "post_processed": "bin/convert_screenshots.py"
+    "post_processed": "bin/convert_screenshots.py",
+    "split_scenes": "bin/call_split_scenes.py",
+    "render_reverse": "bin/call_render_reverse.py",
 }
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 

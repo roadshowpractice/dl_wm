@@ -16,6 +16,7 @@ from .utils import (
     normalized_audio_codec_args,
     normalized_concat_audio_filter,
     normalized_video_codec_args,
+    probe_audio_duration,
     probe_video_dimensions,
     run_cmd,
     validate_clips_manifest,
@@ -59,6 +60,20 @@ def _wrap_text_lines(text: str, *, font: ImageFont.FreeTypeFont, draw: ImageDraw
         lines.append(current)
 
     return lines or [""]
+
+
+def _card_duration_seconds(
+    text: str,
+    *,
+    min_seconds: float,
+    seconds_per_word: float,
+    max_seconds: float | None,
+) -> float:
+    word_count = len((text or "").split())
+    duration = max(min_seconds, word_count * seconds_per_word)
+    if max_seconds is not None:
+        duration = min(duration, max(max_seconds, min_seconds))
+    return duration
 
 
 def _render_intro_card_png(
@@ -128,7 +143,24 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--width", type=int)
     parser.add_argument("--height", type=int)
     parser.add_argument("--fps", type=int, default=30)
-    parser.add_argument("--intro-seconds", type=float, default=2.0)
+    parser.add_argument(
+        "--intro-seconds",
+        type=float,
+        default=2.0,
+        help="Minimum card duration in seconds (longer comments extend past this, see --seconds-per-word)",
+    )
+    parser.add_argument(
+        "--seconds-per-word",
+        type=float,
+        default=0.45,
+        help="Extra card seconds per word in the comment, so longer break-card text gets more time on screen",
+    )
+    parser.add_argument(
+        "--max-intro-seconds",
+        type=float,
+        default=20.0,
+        help="Cap on card duration regardless of comment length; pass a value <= --intro-seconds to disable scaling",
+    )
     parser.add_argument("--black-seconds", type=float, default=0.0, help="Optional black spacer duration; 0 disables")
     return parser
 
@@ -142,6 +174,8 @@ def render_intro_manifest(
     height: int | None = None,
     fps: int = 30,
     intro_seconds: float = 2.0,
+    seconds_per_word: float = 0.45,
+    max_intro_seconds: float | None = 20.0,
     black_seconds: float = 0.0,
 ) -> ClipsManifest:
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -150,9 +184,118 @@ def render_intro_manifest(
 
     updated: list[ClipEntry] = []
     for clip in manifest.clips:
+        if clip.card_only:
+            final_file = output_dir / f"{clip.clip_id}.mp4"
+
+            if clip.image_path:
+                card_source_path = Path(clip.image_path)
+                if not card_source_path.exists():
+                    raise FileNotFoundError(f"Missing image_path referenced by manifest: {card_source_path}")
+                card_vf = (
+                    f"scale={resolved_width}:{resolved_height}:force_original_aspect_ratio=decrease,"
+                    f"pad={resolved_width}:{resolved_height}:(ow-iw)/2:(oh-ih)/2:black,"
+                    f"fps={fps},format=yuv420p"
+                )
+            else:
+                card_source_path = output_dir / f"{clip.clip_id}.card.png"
+                _render_intro_card_png(
+                    card_text=clip.comment or clip.clip_id,
+                    width=resolved_width,
+                    height=resolved_height,
+                    font_path=font,
+                    output_path=card_source_path,
+                )
+                card_vf = f"fps={fps},format=yuv420p"
+
+            audio_path: Path | None = None
+            if clip.audio_path:
+                audio_path = Path(clip.audio_path)
+                if not audio_path.exists():
+                    raise FileNotFoundError(f"Missing audio_path referenced by manifest: {audio_path}")
+
+            if clip.duration_seconds is not None:
+                card_duration = clip.duration_seconds
+            elif audio_path is not None:
+                card_duration = probe_audio_duration(audio_path)
+            else:
+                card_duration = _card_duration_seconds(
+                    clip.comment or clip.clip_id,
+                    min_seconds=intro_seconds,
+                    seconds_per_word=seconds_per_word,
+                    max_seconds=max_intro_seconds,
+                )
+
+            audio_input_args = ["-i", str(audio_path)] if audio_path is not None else ["-f", "lavfi", "-i", normalized_anullsrc()]
+
+            run_cmd(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-loop",
+                    "1",
+                    "-i",
+                    str(card_source_path),
+                    *audio_input_args,
+                    "-t",
+                    str(card_duration),
+                    "-vf",
+                    card_vf,
+                    *normalized_video_codec_args(fps=fps),
+                    *normalized_audio_codec_args(),
+                    "-shortest",
+                    str(final_file),
+                ]
+            )
+
+            updated.append(
+                ClipEntry(
+                    clip_id=clip.clip_id,
+                    start=clip.start,
+                    end=clip.end,
+                    path=str(final_file),
+                    comment=clip.comment,
+                    srt_path=clip.srt_path,
+                    card_only=True,
+                    image_path=clip.image_path,
+                    duration_seconds=clip.duration_seconds,
+                    audio_path=clip.audio_path,
+                )
+            )
+            continue
+
         clip_src = Path(clip.path)
         if not clip_src.exists():
             raise FileNotFoundError(f"Missing clip referenced by manifest: {clip_src}")
+
+        if not clip.comment:
+            # No comment means no card at all - just the raw clip, normalized in place.
+            final_file = output_dir / f"{clip.clip_id}.mp4"
+            run_cmd(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(clip_src),
+                    "-vf",
+                    f"scale={resolved_width}:{resolved_height}:force_original_aspect_ratio=decrease,"
+                    f"pad={resolved_width}:{resolved_height}:(ow-iw)/2:(oh-ih)/2:black,"
+                    f"fps={fps},format=yuv420p",
+                    *normalized_video_codec_args(fps=fps),
+                    *normalized_audio_codec_args(),
+                    str(final_file),
+                ]
+            )
+            updated.append(
+                ClipEntry(
+                    clip_id=clip.clip_id,
+                    start=clip.start,
+                    end=clip.end,
+                    path=str(final_file),
+                    comment=clip.comment,
+                    srt_path=clip.srt_path,
+                )
+            )
+            continue
 
         normalized_clip_path = output_dir / f"{clip.clip_id}.normalized.mp4"
 
@@ -186,6 +329,13 @@ def render_intro_manifest(
             output_path=intro_card_png_path,
         )
 
+        card_duration = _card_duration_seconds(
+            clip.comment or clip.clip_id,
+            min_seconds=intro_seconds,
+            seconds_per_word=seconds_per_word,
+            max_seconds=max_intro_seconds,
+        )
+
         run_cmd(
             [
                 "ffmpeg",
@@ -199,7 +349,7 @@ def render_intro_manifest(
                 "-i",
                 normalized_anullsrc(),
                 "-t",
-                str(intro_seconds),
+                str(card_duration),
                 "-vf",
                 f"fps={fps},format=yuv420p",
                 *normalized_video_codec_args(fps=fps),
@@ -308,6 +458,8 @@ def main() -> None:
         height=args.height,
         fps=args.fps,
         intro_seconds=args.intro_seconds,
+        seconds_per_word=args.seconds_per_word,
+        max_intro_seconds=args.max_intro_seconds,
         black_seconds=args.black_seconds,
     )
     dump_json(Path(args.manifest_out), dataclass_to_dict(out_manifest))

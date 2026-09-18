@@ -4,6 +4,55 @@ Part of the [Subject](../../SUBJECT.md) documentation set. Log of talk-page post
 `JustinR1970`/Norman bot account (`~/Documents/repos/veritastimmy`), so future sessions know
 what's already out there and what to check on.
 
+## 2026-09-17
+
+**Source staged, not yet drafted into article text.** Downloaded + transcribed a Facebook video
+posted by Tim Ballard (`officialtimballard`), Sept 17 2026, "Part 2 of 2" of a pair marking the
+third anniversary of what he calls "Defamation Day" (Sept 15). Local copy:
+`outputs/manual/1780261423101922_Video_wm.mp4`, transcript `outputs/manual/
+1780261423101922_Video_wm.srt`. Self-published, WP:ABOUTSELF only — cite as "Ballard said/
+announced X," never as fact.
+
+Citable content identified: Ballard announces a sequel, **"Backfire 2,"** exact quote —
+"So Backfire 2 is going to be coming out." — no release date, platform, or further detail given
+anywhere else in the video. This is the only new-release announcement in the transcript; worth a
+line in the Media appearances / filmography area alongside the existing Backfire /
+`File:Hiddenwarpromo.jpg` material once there's more than a one-line announcement to source (a
+bare "coming out" mention with no date is thin).
+
+**Deliberately not drafted:** the same video contains extensive, uncorroborated allegations
+naming a podcaster ("Jason Preston") and a second podcaster (name unclear on transcription,
+possibly "Leonard H. Chad") plus claims that multiple LDS stake presidents were excommunicated
+for refusing orders related to Ballard's own case. These are BLP-risk claims about identifiable
+third parties, not just self-reporting about Ballard — held back this session per explicit
+instruction, not drafted into any page or talk-page proposal. A companion video from the same
+day (Katherine Ballard, "Part 1 of 2") was reviewed in the same session and is also being held
+back in full (see [[feedback_tim_ballard_wiki_legal_caution]]-adjacent caution — one line in it
+gestures at "my husband's innocence proven in court," which sits close enough to the still-
+pending Suarez v. Ballard matter to warrant the same wait-for-ruling treatment).
+
+## 2026-08-31
+
+**Sound of Freedom (film)** — added a paragraph to `===Accuracy===`, rev
+`1372477709`, via `wiki_replace_edit.py` (dry-run verified first). Sourced
+to Noticias Caracol (Colombian TV), independent journalism, not
+Ballard-self-report: the real "Operación Cristal 2" sting (Cartagena, Oct
+2014) that inspired the film — 54 minors rescued (corroborates the film's
+own number, which the existing article text already has Ballard disputing
+upward to 123), 5 prosecuted/4 convicted/16-year sentences/1 acquitted, and
+the detail not present anywhere else in this project's material: sentences
+upheld on appeal a decade later but all four convicted traffickers
+currently free on expired legal deadlines, authorities seeking to
+recapture them. Full research trail: `veritastimmy/docs/tb_cartagena_sources_2026-08-31.md`,
+`tb_untouched_batch_wiki_claim_sort_2026-08-31.md` (this fact went through
+a same-day correction cycle — downgraded as unconfirmed against written
+recap articles, then restored after being verified word-for-word against
+the broadcast's own SRT — see that doc's update notes). Does not touch the
+Suárez v. Angel Studios/Ballard defamation case (separate, still-guarded
+topic, see [[feedback_tim_ballard_wiki_legal_caution]]) — this is her
+unrelated, already-concluded criminal trafficking case from the same
+underlying operation.
+
 ## 2026-08-27
 
 **Bot login fixed.** Had been broken since some point before this session — plain

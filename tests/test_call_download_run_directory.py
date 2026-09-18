@@ -17,6 +17,7 @@ def _load_call_download_module():
     vendor_router.VENDOR_FACEBOOK = "facebook"
     vendor_router.VENDOR_INSTAGRAM = "instagram"
     vendor_router.VENDOR_YOUTUBE = "youtube"
+    vendor_router.VENDOR_VIMEO = "vimeo"
     vendor_router.extract_vendor_id = lambda *_args, **_kwargs: "DXaslzKDRiD"
     vendor_router.metadata_filename = lambda *_args, **_kwargs: "instagram__DXaslzKDRiD.json"
     vendor_router.canonicalize_vendor_url = lambda _vendor, url: url
@@ -37,6 +38,10 @@ def _load_call_download_module():
     fb = types.ModuleType("downloaders.facebook")
     fb.download = lambda *_args, **_kwargs: {}
     sys.modules["downloaders.facebook"] = fb
+
+    vimeo = types.ModuleType("downloaders.vimeo")
+    vimeo.download = lambda *_args, **_kwargs: {}
+    sys.modules["downloaders.vimeo"] = vimeo
 
     module_path = pathlib.Path(__file__).resolve().parents[1] / "bin" / "call_download.py"
     spec = importlib.util.spec_from_file_location("call_download_run_dir_module", module_path)

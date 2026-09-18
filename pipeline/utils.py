@@ -22,6 +22,10 @@ class ClipEntry:
     path: str
     comment: str = ""
     srt_path: str | None = None
+    card_only: bool = False
+    image_path: str | None = None
+    duration_seconds: float | None = None
+    audio_path: str | None = None
 
 
 @dataclass
@@ -155,6 +159,38 @@ def probe_video_dimensions(video_path: Path) -> tuple[int, int]:
     return width, height
 
 
+def probe_audio_duration(audio_path: Path) -> float:
+    try:
+        proc = subprocess.run(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "json",
+                str(audio_path),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError) as exc:
+        raise RuntimeError(f"Failed to probe audio duration for {audio_path}") from exc
+
+    try:
+        payload = json.loads(proc.stdout)
+        duration = float(payload["format"]["duration"])
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"Invalid ffprobe output while probing {audio_path}") from exc
+
+    if duration <= 0:
+        raise RuntimeError(f"Non-positive probed duration for {audio_path}: {duration}")
+
+    return duration
+
+
 def validate_clips_manifest(data: dict[str, Any]) -> ClipsManifest:
     if not isinstance(data, dict):
         raise ValueError("clips_manifest must be a JSON object")
@@ -176,13 +212,29 @@ def validate_clips_manifest(data: dict[str, Any]) -> ClipsManifest:
             path = str(clip["path"])
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError(f"clips[{idx}] missing or invalid required fields") from exc
-        if end <= start:
+        card_only = bool(clip.get("card_only", False))
+        if end <= start and not card_only:
             raise ValueError(f"clips[{idx}] has end <= start")
         srt_path = clip.get("srt_path")
         if srt_path is not None:
             if not isinstance(srt_path, str) or not srt_path:
                 raise ValueError(f"clips[{idx}] has invalid srt_path")
             srt_path = str(srt_path)
+        image_path = clip.get("image_path")
+        if image_path is not None:
+            if not isinstance(image_path, str) or not image_path:
+                raise ValueError(f"clips[{idx}] has invalid image_path")
+            image_path = str(image_path)
+        duration_seconds = clip.get("duration_seconds")
+        if duration_seconds is not None:
+            if not isinstance(duration_seconds, (int, float)) or duration_seconds <= 0:
+                raise ValueError(f"clips[{idx}] has invalid duration_seconds")
+            duration_seconds = float(duration_seconds)
+        audio_path = clip.get("audio_path")
+        if audio_path is not None:
+            if not isinstance(audio_path, str) or not audio_path:
+                raise ValueError(f"clips[{idx}] has invalid audio_path")
+            audio_path = str(audio_path)
         parsed.append(
             ClipEntry(
                 clip_id=clip_id,
@@ -191,6 +243,10 @@ def validate_clips_manifest(data: dict[str, Any]) -> ClipsManifest:
                 path=path,
                 comment=str(clip.get("comment", "")),
                 srt_path=srt_path,
+                card_only=card_only,
+                image_path=image_path,
+                audio_path=audio_path,
+                duration_seconds=duration_seconds,
             )
         )
 
