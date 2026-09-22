@@ -14,6 +14,7 @@
         "conf/instagram.cookies.2.txt"
       ],
       "facebook": [
+        "conf/facebook.justinriggs.cookies.txt",
         "conf/facebook.cookies.txt"
       ],
       "youtube": [
@@ -54,7 +55,7 @@
     "caller_module": "",
     "caller_function": "transcribe",
     "python_path": "",
-    "chunk_seconds": 1200
+    "chunk_seconds": 300
   },
   "subtitle_burn": {
     "video_task": "apply_watermark",
