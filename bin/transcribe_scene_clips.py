@@ -39,7 +39,7 @@ def transcribe_clip(clip_path: Path, outdir: Path) -> bool:
         sys.executable, str(script_path), str(clip_path),
         "--outdir", str(outdir),
         "--model", WHISPER_MODEL,
-        "--chunk-seconds", "1200",
+        "--chunk-seconds", "300",
         "--srt", "--no-txt",
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True)

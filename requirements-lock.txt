@@ -24,3 +24,11 @@ python-dotenv==1.0.1
 
 # Whisper (setup_env.sh installs this; keeping it here documents the exact version)
 #openai-whisper==20230314
+
+# faster-whisper (setup_env.sh installs this too; alternate transcription
+# engine, see docs/transcription_engines.md - CTranslate2 backend, no CUDA-
+# wheel disk-quota issue like openai-whisper, so no special install ordering
+# needed, but kept out of environment.yml/pip-installed-here for consistency
+# with how openai-whisper is handled)
+#faster-whisper==1.2.1
+#ctranslate2==4.8.2
