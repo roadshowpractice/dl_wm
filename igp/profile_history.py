@@ -10,6 +10,7 @@ Writes <outdir>/<username>_timeline.jsonl, one record per post, oldest first.
 """
 import asyncio
 import json
+import random
 import re
 import sys
 from pathlib import Path
@@ -40,6 +41,11 @@ def extract_posts_from_json(obj, found):
                 for user in obj.get(k) or []:
                     if isinstance(user, dict) and user.get("username"):
                         collaborators.append(user["username"])
+            # the same post can show up in several responses, some with a
+            # lighter schema that omits coauthors — merge, never overwrite
+            prev = found.get(code)
+            if prev:
+                collaborators += prev["collaborators"]
             found[code] = {
                 "shortcode": code,
                 "taken_at": taken,
@@ -54,11 +60,18 @@ def extract_posts_from_json(obj, found):
             extract_posts_from_json(item, found)
 
 
-async def scrape(username, cookie_file, max_rounds=150, stall_limit=6):
+async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_before=None, pause=(1.5, 1.5)):
+    """stop_before: optional epoch seconds. Once two scroll rounds in a row
+    bring in only posts older than this, stop — the feed is newest-first, so
+    nothing further down can be newer. (Pinned posts arrive in the initial
+    page load, before any scrolling, so they don't trip this.)
+    pause: (min, max) seconds to wait after each scroll, picked at random
+    each round — widen it to scrape more gently."""
     from playwright.async_api import async_playwright
 
     found = {}
     stall_rounds = 0
+    older_rounds = 0
 
     async with async_playwright() as p:
         browser = await p.chromium.launch(
@@ -108,7 +121,7 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6):
         for i in range(max_rounds):
             before_count = len(found)
             await page.mouse.wheel(0, 4000)
-            await asyncio.sleep(1.5)
+            await asyncio.sleep(random.uniform(*pause))
             print(f"round {i+1}/{max_rounds}: total={len(found)}")
             if len(found) == before_count:
                 stall_rounds += 1
@@ -117,6 +130,16 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6):
             if stall_rounds >= stall_limit:
                 print(f"no new posts for {stall_limit} rounds in a row, assuming end of feed")
                 break
+            if stop_before is not None:
+                new = list(found.values())[before_count:]
+                if new:
+                    if all((r["taken_at"] or 0) < stop_before for r in new):
+                        older_rounds += 1
+                    else:
+                        older_rounds = 0
+                if older_rounds >= 2:
+                    print("scrolled past the target date, stopping")
+                    break
 
         await browser.close()
 
