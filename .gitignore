@@ -23,3 +23,5 @@ metadata/
 # live session cookies - never commit
 conf/instagram.cookies.txt
 conf/facebook.justinriggs.cookies.txt
+conf/facebook.*.cookies.txt
+conf/instagram.cookies.*.txt

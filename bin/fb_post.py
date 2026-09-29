@@ -16,6 +16,12 @@ Lessons from the manual run (see ~/Desktop/claude/2026-09-29/2026-09-29_fb_post_
   - use the file input inside the composer, not the first one on the page
   - Post redirects back to the feed; the permalink (pfbid...) shows up in the
     graphql mutation response or on the timestamp link after hovering
+
+Verified 2026-09-29 09:45 (dry run, Merrill cookies exported from Chrome Profile 2):
+logged in, opened /post/create, inserted 1171 chars (emoji + line breaks intact),
+attached the card as a photo (it replaced the link preview), stopped before Post.
+Needs igp.cookies.load_netscape_cookies(path, "facebook.com") - before that fix the
+loader kept only instagram.com cookies, so FB got none and showed the login page.
 """
 import argparse, asyncio, json, re, sys, time
 from pathlib import Path
@@ -52,7 +58,7 @@ async def main(a):
     async with async_playwright() as p:
         b = await p.chromium.launch(headless=True, args=["--disable-gpu", "--single-process", "--no-zygote"])
         c = await b.new_context(viewport={"width": 1358, "height": 900}, user_agent=UA)
-        await c.add_cookies(load_netscape_cookies(Path(a.cookies)))
+        await c.add_cookies(load_netscape_cookies(Path(a.cookies), "facebook.com"))
         pg = await c.new_page()
 
         async def on_response(r):

@@ -18,7 +18,7 @@ from pathlib import Path
 from igp.cookies import load_netscape_cookies
 
 
-def extract_posts_from_json(obj, found):
+def extract_posts_from_json(obj, found, owner=None):
     """Walk arbitrary nested JSON looking for post-like nodes.
 
     The private-API timeline schema (xdt_api__v1__feed__user_timeline_graphql_connection)
@@ -27,7 +27,13 @@ def extract_posts_from_json(obj, found):
     """
     if isinstance(obj, dict):
         code = obj.get("code") or obj.get("shortcode")
-        if code and ("taken_at" in obj or "taken_at_timestamp" in obj):
+        post_owner = (obj.get("user") or obj.get("owner") or {}).get("username") if isinstance(obj.get("user") or obj.get("owner"), dict) else None
+        coauthors = [u.get("username") for k in ("coauthor_producers", "invited_coauthor_producers") for u in (obj.get(k) or []) if isinstance(u, dict)]
+        # Skip posts that belong to someone else (ads, "suggested for you",
+        # the Reels tray...). Without this check the scraper silently logged
+        # other accounts' posts as the target's (2026-09-24: "Muse" ads etc).
+        foreign = owner and post_owner and post_owner != owner and owner not in coauthors
+        if code and ("taken_at" in obj or "taken_at_timestamp" in obj) and not foreign:
             taken = obj.get("taken_at") or obj.get("taken_at_timestamp")
             caption = obj.get("caption")
             if isinstance(caption, dict):
@@ -54,13 +60,46 @@ def extract_posts_from_json(obj, found):
                 "collaborators": sorted(set(collaborators)),
             }
         for v in obj.values():
-            extract_posts_from_json(v, found)
+            extract_posts_from_json(v, found, owner)
     elif isinstance(obj, list):
         for item in obj:
-            extract_posts_from_json(item, found)
+            extract_posts_from_json(item, found, owner)
 
 
-async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_before=None, pause=(1.5, 1.5)):
+BLOCKED_TEXT = "Sorry, this page isn't available"
+GRID_LINKS_JS = """[...document.querySelectorAll('a[href*="/p/"],a[href*="/reel/"]')].map(a => a.getAttribute('href'))"""
+
+
+def _fill_dates_with_ytdlp(found, shortcodes):
+    """For posts seen only as grid links (no JSON), get taken_at + caption
+    from yt-dlp's public metadata. Logged-out Instagram serves the profile
+    grid in the HTML, not via the GraphQL responses we sniff."""
+    try:
+        import yt_dlp
+    except ImportError:
+        print("WARNING: yt_dlp not importable; grid-only posts will have no date")
+        return
+    opts = {"quiet": True, "no_warnings": True, "skip_download": True}
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        for code in shortcodes:
+            if code in found:
+                continue
+            try:
+                info = ydl.extract_info(f"https://www.instagram.com/reel/{code}/", download=False)
+            except Exception as exc:
+                print(f"  yt-dlp could not read {code}: {exc}")
+                continue
+            found[code] = {
+                "shortcode": code,
+                "taken_at": info.get("timestamp"),
+                "caption": (info.get("description") or "")[:200],
+                "carousel_count": 0,
+                "collaborators": [],
+            }
+            print(f"  +1 post via yt-dlp ({code})")
+
+
+async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_before=None, pause=(1.5, 1.5), _logged_out=False):
     """stop_before: optional epoch seconds. Once two scroll rounds in a row
     bring in only posts older than this, stop — the feed is newest-first, so
     nothing further down can be newer. (Pinned posts arrive in the initial
@@ -90,7 +129,7 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
             re.compile(r".*\.(png|jpg|jpeg|webp|gif|svg|woff2?|ttf|mp4|css)(\?.*)?$"),
             lambda route: route.abort(),
         )
-        cookies = load_netscape_cookies(cookie_file)
+        cookies = [] if _logged_out else load_netscape_cookies(cookie_file)
         if cookies:
             await context.add_cookies(cookies)
 
@@ -100,13 +139,18 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
             try:
                 if "instagram.com" not in response.url:
                     return
-                if "json" not in response.headers.get("content-type", ""):
+                # 2026-09-26: profile-timeline pages (xdt_api__v1__feed__user_timeline_graphql_connection)
+                # now arrive labelled text/javascript, not application/json, so accept both.
+                ctype = response.headers.get("content-type", "")
+                if "json" not in ctype and "javascript" not in ctype:
                     return
+                if "javascript" in ctype and "/graphql/query" not in response.url and "/api/v1/" not in response.url:
+                    return  # plain JS bundles, not data
                 text = await response.text()
                 if '"taken_at"' not in text or '"caption"' not in text:
                     return
                 before = len(found)
-                extract_posts_from_json(json.loads(text), found)
+                extract_posts_from_json(json.loads(text), found, username)
                 after = len(found)
                 if after > before:
                     print(f"  +{after - before} posts (total {after})")
@@ -118,8 +162,26 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
         await page.goto(f"https://www.instagram.com/{username}/", wait_until="domcontentloaded", timeout=60000)
         await asyncio.sleep(4)
 
+        # A logged-in account that the creator has blocked gets this page, and
+        # Instagram then fills the page with unrelated posts. Detect it and
+        # fall back to a logged-out scrape instead of recording junk.
+        page_text = await page.evaluate("document.body.innerText")
+        if BLOCKED_TEXT in page_text:
+            await browser.close()
+            if _logged_out:
+                print("Profile unavailable even logged out (deleted/renamed?)")
+                return {}
+            print("Profile not visible to this login (blocked?). Retrying logged out...")
+            return await scrape(username, cookie_file, max_rounds, stall_limit, stop_before, pause, _logged_out=True)
+
+        grid_codes = []
+
         for i in range(max_rounds):
             before_count = len(found)
+            for href in await page.evaluate(GRID_LINKS_JS):
+                m = re.search(r"/(?:p|reel)/([\w-]+)/", href or "")
+                if m and m.group(1) not in grid_codes and (f"/{username}/" in href or href.startswith(("/p/", "/reel/"))):
+                    grid_codes.append(m.group(1))
             await page.mouse.wheel(0, 4000)
             await asyncio.sleep(random.uniform(*pause))
             print(f"round {i+1}/{max_rounds}: total={len(found)}")
@@ -142,6 +204,10 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
                     break
 
         await browser.close()
+
+    if _logged_out and grid_codes:
+        print(f"logged out: {len(grid_codes)} grid links; filling dates with yt-dlp")
+        _fill_dates_with_ytdlp(found, grid_codes)
 
     return found
 
