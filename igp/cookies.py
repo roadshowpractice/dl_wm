@@ -1,7 +1,8 @@
 from pathlib import Path
 
 
-def load_netscape_cookies(path: Path):
+def load_netscape_cookies(path: Path, site: str = "instagram.com"):
+    """Cookies for one site (domain substring) from a Netscape cookies.txt, as Playwright dicts."""
     cookies = []
     if not path.exists():
         print(f"WARNING: missing cookie file: {path}")
@@ -23,7 +24,7 @@ def load_netscape_cookies(path: Path):
             continue
 
         domain, _flag, path_, secure, expires, name, value = parts
-        if "instagram.com" not in domain:
+        if site not in domain:
             continue
 
         try:
