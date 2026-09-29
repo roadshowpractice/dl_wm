@@ -22,6 +22,13 @@ logged in, opened /post/create, inserted 1171 chars (emoji + line breaks intact)
 attached the card as a photo (it replaced the link preview), stopped before Post.
 Needs igp.cookies.load_netscape_cookies(path, "facebook.com") - before that fix the
 loader kept only instagram.com cookies, so FB got none and showed the login page.
+
+First live post 2026-09-29 10:01 ("The Good Guy Edit"):
+https://www.facebook.com/merrill.p.jensen/posts/10234395772575750
+Fixes from that run: a fresh URL's link preview can land after the photo and replace
+it, so wait for the preview first; setting the hidden file input stopped taking, so
+click "Add photos or videos" and answer the file chooser; verify a blob: thumbnail
+(abort if none); permalink = post_id from ComposerStoryCreateMutation.
 """
 import argparse, asyncio, json, re, sys, time
 from pathlib import Path
@@ -73,6 +80,9 @@ async def main(a):
             m = re.search(r"https:\\?/\\?/www\.facebook\.com\\?/[^\"]*?pfbid\w+", body)
             if m and "Create" in name:
                 permalink = m.group(0).replace("\\/", "/")
+            m = re.search(r'"post_id":"(\d+)"', body)
+            if m and name == "ComposerStoryCreateMutation" and not permalink:
+                permalink = f"https://www.facebook.com/{a.profile}/posts/{m.group(1)}"
             log("graphql", name=name, status=r.status, body=body[:4096])
         pg.on("response", lambda r: asyncio.ensure_future(on_response(r)))
 
@@ -92,13 +102,43 @@ async def main(a):
         await asyncio.sleep(3)
         log("text_inserted", chars=len(text))
 
-        # image last, into the file input nearest the composer (the last one on the page)
-        fi = pg.locator('input[type="file"]')
-        n = await fi.count(); log("file_inputs", count=n)
-        await fi.nth(n - 1).set_input_files(image)
-        await asyncio.sleep(6)
-        log("image_attached", path=image)
+        # a URL in the text makes FB build a link preview (card showing the domain in
+        # caps, e.g. ANTMERRILL.GITHUB.IO). Wait for it to land first: if it arrives
+        # after the photo, it replaces the photo.
+        if "http" in text:
+            preview = pg.get_by_text(re.compile(r"^[a-z0-9-]+(\.[a-z0-9-]+)+$", re.I))   # shown in caps via CSS only
+            for _ in range(20):
+                if await preview.count():
+                    break
+                await asyncio.sleep(1)
+            log("link_preview", found=bool(await preview.count()))
+
+        # image last: click the composer's own "Add photos or videos" box and answer
+        # the file chooser (setting the hidden input directly stopped taking), then
+        # check it really attached (a blob: thumbnail shows up). Retry once.
+        photo = pg.locator('img[src^="blob:"]')
+        drop = pg.get_by_text("Add photos or videos")
+        log("file_inputs", count=await pg.locator('input[type="file"]').count(), dropzone=await drop.count())
+        for attempt in (1, 2):
+            if await drop.count():
+                async with pg.expect_file_chooser() as fc:
+                    await drop.first.click()
+                await (await fc.value).set_files(image)
+            else:
+                fi = pg.locator('input[type="file"]')
+                await fi.nth(await fi.count() - 1).set_input_files(image)
+            for _ in range(15):
+                await asyncio.sleep(1)
+                if await photo.count():
+                    break
+            ok = bool(await photo.count())
+            log("image_attached", path=image, attempt=attempt, ok=ok, blob_imgs=await photo.count())
+            if ok:
+                break
         await log.shot(pg, "ready")
+        if not ok:
+            log("abort", reason="photo never showed up in the composer (link preview won?)")
+            await b.close(); return 3
 
         if not a.post:
             log("dry_run", note="not posted; rerun with --post")
@@ -124,5 +164,6 @@ if __name__ == "__main__":
     ap.add_argument("--text", required=True, help="file with the post text")
     ap.add_argument("--image", required=True, help="image to attach")
     ap.add_argument("--post", action="store_true", help="actually click Post (default: dry run)")
+    ap.add_argument("--profile", default="merrill.p.jensen", help="profile username for the permalink")
     ap.add_argument("--outdir", default=str(Path.home() / "Desktop/claude" / time.strftime("%Y-%m-%d")))
     sys.exit(asyncio.run(main(ap.parse_args())))
