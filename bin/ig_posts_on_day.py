@@ -34,6 +34,7 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 root_dir = os.path.dirname(current_dir)
 sys.path.append(root_dir)
 
+from igp.cookies import load_netscape_cookies
 from igp.profile_history import scrape
 
 TB = "timballard89"
@@ -67,7 +68,8 @@ def main():
     parser.add_argument("username")
     parser.add_argument("day", help="YYYY-MM-DD")
     parser.add_argument("--tz", default="America/Los_Angeles", help="timezone the day is counted in (default: %(default)s)")
-    parser.add_argument("--cookies", default=os.path.join(root_dir, "conf", "instagram.cookies.txt"))
+    parser.add_argument("--cookies", default=os.path.join(root_dir, "conf", "instagram.cookies.haddamgoel.txt"),
+                        help="Netscape cookies.txt (default: haddamgoel — timballard89 blocks merrillp.jensen)")
     parser.add_argument("--max-rounds", type=int, default=150)
     parser.add_argument("--pause", type=float, nargs=2, default=[4.0, 9.0], metavar=("MIN", "MAX"),
                         help="seconds to wait after each scroll, random in [MIN, MAX] (default: 4 9)")
@@ -93,6 +95,12 @@ def main():
                 print(f"last scrape was {waited:.1f} min ago — wait {args.cooldown - waited:.1f} more min "
                       f"(cooldown {args.cooldown:g} min), or pass --force")
                 sys.exit(2)
+        # Logged out, IG now shows a login wall instead of the grid (2026-10-03),
+        # so an empty cookie file means a guaranteed silent 0 — stop here instead.
+        if not load_netscape_cookies(Path(args.cookies)):
+            print(f"ERROR: no instagram.com cookies in {args.cookies} — re-export with "
+                  f"bin/export_browser_cookies.py instagram.com <file>, or pass --cookies")
+            sys.exit(3)
         LAST_SCRAPE.parent.mkdir(parents=True, exist_ok=True)
         LAST_SCRAPE.write_text(f"{time.time()}\n")
 
