@@ -1,0 +1,87 @@
+dl_wm CHEAT SHEET — driving the pipeline yourself            (written 2026-10-03)
+================================================================================
+Repo:    ~/Documents/repos/dl_wm        Env: cad   (= conda activate dl_wm)
+Outputs: dl_wm/outputs/<today>/<vendor>__<id>/   (lives on the UBUNTU 26_0 USB drive)
+Every command below: cd ~/Documents/repos/dl_wm && cad   first.
+
+
+1. ONE LINK, FULL PIPELINE  (download -> watermark -> transcript/SRT)
+--------------------------------------------------------------------------------
+dllink https://www.instagram.com/p/SHORTCODE/
+    - wraps bin/call_router.py; mounts the USB drive if needed
+    - log: ~/Desktop/claude/<today>/dllink_<time>.log
+    - no URL = uses the link saved in ~/Downloads/link.md
+python bin/call_router.py "URL"            same thing, no wrapper
+python bin/call_router.py "URL" --dry-run  show what it would do
+
+    Re-running is safe: finished steps are skipped and only missing ones run.
+    Carousels: every video in the post gets processed (since 2026-10-03).
+    Photo posts: downloaded at full size, no watermark/transcript (by design).
+    DON'T use bin/call_download.py for a real run: download only, it skips the rest.
+
+
+2. WHAT DID TIM POST ON A GIVEN DAY  (metadata only, nothing downloaded)
+--------------------------------------------------------------------------------
+python bin/ig_posts_on_day.py timballard89 2026-10-03
+    - uses the haddamgoel cookies (Tim blocks merrillp.jensen)
+    - slow and polite: 4-9s per scroll, 2 min cooldown between runs
+    - writes outputs/<today>/ig_posts_timballard89_<day>.jsonl, prints the URLs
+    - then feed each URL to dllink (1)
+
+
+3. SCRAPE AN ACCOUNT'S WHOLE POST HISTORY  (metadata only)
+--------------------------------------------------------------------------------
+U=ldsabuseonx; python -m igp.profile_history $U conf/instagram.cookies.haddamgoel.txt \
+    outputs/ig_timelines/${U}_$(date +%F) 150 2>&1 | tee ~/Desktop/claude/$(date +%F)/logs/scrape_$U.log
+    - 150 = max scroll rounds (raise it for big accounts)
+    - output: <account>_timeline.jsonl (shortcode, date, caption, slides, collaborators)
+    - scrolls fast (1.5s), so one account at a time
+    - list of accounts to do: ~/Desktop/claude/2026-10-03/collabs_to_scrape.txt
+
+
+4. SCREENSHOTS -> COLLABORATORS
+--------------------------------------------------------------------------------
+bin/ocr_collabs.sh ~/path/to/screenshots  ~/Desktop/claude/$(date +%F)/ocr/NAME  --draw-boxes
+    - writes collabs_by_screenshot.tsv, collabs_by_post.tsv, collab_pairs.tsv
+    - ~6-8s per screenshot; --draw-boxes saves <name>.boxes.png to check the regions
+    - rebuild the tables without re-reading the shots:  COLLECT_ONLY=1 bin/ocr_collabs.sh DIR OUTDIR
+    - one image:  python bin/ocr_screenshots.py FILE.png --out DIR
+    - NOTE: tuned for full-screen 1366x768 shots. Claude's tab photos (tab_*.jpg)
+      only get plain text until page-view mode is added.
+
+
+5. ONE INSTAGRAM POST'S PHOTOS / CAROUSEL BY HAND
+--------------------------------------------------------------------------------
+bash bin/igp_probe.sh "https://www.instagram.com/p/SHORTCODE/"
+    (the pipeline already does this automatically for photo posts)
+
+
+6. FIX A BAD TRANSCRIPT  (wrong language, e.g. Spanish read as Italian)
+--------------------------------------------------------------------------------
+cd outputs/<day>/instagram__<id>/
+mv instagram__<id>.whisper.json instagram__<id>.whisper.json.bad      # else it reuses it
+python ~/Documents/repos/dl_wm/bin/transcribe_media_faster_whisper.py instagram__<id>.mp4 --srt --txt --language es
+    languages: es  pt  en
+
+
+7. COOKIES  (when Instagram downloads/scrapes suddenly return nothing)
+--------------------------------------------------------------------------------
+python bin/export_browser_cookies.py instagram.com conf/instagram.cookies.haddamgoel.txt ~/.config/google-chrome-goel/Default
+python bin/check_cookie_file.py conf/instagram.cookies.haddamgoel.txt     # names only, no values
+    - log into haddamgoel first with the Goel_Instagram desktop launcher
+    - conf/instagram.cookies.txt is a link to the haddamgoel file
+    - which Chrome profile is which account: table in dl_wm/CLAUDE.md
+
+
+8. HOUSEKEEPING
+--------------------------------------------------------------------------------
+python -m pytest -q          run the tests (~10-60s, all should pass)
+git status / git log -5      what's changed / recent commits      (branch: dev)
+
+
+WHEN SOMETHING LOOKS WRONG
+--------------------------------------------------------------------------------
+- 0 posts / cover-image-only / "No video formats": check the cookies first (7)
+- photos missing on a carousel: re-run dllink on it, finished steps are skipped
+- a step didn't run: look at the metadata/<vendor>__<id>.json "default_tasks" block:
+    true = still to do, a path = done, false = turned off
