@@ -208,7 +208,10 @@ def find_post_model(captured, shortcode):
         has_target_marker = any(marker in text for marker in POST_QUERY_MARKERS) or shortcode in text
         if not has_target_marker:
             continue
-        if any(marker in lowered for marker in NON_POST_GRAPHQL_MARKERS):
+        # The post's own HTML page mentions "inbox"/"messaging" in its nav, so
+        # only apply the non-post filter when the target media object isn't in it.
+        has_target_media = f'"code":"{shortcode}"' in text or f'"shortcode":"{shortcode}"' in text
+        if not has_target_media and any(marker in lowered for marker in NON_POST_GRAPHQL_MARKERS):
             continue
         try:
             post_model = build_post_model(json.loads(text), shortcode)

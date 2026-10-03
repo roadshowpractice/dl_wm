@@ -105,8 +105,11 @@ def build_post_model(obj, shortcode):
         asset_count = len(assets)
         carousel_count = model.get("carousel_count") or 0
         is_carousel = 1 if max(asset_count, carousel_count) > 1 else 0
-        # Prefer clear carousels first, then more extracted assets.
-        return (is_carousel, asset_count, carousel_count)
+        # Assets that actually carry media URLs — a page can mention the
+        # shortcode in a bare link/permalink object with no media at all.
+        with_media = sum(1 for a in assets if any((a.get("candidates") or {}).values()))
+        # Prefer clear carousels first, then more downloadable assets.
+        return (is_carousel, with_media, asset_count, carousel_count)
 
     def _build_model(item):
         carousel = item.get("carousel_media") if isinstance(item.get("carousel_media"), list) else None
