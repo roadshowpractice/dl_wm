@@ -2,6 +2,9 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
+import sys
 import html as html_lib
 from pathlib import Path
 
@@ -342,6 +345,82 @@ def download_instagram_html_fallback(url, download_path, metadata_dir, cookie_pa
     )
 
 
+IGP_TIMEOUT_SECONDS = 240
+
+
+def download_carousel_via_igp(url, vendor_id, output_dir, cookie_path, run_id):
+    """Photo carousels make yt-dlp fail with "No video formats found", and the
+    HTML fallback only ever finds the cover image. igp.capture opens the post in
+    headless Chromium and reads the post's own GraphQL data, which lists every
+    slide. Runs as a subprocess (playwright stays out of this process) and
+    copies slides into output_dir as <run_id>__NN.<ext>, the same names the
+    yt-dlp carousel path uses. Returns None on any failure so the caller can
+    fall back to the cover image."""
+    if not cookie_path or not os.path.isfile(cookie_path):
+        logger.warning("igp carousel: no cookie file, skipping")
+        return None
+    root = Path(__file__).resolve().parent.parent
+    capture_dir = Path(output_dir) / "igp_capture"
+    cmd = [sys.executable, "-m", "igp.capture", url, vendor_id, str(cookie_path), str(capture_dir)]
+    logger.info("igp carousel: capturing %s", url)
+    try:
+        proc = subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=IGP_TIMEOUT_SECONDS)
+    except Exception as exc:
+        logger.warning("igp carousel: capture did not finish: %s", exc)
+        return None
+    if proc.returncode != 0:
+        logger.warning("igp carousel: capture exited %s: %s", proc.returncode, proc.stderr.strip()[-500:])
+        return None
+
+    manifest = capture_dir / "manifest.jsonl"
+    rows = []
+    if manifest.exists():
+        rows = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines() if line.strip()]
+    rows = [r for r in rows if r.get("status") == "ok" and r.get("carousel_index") and r.get("path")]
+    if not rows:
+        logger.warning("igp carousel: no slides captured (%s)", manifest)
+        return None
+
+    rows.sort(key=lambda r: r["carousel_index"])
+    multi = len(rows) > 1
+    items, files = [], []
+    for r in rows:
+        src = capture_dir / r["path"]
+        ext = src.suffix.lstrip(".") or "jpg"
+        stem = f"{run_id}__{r['carousel_index']:02d}" if multi else run_id
+        dest = Path(output_dir) / f"{stem}.{ext}"
+        shutil.copyfile(src, dest)
+        files.append(str(dest))
+        items.append({"index": r["carousel_index"], "type": r.get("media_type") or "image", "filename": dest.name})
+    # captured_responses.jsonl is every raw response from the page — large and
+    # only useful for debugging a failed capture, so drop it once slides are in.
+    (capture_dir / "captured_responses.jsonl").unlink(missing_ok=True)
+
+    first = rows[0]
+    meta = {
+        "caption": first.get("caption"),
+        "owner": first.get("owner"),
+        "collaborators": first.get("collaborators", []),
+        "carousel_count": first.get("carousel_count"),
+    }
+    logger.info("igp carousel: %s slide(s) saved", len(files))
+    return {"items": items, "files": files, "meta": meta}
+
+
+def _igp_info(igp, vendor_id):
+    """info / page_metadata dicts for a carousel saved by download_carousel_via_igp."""
+    owner = igp["meta"].get("owner") or {}
+    caption = igp["meta"].get("caption")
+    info = {
+        "id": vendor_id,
+        "title": (caption or "").split("\n", 1)[0][:200] or None,
+        "description": caption,
+        "uploader": owner.get("username") if isinstance(owner, dict) else owner,
+        "ext": Path(igp["files"][0]).suffix.lstrip("."),
+    }
+    return info, {"title": info["title"], "caption": caption, "uploader": info["uploader"]}
+
+
 def _download_video_entry(entry, media_dir, stem, cookie_path, video_download):
     output_template = os.path.join(media_dir, f"{stem}.%(ext)s")
     ydl_opts = {
@@ -402,8 +481,18 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         message = str(exc)
         if is_download_error:
             logger.warning("yt-dlp extract_info failed: %s", message)
+        igp = None
         if is_download_error and "No video formats found" in message:
-            logger.warning("No video formats found; trying Instagram HTML fallback")
+            logger.warning("No video formats found; trying igp carousel capture")
+            igp = download_carousel_via_igp(url, vendor_id, output_dir, cookie_path, run_id)
+        if igp:
+            info, page_metadata = _igp_info(igp, vendor_id)
+            items = igp["items"]
+            downloaded_files = igp["files"]
+            is_carousel = len(items) > 1
+            used_html_fallback = True  # skip the yt-dlp entry loop below
+        elif is_download_error and "No video formats found" in message:
+            logger.warning("igp capture failed; trying Instagram HTML fallback (cover image only)")
             fallback = download_instagram_html_fallback(
                 url=url,
                 download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{vendor_id}.jpg"),
@@ -496,8 +585,19 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
             )
             logger.info("Downloaded image entry %s", i)
 
+        igp = None
         if not downloaded_files:
-            logger.warning("No yt-dlp downloadable media entries; trying Instagram HTML fallback")
+            # yt-dlp runs with ignoreerrors here, so a photo carousel's "No video
+            # formats found" lands as an empty result instead of an exception.
+            logger.warning("No yt-dlp downloadable media entries; trying igp carousel capture")
+            igp = download_carousel_via_igp(url, vendor_id, output_dir, cookie_path, run_id)
+        if igp:
+            info, page_metadata = _igp_info(igp, vendor_id)
+            items = igp["items"]
+            downloaded_files = igp["files"]
+            is_carousel = len(items) > 1
+        elif not downloaded_files:
+            logger.warning("igp capture failed; trying Instagram HTML fallback (cover image only)")
             fallback = download_instagram_html_fallback(
                 url=url,
                 download_path=os.path.join(output_dir, f"{VENDOR_INSTAGRAM}__{vendor_id}.jpg"),

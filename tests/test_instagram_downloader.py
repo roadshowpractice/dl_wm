@@ -507,3 +507,60 @@ def test_html_fallback_unescapes_html_entities_before_request(monkeypatch, tmp_p
     assert call["url"] == unescaped_candidate_url
     assert "&amp;" not in call["url"]
     assert result["image_url"] == unescaped_candidate_url
+
+
+import pytest
+
+
+@pytest.mark.parametrize("ydl_name", ["FakeFailingYDL", "FakeNoEntriesYDL"])
+def test_instagram_igp_carousel_on_no_video_formats(monkeypatch, tmp_path, ydl_name):
+    out_dir = tmp_path / "out"
+    metadata_dir = tmp_path / "meta"
+    cookie = tmp_path / "cookies.txt"
+    cookie.write_text("# Netscape HTTP Cookie File\n")
+
+    monkeypatch.setattr(ig, "load_app_config", lambda: {"raw_metadata_mode": "json"})
+    monkeypatch.setattr(ig, "extract_vendor_id", lambda *_: "DSQ17ABgQxL")
+    monkeypatch.setattr(ig.yt_dlp, "YoutubeDL", globals()[ydl_name])
+    monkeypatch.setattr(
+        ig.yt_dlp,
+        "utils",
+        types.SimpleNamespace(DownloadError=FakeDownloadError),
+        raising=False,
+    )
+
+    def fake_run(cmd, **_kwargs):
+        capture_dir = Path(cmd[-1])
+        capture_dir.mkdir(parents=True, exist_ok=True)
+        rows = []
+        for idx in (1, 2, 3):
+            (capture_dir / f"{idx:03d}.jpg").write_bytes(b"img%d" % idx)
+            rows.append({"carousel_index": idx, "carousel_count": 3, "media_type": "image", "path": f"{idx:03d}.jpg",
+                         "status": "ok", "caption": "First line\nmore", "owner": {"username": "timballard89"}})
+        (capture_dir / "manifest.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+        (capture_dir / "captured_responses.jsonl").write_text("{}\n")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(ig.subprocess, "run", fake_run)
+
+    def no_fallback(**_kwargs):
+        raise AssertionError("cover-image fallback should not run when igp succeeds")
+
+    monkeypatch.setattr(ig, "download_instagram_html_fallback", no_fallback)
+
+    record = ig.download(
+        "https://www.instagram.com/p/DSQ17ABgQxL/",
+        str(out_dir),
+        str(metadata_dir),
+        {},
+        cookie_path=str(cookie),
+        video_download={"format": "best"},
+    )
+
+    data = json.loads(Path(record["metadata_path"]).read_text(encoding="utf-8"))
+    assert data["media_type"] == "carousel"
+    assert [i["filename"] for i in data["items"]] == ["out__01.jpg", "out__02.jpg", "out__03.jpg"]
+    assert (out_dir / "out__03.jpg").read_bytes() == b"img3"
+    assert data["uploader"] == "timballard89"
+    assert data["title"] == "First line"
+    assert not (out_dir / "igp_capture" / "captured_responses.jsonl").exists()
