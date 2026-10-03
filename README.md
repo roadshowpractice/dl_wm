@@ -1,5 +1,7 @@
 # dl_wm
 
+**Driving it by hand:** see [`docs/CHEAT_SHEET.txt`](docs/CHEAT_SHEET.txt), with copy-paste commands for the pipeline, Instagram scrapes, screenshot OCR, transcript fixes and cookies.
+
 `dl_wm` is a small Python workflow for downloading media and running follow-up tasks (like watermarking) through script entrypoints in `bin/`.
 
 ## Setup (Conda via `.yml`)
