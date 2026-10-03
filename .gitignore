@@ -25,3 +25,6 @@ conf/instagram.cookies.txt
 conf/facebook.justinriggs.cookies.txt
 conf/facebook.*.cookies.txt
 conf/instagram.cookies.*.txt
+conf/instagram.cookies.*.txt.bak*
+conf/facebook.cookies.txt
+conf/insta.*.txt
