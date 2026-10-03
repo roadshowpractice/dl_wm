@@ -1,3 +1,4 @@
+import json
 import importlib.util
 import pathlib
 import sys
@@ -86,3 +87,69 @@ def test_image_media_short_circuits_pipeline(monkeypatch, capsys):
     )
     output = capsys.readouterr().out
     assert "Found in: metadata/file.json" in output
+
+
+def test_carousel_followup_items_get_their_own_task_state(tmp_path):
+    module = _load_call_router_module()
+    first = tmp_path / "post__01.mp4"
+    second = tmp_path / "post__02.mp4"
+    found_data = {
+        "uploader": "someone",
+        "items": [
+            {"index": 1, "type": "video", "filename": "post__01.mp4"},
+            {"index": 2, "type": "video", "filename": "post__02.mp4"},
+            {"index": 3, "type": "image", "filename": "post__03.jpg"},
+        ],
+        "default_tasks": {
+            "perform_download": str(first),
+            "apply_watermark": str(tmp_path / "post__01_watermarked.mp4"),
+            "extract_audio": True,
+            "burn_srt": False,
+        },
+    }
+
+    assert module.carousel_followup_items(found_data, str(first)) == [str(second)]
+
+    tasks = module.item_task_state(found_data, str(second))
+    assert tasks == {"perform_download": str(second), "apply_watermark": True, "extract_audio": True, "burn_srt": False}
+    sidecar = tmp_path / "post__02.json"
+    data = json.loads(sidecar.read_text())
+    assert data["uploader"] == "someone" and "items" not in data
+
+    # a second run resumes from the sidecar instead of resetting it
+    data["default_tasks"]["apply_watermark"] = "done.mp4"
+    sidecar.write_text(json.dumps(data))
+    assert module.item_task_state(found_data, str(second))["apply_watermark"] == "done.mp4"
+
+
+def test_single_item_post_has_no_followups(tmp_path):
+    module = _load_call_router_module()
+    assert module.carousel_followup_items({"items": [{"type": "video", "filename": "a.mp4"}]}, str(tmp_path / "a.mp4")) == []
+
+
+def test_mixed_carousel_starting_with_image_runs_video_items(monkeypatch, tmp_path):
+    image = tmp_path / "post__01.jpg"
+    video = tmp_path / "post__02.mp4"
+    image.write_bytes(b"i")
+    video.write_bytes(b"v")
+    metadata = {
+        "url": "https://www.instagram.com/p/MIXED/",
+        "media_type": "carousel",
+        "items": [
+            {"index": 1, "type": "image", "filename": image.name},
+            {"index": 2, "type": "video", "filename": video.name},
+        ],
+        "default_tasks": {"perform_download": str(image), "apply_watermark": True},
+    }
+    monkeypatch.setattr(call_router, "find_url_json", lambda *_a, **_k: ("metadata/file.json", metadata))
+    monkeypatch.setattr(call_router, "wait_for_download_file", lambda *_a, **_k: True)
+    ran = []
+    monkeypatch.setattr(call_router, "execute_tasks", lambda tasks, url, path, dry_run=False: ran.append(path))
+    noop = lambda *_a, **_k: None
+    monkeypatch.setattr(call_router, "initialize_logging", lambda: types.SimpleNamespace(info=noop, warning=noop, error=noop))
+    monkeypatch.setattr(call_router.sys, "argv", ["call_router.py", metadata["url"]])
+
+    call_router.main()
+
+    assert ran == [str(video)]
+    assert (tmp_path / "post__02.json").exists()
