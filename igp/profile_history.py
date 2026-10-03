@@ -99,13 +99,16 @@ def _fill_dates_with_ytdlp(found, shortcodes):
             print(f"  +1 post via yt-dlp ({code})")
 
 
-async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_before=None, pause=(1.5, 1.5), _logged_out=False):
+async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_before=None, pause=(1.5, 1.5), _logged_out=False, raw_sink=None):
     """stop_before: optional epoch seconds. Once two scroll rounds in a row
     bring in only posts older than this, stop — the feed is newest-first, so
     nothing further down can be newer. (Pinned posts arrive in the initial
     page load, before any scrolling, so they don't trip this.)
     pause: (min, max) seconds to wait after each scroll, picked at random
-    each round — widen it to scrape more gently."""
+    each round — widen it to scrape more gently.
+    raw_sink: optional callable(record) receiving every Instagram data response
+    (graphql/api, json or javascript) unmodified, before any filtering:
+    {"url", "status", "content_type", "text"}. For evidence capture."""
     from playwright.async_api import async_playwright
 
     found = {}
@@ -142,11 +145,20 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
                 # 2026-09-26: profile-timeline pages (xdt_api__v1__feed__user_timeline_graphql_connection)
                 # now arrive labelled text/javascript, not application/json, so accept both.
                 ctype = response.headers.get("content-type", "")
+                if raw_sink is not None and "text/html" in ctype and \
+                        response.url.split("?")[0].rstrip("/").endswith("/" + username):
+                    # the profile page itself: follower/following/post counts as served
+                    raw_sink({"url": response.url, "status": response.status,
+                              "content_type": ctype, "text": await response.text()})
+                    return
                 if "json" not in ctype and "javascript" not in ctype:
                     return
                 if "javascript" in ctype and "/graphql/query" not in response.url and "/api/v1/" not in response.url:
                     return  # plain JS bundles, not data
                 text = await response.text()
+                if raw_sink is not None:
+                    raw_sink({"url": response.url, "status": response.status,
+                              "content_type": ctype, "text": text})
                 if '"taken_at"' not in text or '"caption"' not in text:
                     return
                 before = len(found)
@@ -172,7 +184,7 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
                 print("Profile unavailable even logged out (deleted/renamed?)")
                 return {}
             print("Profile not visible to this login (blocked?). Retrying logged out...")
-            return await scrape(username, cookie_file, max_rounds, stall_limit, stop_before, pause, _logged_out=True)
+            return await scrape(username, cookie_file, max_rounds, stall_limit, stop_before, pause, _logged_out=True, raw_sink=raw_sink)
 
         grid_codes = []
 
