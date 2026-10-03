@@ -82,7 +82,7 @@ def cookie_identity(cookie_file):
 
 def git_state():
     def run(*args):
-        return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True).stdout.strip()
+        return subprocess.run(["git", *args], cwd=REPO, capture_output=True, text=True).stdout.rstrip("\n")
     return {"commit": run("rev-parse", "HEAD"), "branch": run("rev-parse", "--abbrev-ref", "HEAD"),
             "dirty_files": [l[3:] for l in run("status", "--porcelain").splitlines() if l]}
 
