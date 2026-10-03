@@ -83,6 +83,48 @@ def execute_tasks(task_config, url, to_process, dry_run=False):
             logging.info("⏭️  Skipping task: {}".format(task))
 
 
+def carousel_followup_items(found_data, to_process):
+    """Video items after the first in a carousel post. The downloader records
+    only the first file as perform_download, so without this every later slide
+    stopped at download."""
+    items = found_data.get("items") or []
+    if len(items) < 2:
+        return []
+    media_dir = os.path.dirname(to_process)
+    first = os.path.basename(to_process)
+    return [
+        os.path.join(media_dir, item["filename"])
+        for item in items
+        if item.get("type") == "video" and item.get("filename") and item["filename"] != first
+    ]
+
+
+def item_task_state(found_data, item_path, write=True):
+    """Per-item task state, kept in a <media>.json sidecar next to the file.
+    The task scripts look for that sidecar before searching metadata/, so each
+    item records its own outputs. Created on first run from the post's
+    metadata with completed tasks reset to pending; reused (resumed) after."""
+    sidecar = os.path.splitext(item_path)[0] + ".json"
+    if os.path.isfile(sidecar):
+        with open(sidecar, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data.get("default_tasks"), dict):
+            return data["default_tasks"]
+
+    data = {k: v for k, v in found_data.items() if k not in ("items", "manifest")}
+    tasks = {
+        task: (False if status is False else True)
+        for task, status in (found_data.get("default_tasks") or {}).items()
+    }
+    tasks["perform_download"] = item_path
+    data["default_tasks"] = tasks
+    data["downloaded_file"] = item_path
+    if write:
+        with open(sidecar, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+    return tasks
+
+
 def run_my_existing_downloader(url, logger):
     """Calls the known-good downloader script for the given URL."""
     logger.info("📥 Initiating download for: {}".format(url))
@@ -208,7 +250,9 @@ def main():
             logger.error("Input file does not exist: {}".format(to_process))
             return
 
-        if is_image_media(found_data, to_process):
+        followups = carousel_followup_items(found_data, to_process)
+        first_is_image = is_image_media(found_data, to_process)
+        if first_is_image and not followups:
             logger.info(
                 "Image media detected; download complete. Skipping video/audio pipeline."
             )
@@ -219,8 +263,20 @@ def main():
             logger.warning("No 'default_tasks' section found in metadata.")
             return
 
-        logger.info("🛠 Tasks to evaluate: {}".format(list(default_tasks.keys())))
-        execute_tasks(default_tasks, url, to_process, dry_run)
+        if first_is_image:
+            # Mixed carousel that opens on a photo: nothing to do for slide 1,
+            # but its video slides still go through the pipeline below.
+            logger.info("First carousel item is an image; processing its video items only.")
+        else:
+            logger.info("🛠 Tasks to evaluate: {}".format(list(default_tasks.keys())))
+            execute_tasks(default_tasks, url, to_process, dry_run)
+
+        for item_path in followups:
+            if not os.path.isfile(item_path):
+                logger.warning("Carousel item missing on disk, skipping: {}".format(item_path))
+                continue
+            logger.info("🎞 Carousel item: {}".format(item_path))
+            execute_tasks(item_task_state(found_data, item_path, write=not dry_run), url, item_path, dry_run)
 
     except Exception as e:
         logging.error("Unexpected error in main(): {}".format(e))
