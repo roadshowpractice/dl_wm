@@ -208,6 +208,9 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
     if _logged_out and grid_codes:
         print(f"logged out: {len(grid_codes)} grid links; filling dates with yt-dlp")
         _fill_dates_with_ytdlp(found, grid_codes)
+    elif _logged_out and not found:
+        print("WARNING: logged out and no grid links either — IG is likely showing a login wall; "
+              "use cookies from an account the creator hasn't blocked")
 
     return found
 

@@ -1,7 +1,9 @@
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 import traceback
 from glob import glob
 from datetime import datetime
@@ -99,6 +101,19 @@ def resolve_cookie_paths(platform_config, video_download_cfg, vendor):
             resolved.append(path)
 
     return resolved
+
+
+def _scratch_cookie_copy(cookie_path):
+    """yt-dlp saves its cookie jar back into its cookiefile on exit, so if the
+    site expires the session mid-run the file in conf/ gets overwritten with an
+    empty jar (2026-10-02: conf/instagram.cookies.txt went to header-only that
+    way). Hand yt-dlp a throwaway copy so conf/ files are read-only to it."""
+    if not cookie_path or not os.path.isfile(cookie_path):
+        return cookie_path
+    fd, tmp = tempfile.mkstemp(prefix="dlwm_cookies_", suffix=".txt")
+    os.close(fd)
+    shutil.copyfile(cookie_path, tmp)
+    return tmp
 
 
 def is_cookie_identity_blocked_error(exc):
@@ -238,6 +253,9 @@ def main():
 
         last_error = None
         for idx, cookie_path in enumerate(cookie_paths, start=1):
+            # YouTube keeps the real path: its downloader deliberately regenerates
+            # that cookie file from the browser when it goes stale.
+            ydl_cookie = cookie_path if vendor == VENDOR_YOUTUBE else _scratch_cookie_copy(cookie_path)
             try:
                 if vendor == VENDOR_YOUTUBE:
                     result = download_youtube(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
@@ -250,13 +268,13 @@ def main():
                         )
                 elif vendor == VENDOR_FACEBOOK:
                     logger.info("Facebook download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
-                    result = download_facebook(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                    result = download_facebook(url, run_dir, metadata_dir, registry_record, ydl_cookie, video_download_cfg)
                 elif vendor == VENDOR_VIMEO:
                     logger.info("Vimeo download attempt %s/%s", idx, len(cookie_paths))
-                    result = download_vimeo(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                    result = download_vimeo(url, run_dir, metadata_dir, registry_record, ydl_cookie, video_download_cfg)
                 else:
                     logger.info("Instagram download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
-                    result = download_instagram(url, run_dir, metadata_dir, registry_record, cookie_path, video_download_cfg)
+                    result = download_instagram(url, run_dir, metadata_dir, registry_record, ydl_cookie, video_download_cfg)
                 break
             except Exception as exc:
                 last_error = exc
@@ -270,6 +288,9 @@ def main():
                     )
                     continue
                 raise
+            finally:
+                if ydl_cookie and ydl_cookie != cookie_path and os.path.exists(ydl_cookie):
+                    os.remove(ydl_cookie)
         else:
             if last_error:
                 raise last_error
