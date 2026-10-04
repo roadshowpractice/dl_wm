@@ -38,6 +38,14 @@ U=ldsabuseonx; python -m igp.profile_history $U conf/instagram.cookies.haddamgoe
     - scrolls fast (1.5s), so one account at a time
     - list of accounts to do: ~/Desktop/claude/2026-10-03/collabs_to_scrape.txt
 
+WORD SORT of a scrape (what an account talks about, who it tags, when it posted)
+python bin/ig_word_sort.py outputs/ig_timelines/ldsabuseonx_2026-10-04
+python bin/ig_word_sort.py outputs/ig_timelines/*_2026-10-04        (one report per account)
+    - writes ~/Desktop/claude/<today>/analysis/<account>_word_sort.txt
+    - posts per month, collaborators, locations, @mentions, #hashtags, words, word pairs
+    - works on scrapes (above) and forensic captures (bin/ig_scrape_account.py)
+    - --top 60 for longer lists, --print to also show it in the terminal
+
 
 4. SCREENSHOTS -> COLLABORATORS
 --------------------------------------------------------------------------------
