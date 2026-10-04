@@ -99,6 +99,12 @@ def _fill_dates_with_ytdlp(found, shortcodes):
             print(f"  +1 post via yt-dlp ({code})")
 
 
+# How the last scrape() in this process ended: "feed_end" (no new posts for stall_limit
+# rounds, i.e. complete), "max_rounds" (hit the cap: older posts were NOT reached),
+# "stop_before" (scrolled past the target date), or "logged_out" (latest ~12 only).
+LAST_END = None
+
+
 async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_before=None, pause=(1.5, 1.5), _logged_out=False, raw_sink=None):
     """stop_before: optional epoch seconds. Once two scroll rounds in a row
     bring in only posts older than this, stop — the feed is newest-first, so
@@ -110,6 +116,7 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
     (graphql/api, json or javascript) unmodified, before any filtering:
     {"url", "status", "content_type", "text"}. For evidence capture."""
     from playwright.async_api import async_playwright
+    global LAST_END
 
     found = {}
     stall_rounds = 0
@@ -188,6 +195,7 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
 
         grid_codes = []
 
+        LAST_END = "max_rounds"
         for i in range(max_rounds):
             before_count = len(found)
             for href in await page.evaluate(GRID_LINKS_JS):
@@ -203,6 +211,7 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
                 stall_rounds = 0
             if stall_rounds >= stall_limit:
                 print(f"no new posts for {stall_limit} rounds in a row, assuming end of feed")
+                LAST_END = "feed_end"
                 break
             if stop_before is not None:
                 new = list(found.values())[before_count:]
@@ -213,10 +222,13 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
                         older_rounds = 0
                 if older_rounds >= 2:
                     print("scrolled past the target date, stopping")
+                    LAST_END = "stop_before"
                     break
 
         await browser.close()
 
+    if _logged_out:
+        LAST_END = "logged_out"
     if _logged_out and grid_codes:
         print(f"logged out: {len(grid_codes)} grid links; filling dates with yt-dlp")
         _fill_dates_with_ytdlp(found, grid_codes)
