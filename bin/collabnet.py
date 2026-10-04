@@ -109,7 +109,7 @@ def append_to_queue(queue_path, new, source):
 
 def step_scrape(account, cookies, rounds, pause, outdir):
     from igp.profile_history import scrape
-    found = asyncio.run(scrape(account, cookies, max_rounds=rounds, pause=tuple(pause)))
+    found = asyncio.run(scrape(account, Path(cookies), max_rounds=rounds, pause=tuple(pause)))
     outdir.mkdir(parents=True, exist_ok=True)
     out = outdir / f"{account}_timeline.jsonl"
     with open(out, "w", encoding="utf-8") as fh:
