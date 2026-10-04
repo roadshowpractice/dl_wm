@@ -46,6 +46,19 @@ python bin/ig_word_sort.py outputs/ig_timelines/*_2026-10-04        (one report 
     - works on scrapes (above) and forensic captures (bin/ig_scrape_account.py)
     - --top 60 for longer lists, --print to also show it in the terminal
 
+COLLABNET — walk a collaborator network (its own pipeline, not dllink)
+collabnet ~/Desktop/claude/<today>/QUEUE.txt                 accounts in the file, one after the next
+collabnet QUEUE.txt --snowball --max-accounts 10             also queue each account's new collaborators
+collabnet QUEUE.txt --dry-run                                say what it would scrape, scrape nothing
+    - queue file: one account per line, anything after # is a comment
+    - per account: scrape (skipped if we already have it) -> word sort -> graph redrawn
+    - waits 3-6 min between accounts (--gap MIN MAX), 3-6 s between scrolls (--pause)
+    - output: ~/Desktop/claude/<today>/collabnet_<queue name>/
+          run_<time>.log  status.tsv  word_sorts/  graph/collab_graph.html (.png, edges.tsv, nodes.tsv)
+    - Ctrl-C is safe; run the same command again to carry on
+python bin/ig_collab_graph.py                                graph of ALL scrapes we have
+python bin/ig_collab_graph.py --center hiddenwarmovie --depth 2
+
 
 4. SCREENSHOTS -> COLLABORATORS
 --------------------------------------------------------------------------------

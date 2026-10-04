@@ -44,3 +44,8 @@ dependencies:
 
       # optional helper
       - python-dotenv==1.0.1
+
+      # collabnet / ig_collab_graph (network drawing)
+      - networkx>=3.4
+      - matplotlib>=3.10
+      - scipy>=1.15
