@@ -108,14 +108,14 @@ def append_to_queue(queue_path, new, source):
 # ---------- steps ----------
 
 def step_scrape(account, cookies, rounds, pause, outdir):
-    from igp.profile_history import scrape
-    found = asyncio.run(scrape(account, Path(cookies), max_rounds=rounds, pause=tuple(pause)))
+    import igp.profile_history as ph
+    found = asyncio.run(ph.scrape(account, Path(cookies), max_rounds=rounds, pause=tuple(pause)))
     outdir.mkdir(parents=True, exist_ok=True)
     out = outdir / f"{account}_timeline.jsonl"
     with open(out, "w", encoding="utf-8") as fh:
         for rec in sorted(found.values(), key=lambda r: (r["taken_at"] or 0)):
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
-    return out, len(found)
+    return out, len(found), ph.LAST_END
 
 
 def step_word_sort(account, timeline, run_dir, top=40):
@@ -192,12 +192,15 @@ def main(argv=None):
                 outdir = TIMELINES / f"{account}_{date.today().isoformat()}"
                 log(f"{tag}: scraping -> {outdir.relative_to(REPO)}")
                 try:
-                    timeline, n = step_scrape(account, args.cookies, args.rounds, args.pause, outdir)
-                    status = "scraped" if n else "empty"
+                    timeline, n, ended = step_scrape(account, args.cookies, args.rounds, args.pause, outdir)
+                    # "capped" = stopped at --rounds before the oldest post: re-run with --refresh --rounds N
+                    status = ("empty" if not n else "complete" if ended == "feed_end"
+                              else "CAPPED" if ended == "max_rounds" else ended)
                 except Exception as e:  # one bad account shouldn't stop the walk
                     timeline, n, status = None, 0, f"error: {e!r}"[:200]
                 scraped += 1
-                log(f"    {status}, {n} posts")
+                log(f"    {status}, {n} posts" + (f"  (hit --rounds {args.rounds}: older posts not reached; "
+                                                     f"re-run with --refresh --rounds {args.rounds * 4})" if status == "CAPPED" else ""))
 
             ws = ""
             if timeline and n and not args.dry_run:
