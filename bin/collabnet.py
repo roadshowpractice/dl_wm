@@ -8,10 +8,12 @@ accounts, metadata only, nothing downloaded. For each account in a queue file:
                 into outputs/ig_timelines/<account>_<date>/  (skipped if we already
                 have a full scrape of it; --refresh scrapes again)
   2. word sort  bin/ig_word_sort.py on it -> <run>/word_sorts/<account>_word_sort.txt
-  3. graph      bin/ig_collab_graph.py redrawn for the queue's accounts and everyone
-                they co-post with -> <run>/graph/  (png, html, edges.tsv, nodes.tsv)
-
 then waits a random few minutes (--gap) before the next account.
+
+When the whole queue is done (not after each account), it draws ONE graph:
+  bin/ig_collab_graph.py for the queue's accounts and everyone they co-post with
+  -> <run>/graph/ (png, html, edges.tsv, nodes.tsv, plus a dated copy in graph/history/).
+  A run stopped with Ctrl-C draws no graph; the run that finishes the queue does.
 
 --snowball: collaborators found on each account's posts that aren't in the queue yet
 are appended to the queue file ("# from <account>, N posts") and walked too, until
@@ -212,14 +214,16 @@ def main(argv=None):
                     if new:
                         append_to_queue(queue_path, new, account)
                         log(f"    + {len(new)} new collaborators queued: {', '.join(sorted(new))}")
-                step_graph(read_queue(queue_path), run_dir)
-                log(f"    graph -> graph/collab_graph.png")
             with open(run_dir / "status.tsv", "a", encoding="utf-8") as fh:
                 fh.write(f"{account}\t{status}\t{n}\t{timeline or ''}\t{ws}\t"
                          f"{datetime.now(timezone.utc).isoformat(timespec='seconds')}\n")
     except KeyboardInterrupt:
         log("stopped (Ctrl-C). Run the same command again to carry on.")
         return 130
+    # One graph per run, drawn only at the very end (John, 2026-10-04: no image after every account).
+    if not args.dry_run:
+        step_graph(read_queue(queue_path), run_dir)
+        log(f"graph -> graph/collab_graph.png (+ dated copy in graph/history/)")
     log(f"finished: {scraped} scraped this run. graph: {run_dir / 'graph' / 'collab_graph.html'}")
     return 0
 
