@@ -9,7 +9,7 @@ if lib_path not in sys.path:
     sys.path.append(lib_path)
 
 from teton_utils import initialize_logging, load_app_config
-from transcription_caller import run_transcription, update_task_for_media
+from transcription_caller import NO_AUDIO, has_audio_stream, run_transcription, update_task_for_media
 
 
 def main() -> int:
@@ -27,6 +27,12 @@ def main() -> int:
     txt_path = f"{base}.txt"
 
     load_app_config()  # Force app config parse early for clearer errors.
+    if has_audio_stream(input_video) is False:
+        # Silent post (Instagram offers no audio track): nothing to transcribe.
+        logger.warning("No audio stream in %s; skipping transcription.", input_video)
+        update_task_for_media(input_video, "extract_audio", NO_AUDIO)
+        return 0
+
     if not run_transcription(input_video, txt_path, "txt"):
         logger.error("Transcription failed for txt output: %s", txt_path)
         return 1

@@ -9,7 +9,7 @@ if lib_path not in sys.path:
     sys.path.append(lib_path)
 
 from teton_utils import initialize_logging
-from transcription_caller import run_transcription, update_task_for_media
+from transcription_caller import NO_AUDIO, has_audio_stream, run_transcription, update_task_for_media
 
 
 def main() -> int:
@@ -25,6 +25,12 @@ def main() -> int:
 
     base, _ = os.path.splitext(input_video)
     srt_path = f"{base}.srt"
+
+    if has_audio_stream(input_video) is False:
+        # Silent post (Instagram offers no audio track): nothing to transcribe.
+        logger.warning("No audio stream in %s; skipping transcription.", input_video)
+        update_task_for_media(input_video, "generate_srt", NO_AUDIO)
+        return 0
 
     if not run_transcription(input_video, srt_path, "srt"):
         logger.error("Caption transcription failed for srt output: %s", srt_path)

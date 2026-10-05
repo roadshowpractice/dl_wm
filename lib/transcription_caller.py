@@ -137,6 +137,22 @@ def _auto_transcribe_with_local_script(
     return True
 
 
+NO_AUDIO = "no_audio"
+
+
+def has_audio_stream(media_path: str) -> Optional[bool]:
+    """True/False from ffprobe; None when ffprobe can't tell (then transcribe as before)."""
+    cmd = ["ffprobe", "-v", "error", "-select_streams", "a",
+           "-show_entries", "stream=index", "-of", "csv=p=0", media_path]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    return bool(result.stdout.strip())
+
+
 def run_transcription(input_path: str, output_path: str, output_format: str) -> bool:
     """Run configured transcription caller, returning True on success."""
     app_config = load_app_config()
