@@ -94,8 +94,13 @@ def load_posts(files):
                     continue
                 n += 1
                 people = {acct} | {c.lower() for c in (r.get("collaborators") or [])}
-                rec = posts.setdefault(code, {"people": set(), "taken_at": int(r.get("taken_at") or 0)})
+                rec = posts.setdefault(code, {"people": set(), "taken_at": int(r.get("taken_at") or 0),
+                                              "credited": set(), "seen_in": set(), "caption": ""})
                 rec["people"] |= people
+                # evidence: who Instagram credited on the post, and which scrape(s) it came from
+                rec["credited"] |= {c.lower() for c in (r.get("collaborators") or [])}
+                rec["seen_in"].add(acct)
+                rec["caption"] = rec["caption"] or (r.get("caption") or "")
         counts[acct] = n
     return posts, counts
 
@@ -104,7 +109,7 @@ def build_edges(posts):
     edges = {}
     for code, rec in posts.items():
         for a, b in itertools.combinations(sorted(rec["people"]), 2):
-            e = edges.setdefault((a, b), {"n": 0, "first": None, "last": None, "codes": []})
+            e = edges.setdefault((a, b), {"n": 0, "first": None, "last": None, "codes": [], "all_codes": []})
             e["n"] += 1
             t = rec["taken_at"]
             if t:
@@ -112,7 +117,101 @@ def build_edges(posts):
                 e["last"] = t if e["last"] is None else max(e["last"], t)
             if len(e["codes"]) < 3:
                 e["codes"].append(code)
+            e["all_codes"].append(code)
     return edges
+
+
+def names_from_metadata(meta_dir=REPO / "metadata"):
+    """{handle: (display name, source)} from downloaded posts: metadata title "Video by <handle>" + "uploader"."""
+    found = {}
+    for f in sorted(meta_dir.glob("instagram__*.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        m = re.match(r"(?:Video|Post) by ([\w.]+)", d.get("video_title") or "")
+        if m and d.get("uploader"):
+            found.setdefault(m.group(1).lower(), (d["uploader"], f"metadata/{f.name} (uploader)"))
+    return found
+
+
+def read_names(path):
+    """{handle: (display name, source)} from a file: handle<TAB>name<TAB>source. Overrides metadata."""
+    out = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        parts = line.split("\t")
+        if len(parts) >= 2 and parts[0].strip() and not line.startswith("#"):
+            out[parts[0].strip().lower()] = (parts[1].strip(), parts[2].strip() if len(parts) > 2 else path)
+    return out
+
+
+def read_members(path):
+    """{account: source note} from a membership file: one account per line, '# source' after it."""
+    out = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        acct, _, note = line.partition("#")
+        acct = acct.strip().lower()
+        if acct:
+            out[acct] = note.strip()
+    return out
+
+
+def sha256(path):
+    import hashlib
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def write_evidence(out, files, posts, edges, members, argv, started):
+    """Evidence package: every input fingerprinted, every link traced to every post, a manifest."""
+    import getpass, platform, socket, subprocess
+    import matplotlib, networkx
+    day = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ") if t else ""
+    with open(out / "inputs.tsv", "w", encoding="utf-8") as fh:
+        fh.write("account\tfile\tsha256\tbytes\tlines\tmodified_utc\n")
+        for acct, path in sorted(files.items()):
+            st = Path(path).stat()
+            lines = sum(1 for l in open(path, encoding="utf-8") if l.strip())
+            fh.write(f"{acct}\t{path}\t{sha256(path)}\t{st.st_size}\t{lines}\t"
+                     f"{datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat(timespec='seconds')}\n")
+    with open(out / "edge_posts.tsv", "w", encoding="utf-8") as fh:
+        fh.write("a\tb\tshortcode\turl\tposted_utc\tcredited_collaborators\tseen_in_scrape_of\tcaption_start\n")
+        for (a, b), e in sorted(edges.items(), key=lambda kv: (-kv[1]["n"], kv[0])):
+            for code in sorted(e["all_codes"], key=lambda c: posts[c]["taken_at"]):
+                r = posts[code]
+                fh.write(f"{a}\t{b}\t{code}\thttps://www.instagram.com/p/{code}/\t{day(r['taken_at'])}\t"
+                         f"{','.join(sorted(r['credited']))}\t{','.join(sorted(r['seen_in']))}\t"
+                         f"{r['caption'][:120].replace(chr(10), ' ').replace(chr(9), ' ')}\n")
+    if members is not None:
+        with open(out / "members.tsv", "w", encoding="utf-8") as fh:
+            fh.write("account\tsource\tscraped_input\tin_graph\n")
+            in_graph = {n for k in edges for n in k}
+            for acct, note in members.items():
+                fh.write(f"{acct}\t{note}\t{'y' if acct in files else ''}\t{'y' if acct in in_graph else ''}\n")
+    git = lambda *a: subprocess.run(["git", "-C", str(REPO), *a], capture_output=True, text=True).stdout.strip()
+    manifest = {
+        "made_by": "bin/ig_collab_graph.py --evidence",
+        "command": [sys.executable, str(Path(__file__).resolve()), *argv],
+        "started_utc": started, "finished_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "host": socket.gethostname(), "user": getpass.getuser(), "platform": platform.platform(),
+        "python": platform.python_version(), "networkx": networkx.__version__, "matplotlib": matplotlib.__version__,
+        "git_commit": git("rev-parse", "HEAD"), "git_dirty_files": [l for l in git("status", "--porcelain").splitlines()],
+        "script_sha256": sha256(Path(__file__).resolve()),
+        "rules": {
+            "post": "one record per shortcode, merged across the input scrapes",
+            "link": "two accounts are linked by a post when both are among {the scraped account} + {credited collaborators}",
+            "weight": "number of distinct posts (shortcodes) linking the two accounts",
+            "members": "with --members, only links whose BOTH ends are members are kept",
+        },
+        "outputs": {},
+    }
+    for f in sorted(out.iterdir()):
+        if f.is_file() and f.name != "manifest.json":
+            manifest["outputs"][f.name] = {"sha256": sha256(f), "bytes": f.stat().st_size}
+    (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 
 
 def neighborhood(edges, center, depth):
@@ -131,7 +230,7 @@ def day(t):
     return datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d") if t else ""
 
 
-def draw(edges, scraped, out_png, label_top, title):
+def draw(edges, scraped, out_png, label_top, title, names=None, label_all=False):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -154,7 +253,11 @@ def draw(edges, scraped, out_png, label_top, title):
     colors = ["#e0b93a" if n in scraped else "#7d8798" for n in G]
     nx.draw_networkx_nodes(G, pos, ax=ax, node_size=sizes, node_color=colors, edgecolors="#12151c", linewidths=1)
     top = {n for n in G if n in scraped} | set(sorted((n for n in G if n not in scraped), key=lambda n: -strength[n])[:label_top])
-    nx.draw_networkx_labels(G, pos, ax=ax, labels={n: n for n in G if n in top}, font_size=9,
+    if label_all:
+        top = set(G)
+    names = names or {}
+    labels = {n: (f"{names[n][0]}\n@{n}" if n in names else f"@{n}") if names else n for n in G if n in top}
+    nx.draw_networkx_labels(G, pos, ax=ax, labels=labels, font_size=9,
                             font_color="#e6e8ee", font_family="DejaVu Sans")
     ax.set_title(title, color="#e6e8ee", fontsize=14, loc="left")
     # Key: ALWAYS (John's standing rule).
@@ -190,9 +293,27 @@ def main(argv=None):
     ap.add_argument("--touching", default="", help="comma-separated: keep links with at least one end in these accounts")
     ap.add_argument("--label-top", type=int, default=25, help="also name the N busiest unscraped accounts (scraped ones are always named)")
     ap.add_argument("--out", help="output folder")
+    ap.add_argument("--inputs", default="", help="comma-separated scrape files to use INSTEAD of every scrape we have "
+                    "(account = <account>_<date>/<account>_timeline.jsonl name or forensic folder name)")
+    ap.add_argument("--members", help="membership file (one account per line, '# source' after it): keep only links "
+                    "whose BOTH ends are members")
+    ap.add_argument("--names", nargs="?", const="auto", help="label nodes 'Display Name / @handle': names from "
+                    "downloaded-post metadata, plus/overridden by a TSV file (handle<TAB>name<TAB>source) if given")
+    ap.add_argument("--label-all", action="store_true", help="label every node (small graphs)")
+    ap.add_argument("--evidence", action="store_true", help="also write inputs.tsv (sha256 of every input), "
+                    "edge_posts.tsv (every post behind every link), members.tsv and manifest.json")
     args = ap.parse_args(argv)
+    started = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-    files = account_files()
+    if args.inputs:
+        files = {}
+        for raw in args.inputs.split(","):
+            p = Path(raw.strip()).expanduser().resolve()
+            acct = (p.name[: -len("_timeline.jsonl")] if p.name.endswith("_timeline.jsonl")
+                    else re.sub(r"_\d{4}-\d{2}-\d{2}.*$", "", p.parent.name))
+            files[acct.lower()] = p
+    else:
+        files = account_files()
     posts, counts = load_posts(files)
     edges = build_edges(posts)
     exclude = {a.strip().lower() for a in args.exclude.split(",") if a.strip()}
@@ -200,6 +321,9 @@ def main(argv=None):
     if args.only:
         only = {a.strip().lower() for a in args.only.split(",") if a.strip()}
         edges = {k: v for k, v in edges.items() if set(k) <= only}
+    members = read_members(args.members) if args.members else None
+    if members is not None:
+        edges = {k: v for k, v in edges.items() if set(k) <= set(members)}
     if args.touching:
         touching = {a.strip().lower() for a in args.touching.split(",") if a.strip()}
         edges = {k: v for k, v in edges.items() if set(k) & touching}
@@ -233,7 +357,19 @@ def main(argv=None):
              else f"{len(args.touching.split(','))} accounts and their partners" if args.touching
              else "all scraped accounts")
     title = f"Instagram co-posting — {scope} · {len(nodes)} accounts, {len(edges)} links · {date.today().isoformat()}"
-    draw(edges, scraped, out / "collab_graph.png", args.label_top, title)
+    if members is not None:
+        title = f"Instagram co-posting — {Path(args.members).stem} ({len(members)} listed accounts) · {len(nodes)} accounts, {len(edges)} links · {date.today().isoformat()}"
+    names = None
+    if args.names:
+        names = names_from_metadata()
+        if args.names != "auto":
+            names.update(read_names(args.names))
+        with open(out / "names.tsv", "w", encoding="utf-8") as fh:
+            fh.write("handle\tdisplay_name\tsource\n")
+            for n in nodes:
+                nm, src = names.get(n, ("", "no name in our data"))
+                fh.write(f"{n}\t{nm}\t{src}\n")
+    draw(edges, scraped, out / "collab_graph.png", args.label_top, title, names=names, label_all=args.label_all)
 
     png64 = base64.b64encode((out / "collab_graph.png").read_bytes()).decode()
     def table(path):
@@ -250,6 +386,9 @@ th{{color:#a2a9b8}}h2{{margin-top:32px}}</style>
 <img src="data:image/png;base64,{png64}">
 <h2>Accounts</h2>{table("nodes.tsv")}<h2>Links</h2>{table("edges.tsv")}"""
     (out / "collab_graph.html").write_text(page, encoding="utf-8")
+    if args.evidence:
+        write_evidence(out, files, posts, edges, members, list(argv if argv is not None else sys.argv[1:]), started)
+
     # Dated copy of every drawing (John, 2026-10-04): the files above are overwritten each run,
     # history/ keeps each version: <date_time>_<accounts>a_<links>l.png plus its edges/nodes tables.
     import shutil
