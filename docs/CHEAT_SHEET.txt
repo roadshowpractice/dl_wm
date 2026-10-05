@@ -11,7 +11,13 @@ dllink https://www.instagram.com/p/SHORTCODE/
     - wraps bin/call_router.py; mounts the USB drive if needed
     - log: ~/Desktop/claude/<today>/dllink_<time>.log
     - no URL = uses the link saved in ~/Downloads/link.md
-python bin/call_router.py "URL"            same thing, no wrapper
+dllink --list FILE                          every link in FILE, one at a time   (added 2026-10-04)
+    - 60-180 s between links (DLLINK_GAP="MIN MAX" to change)
+    - logs: ~/Desktop/claude/<today>/dllink_list_<time>/ (<shortcode>.log + _progress.log)
+    - finished links go in FILE.done and are skipped next time: Ctrl-C safe, re-run carries on
+    - checks the USB drive is writable first and before every link; stops if it isn't
+python -m lib.drive_check                   is the USB drive for outputs/ really writable? (test write)
+python bin/call_router.py "URL"            same thing, no wrapper (exits 1 if anything failed)
 python bin/call_router.py "URL" --dry-run  show what it would do
 
     Re-running is safe: finished steps are skipped and only missing ones run.
@@ -56,6 +62,12 @@ collabnet QUEUE.txt --dry-run                                say what it would s
     - output: ~/Desktop/claude/<today>/collabnet_<queue name>/
           run_<time>.log  status.tsv  word_sorts/  graph/collab_graph.html (.png, edges.tsv, nodes.tsv)
     - Ctrl-C is safe; run the same command again to carry on
+    - accounts that hit the scroll cap are logged CAPPED and listed in capped_<queue>.txt
+      (next to the queue file) with the re-scrape command at its top
+python bin/ig_tagged_posts.py timballard89 --name 'tim\s*ballard' --queue QUEUE.txt
+    - every post in those accounts' scrapes that ties to timballard89 (collaborator, @, or named)
+    - writes ~/Desktop/claude/<today>/analysis/timballard89_tagged_posts.tsv + .urls.txt
+    - then: dllink --list ~/Desktop/claude/<today>/analysis/timballard89_tagged_posts.urls.txt
 python bin/ig_collab_graph.py                                graph of ALL scrapes we have
 python bin/ig_collab_graph.py --center hiddenwarmovie --depth 2
 
