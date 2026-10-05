@@ -14,6 +14,8 @@ Writes to ~/Desktop/claude/<today>/analysis/collab_graph/ (or --out):
                      Line colour (and width) = band of shared posts, faint blue 1 -> near-white 100+;
                      dot size = shared posts; gold = scraped, grey = only seen as a collaborator
   collab_graph.html  the picture plus both tables, one local file (open in a browser)
+  history/           a dated copy of every drawing: <date_time>_<accounts>a_<links>l_collab_graph.png
+                     (+ its edges.tsv / nodes.tsv), since the files above are overwritten each run
 
 Usage:
     python bin/ig_collab_graph.py
@@ -248,7 +250,15 @@ th{{color:#a2a9b8}}h2{{margin-top:32px}}</style>
 <img src="data:image/png;base64,{png64}">
 <h2>Accounts</h2>{table("nodes.tsv")}<h2>Links</h2>{table("edges.tsv")}"""
     (out / "collab_graph.html").write_text(page, encoding="utf-8")
-    print(f"{len(nodes)} accounts, {len(edges)} links -> {out}")
+    # Dated copy of every drawing (John, 2026-10-04): the files above are overwritten each run,
+    # history/ keeps each version: <date_time>_<accounts>a_<links>l.png plus its edges/nodes tables.
+    import shutil
+    hist = out / "history"
+    hist.mkdir(exist_ok=True)
+    stamp = f"{datetime.now().strftime('%Y-%m-%d_%H%M%S')}_{len(nodes)}a_{len(edges)}l"
+    for name in ("collab_graph.png", "edges.tsv", "nodes.tsv"):
+        shutil.copy2(out / name, hist / f"{stamp}_{name}")
+    print(f"{len(nodes)} accounts, {len(edges)} links -> {out}  (dated copy: history/{stamp}_collab_graph.png)")
     return 0
 
 
