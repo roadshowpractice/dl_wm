@@ -44,7 +44,9 @@ def is_image_media(found_data, downloaded_path):
     return extension in IMAGE_EXTENSIONS
 
 def execute_tasks(task_config, url, to_process, dry_run=False):
-    """Run appropriate script for each task based on its config."""
+    """Run appropriate script for each task based on its config.
+    Returns how many tasks failed (0 = all fine), so main() can exit non-zero."""
+    failed = 0
     for task, status in task_config.items():
         script = TASK_DISPATCH.get(task)
 
@@ -72,6 +74,7 @@ def execute_tasks(task_config, url, to_process, dry_run=False):
             else:
                 result = subprocess.run([sys.executable, script_path, task_input], cwd=root_dir)
                 if result.returncode != 0:
+                    failed += 1
                     logging.error(
                         "Task failed: {} (exit code: {})".format(
                             task, result.returncode
@@ -81,6 +84,7 @@ def execute_tasks(task_config, url, to_process, dry_run=False):
             logging.info("✅ Task already completed: {} @ {}".format(task, status))
         else:
             logging.info("⏭️  Skipping task: {}".format(task))
+    return failed
 
 
 def carousel_followup_items(found_data, to_process):
@@ -218,7 +222,7 @@ def main():
                     "❌ Downloader failed before metadata was generated. "
                     "Fix downloader errors above, then rerun call_router."
                 )
-                return
+                return 1
             found_file, found_data = find_url_json(url, metadata_dir=metadata_dir)
             perform_download_done = (
                 found_data.get("default_tasks", {}).get("perform_download")
@@ -228,7 +232,7 @@ def main():
 
         if not found_data:
             logger.error("❌ No metadata found after attempted download.")
-            return
+            return 1
 
         print("Found in: {}".format(found_file))
         visible_fields = {
@@ -244,12 +248,13 @@ def main():
             to_process = perform_download_done
         else:
             logger.error("Download task not completed and no output path recorded.")
-            return
+            return 1
 
         if not wait_for_download_file(to_process, logger):
             logger.error("Input file does not exist: {}".format(to_process))
-            return
+            return 1
 
+        failed_tasks = 0
         followups = carousel_followup_items(found_data, to_process)
         first_is_image = is_image_media(found_data, to_process)
         if first_is_image and not followups:
@@ -269,19 +274,25 @@ def main():
             logger.info("First carousel item is an image; processing its video items only.")
         else:
             logger.info("🛠 Tasks to evaluate: {}".format(list(default_tasks.keys())))
-            execute_tasks(default_tasks, url, to_process, dry_run)
+            failed_tasks += execute_tasks(default_tasks, url, to_process, dry_run)
 
         for item_path in followups:
             if not os.path.isfile(item_path):
                 logger.warning("Carousel item missing on disk, skipping: {}".format(item_path))
                 continue
             logger.info("🎞 Carousel item: {}".format(item_path))
-            execute_tasks(item_task_state(found_data, item_path, write=not dry_run), url, item_path, dry_run)
+            failed_tasks += execute_tasks(item_task_state(found_data, item_path, write=not dry_run), url, item_path, dry_run)
+
+        # Exit code (2026-10-04): non-zero when anything failed, so a caller such as
+        # `dllink --list` can tell a failed link from a finished one. Before this,
+        # main() always exited 0, even after logging an error.
+        return 1 if failed_tasks else 0
 
     except Exception as e:
         logging.error("Unexpected error in main(): {}".format(e))
         traceback.print_exc()
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
