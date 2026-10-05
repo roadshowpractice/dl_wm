@@ -1,4 +1,6 @@
 import importlib.util
+import sys
+sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parents[1]))
 import json
 import pathlib
 
@@ -64,3 +66,43 @@ def test_graph_counts_a_shared_post_once(tmp_path):
     assert edges[("a", "b")]["n"] == 1
     assert edges[("b", "c")]["n"] == 1
     assert counts == {"a": 1, "b": 2}
+
+
+def test_write_capped_lists_each_account_once(tmp_path):
+    q = tmp_path / "myqueue.txt"
+    q.write_text("a\nb\n", encoding="utf-8")
+    msgs = []
+    cn.write_capped([("a", 384)], q, 150, msgs.append)
+    cn.write_capped([("a", 384), ("b", 400)], q, 150, msgs.append)
+    out = tmp_path / "capped_myqueue.txt"
+    assert cn.read_queue(out) == ["a", "b"]
+    assert "--refresh --rounds 600" in out.read_text()
+
+
+def test_drive_check(tmp_path):
+    import pytest
+    from lib.drive_check import OutputsDriveError, assert_outputs_writable
+    assert assert_outputs_writable(tmp_path) == tmp_path.resolve()
+    assert not list(tmp_path.iterdir())  # the probe file is cleaned up
+    with pytest.raises(OutputsDriveError):
+        assert_outputs_writable(tmp_path / "not_there")
+
+
+def test_ig_tagged_posts_rules(tmp_path):
+    tp = _load("ig_tagged_posts")
+    a = _write(tmp_path / "tb.jsonl", [
+        {"shortcode": "SOLO", "caption": "my own post", "collaborators": []},           # TB solo: out
+        {"shortcode": "CO", "caption": "", "collaborators": ["timballard89", "x"]},     # co-authored: in
+    ])
+    b = _write(tmp_path / "x.jsonl", [
+        {"shortcode": "CO", "caption": "", "collaborators": ["timballard89", "x"]},     # same post: once
+        {"shortcode": "AT", "caption": "thanks @timballard89", "collaborators": []},
+        {"shortcode": "NM", "caption": "with Tim Ballard today", "collaborators": []},
+        {"shortcode": "NO", "caption": "nothing", "collaborators": []},
+    ])
+    rows = tp.find_tagged({"timballard89": a, "x": b}, "timballard89", r"tim\s*ballard")
+    assert set(rows) == {"CO", "AT", "NM"}
+    assert rows["CO"]["found_in"] == {"timballard89", "x"}
+    total, new = tp.write(rows, tmp_path / "out", meta_dir=tmp_path)
+    assert (total, new) == (3, 3)
+    assert len((tmp_path / "out.urls.txt").read_text().splitlines()) == 3
