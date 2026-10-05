@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# collabnet — walk an Instagram collaborator network from a queue file, one account
+# after the next: scrape (metadata only) -> word sort -> graph. Not dllink (that's the
+# per-link download/watermark/transcript pipeline). Everything after the queue file is
+# passed through: --snowball, --max-accounts N, --gap MIN MAX, --dry-run, ...
+# Output: ~/Desktop/claude/<today>/collabnet_<queue name>/  (log, status.tsv, word_sorts/, graph/)
+set -euo pipefail
+
+REPO=~/Documents/repos/dl_wm
+set +u
+source ~/miniforge3/etc/profile.d/conda.sh
+shopt -s expand_aliases
+source ~/.bash_aliases
+cad
+set -u
+
+[ $# -ge 1 ] || { echo "usage: collabnet QUEUE.txt [--snowball] [--max-accounts N] [--dry-run] ..."; exit 1; }
+queue=$(realpath "$1"); shift
+
+# outputs/ is a symlink onto the UBUNTU 26_0 USB drive, which keeps unmounting
+if ! findmnt -rn -S LABEL="UBUNTU 26_0" >/dev/null; then
+  udisksctl mount -b "$(blkid -L 'UBUNTU 26_0')"
+fi
+
+cd "$REPO"
+python bin/collabnet.py "$queue" "$@"

@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# dllink — run the dl_wm pipeline on the link saved in ~/Downloads/link.md
+# (or on a URL passed as the first argument). Output lands in
+# dl_wm/outputs/<today>/. Log goes to ~/Desktop/claude/<today>/dllink_<time>.log
+set -euo pipefail
+
+REPO=~/Documents/repos/dl_wm
+# activate the dl_wm conda env for real (cad = conda activate dl_wm, from
+# ~/.bash_aliases) — yt-dlp needs the env's deno to solve YouTube's
+# n-challenge, and without an activated env every YouTube fetch 403s
+set +u
+source ~/miniforge3/etc/profile.d/conda.sh
+shopt -s expand_aliases
+source ~/.bash_aliases
+cad
+set -u
+PY=python
+LINKFILE=~/Downloads/link.md
+
+url="${1:-}"
+if [ -z "$url" ]; then
+  [ -f "$LINKFILE" ] || { echo "no URL given and $LINKFILE not found"; exit 1; }
+  url=$(grep -oE 'https?://[^ )>]+' "$LINKFILE" | head -1)
+fi
+[ -n "$url" ] || { echo "no URL found in $LINKFILE"; exit 1; }
+
+# outputs/ is a symlink onto the UBUNTU 26_0 USB drive, which keeps unmounting
+if ! findmnt -rn -S LABEL="UBUNTU 26_0" >/dev/null; then
+  udisksctl mount -b "$(blkid -L 'UBUNTU 26_0')"
+fi
+
+logdir=~/Desktop/claude/$(date +%F)
+mkdir -p "$logdir"
+log="$logdir/dllink_$(date +%H%M%S).log"
+
+echo "URL: $url"
+echo "log: $log"
+cd "$REPO"
+"$PY" bin/call_router.py "$url" 2>&1 | tee "$log"
+echo
+echo "done — outputs in $REPO/outputs/$(date +%F)/"
