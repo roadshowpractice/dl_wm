@@ -13,7 +13,7 @@
 #   - running tally:                ~/Desktop/claude/<today>/dllink_list_<time>/_progress.log
 #   - finished links are written to FILE.done; running the same command again skips them,
 #     so Ctrl-C is safe and a re-run carries on. Failed links are NOT marked done (re-run retries them).
-#   - one failed link doesn't stop the list.
+#   - one failed link doesn't stop the list; a USB drive that isn't writable does (checked before each link).
 set -euo pipefail
 
 REPO=~/Documents/repos/dl_wm
@@ -36,6 +36,13 @@ fi
 
 logdir=~/Desktop/claude/$(date +%F)
 mkdir -p "$logdir"
+
+# Don't trust the drive: prove outputs/ can be written (test file written, read back, deleted).
+# Checked once here and again before every link in --list mode.   (added 2026-10-04)
+drive_check() { (cd "$REPO" && "$PY" -m lib.drive_check >/dev/null); }
+if ! (cd "$REPO" && "$PY" -m lib.drive_check); then
+  echo "STOPPED: the USB drive for outputs/ isn't writable (see above). Nothing was run."; exit 1
+fi
 
 # ---------- --list FILE (added 2026-10-04) ----------
 if [ "${1:-}" = "--list" ]; then
@@ -61,6 +68,10 @@ if [ "${1:-}" = "--list" ]; then
       wait=$((gap_min + RANDOM % (gap_max - gap_min + 1)))
       say "    waiting ${wait}s"
       sleep "$wait"
+    fi
+    if ! drive_check; then
+      say "STOPPED at [$n/$total]: the USB drive for outputs/ stopped being writable. Re-run once it's back."
+      exit 1
     fi
     code=$(basename "${url%/}")
     say "[$n/$total] $url"
