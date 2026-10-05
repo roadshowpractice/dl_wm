@@ -15,6 +15,9 @@ When the whole queue is done (not after each account), it draws ONE graph:
   -> <run>/graph/ (png, html, edges.tsv, nodes.tsv, plus a dated copy in graph/history/).
   A run stopped with Ctrl-C draws no graph; the run that finishes the queue does.
 
+Accounts that stop at the scroll cap (--rounds) are logged as CAPPED and written to
+capped_<queue name>.txt next to the queue file, with the re-scrape command at its top.
+
 --snowball: collaborators found on each account's posts that aren't in the queue yet
 are appended to the queue file ("# from <account>, N posts") and walked too, until
 --max-accounts scrapes have been done this run.
@@ -58,6 +61,8 @@ def _load(name):
     spec.loader.exec_module(mod)
     return mod
 
+
+from lib.drive_check import OutputsDriveError, assert_outputs_writable
 
 word_sort = _load("ig_word_sort")
 collab_graph = _load("ig_collab_graph")
@@ -132,6 +137,26 @@ def step_graph(queue, run_dir):
     return collab_graph.main(["--touching", ",".join(queue), "--out", str(run_dir / "graph")])
 
 
+def write_capped(capped, queue_path, rounds, log):
+    """Accounts that hit the scroll cap -> capped_<queue>.txt next to the queue file, ready to re-run.
+    Appends (a re-run may cap more); accounts already listed aren't repeated."""
+    if not capped:
+        return
+    out = queue_path.with_name(f"capped_{queue_path.stem}.txt")
+    have = set(read_queue(out)) if out.exists() else set()
+    new = [(a, n) for a, n in capped if a not in have]
+    if not new:
+        return
+    with open(out, "a", encoding="utf-8") as fh:
+        if not have:
+            fh.write(f"# Accounts from {queue_path.name} whose scrape stopped at --rounds {rounds} (older posts\n"
+                     f"# NOT reached). Re-scrape with:\n"
+                     f"#   collabnet {out} --refresh --rounds {rounds * 4}\n")
+        for a, n in new:
+            fh.write(f"{a:<30}# {n} posts at the cap, {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+    log(f"{len(new)} capped account(s) listed for re-scrape -> {out}")
+
+
 class Log:
     def __init__(self, path):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -167,7 +192,20 @@ def main(argv=None):
     log(f"  cookies {args.cookies}  rounds {args.rounds}  gap {args.gap} min  pause {args.pause} s  "
         f"snowball {args.snowball}  max {args.max_accounts}{'  DRY RUN' if args.dry_run else ''}")
 
+    # The scrapes are saved on the USB drive (outputs/ -> /mnt/ubuntu26). Prove it can be
+    # written to before starting, and again before every account (drives drop out mid-run).
+    def drive_ok():
+        try:
+            assert_outputs_writable()
+            return True
+        except OutputsDriveError as e:
+            log(f"STOPPED, nothing more will be saved: {e}")
+            return False
+
+    if not args.dry_run and not drive_ok():
+        return 2
     scraped, i = 0, 0
+    capped = []  # (account, posts) that hit --rounds this run
     try:
         while True:
             queue = read_queue(queue_path)  # re-read each time: snowball grows it
@@ -191,6 +229,8 @@ def main(argv=None):
                     wait = random.uniform(*args.gap) * 60
                     log(f"    waiting {wait / 60:.1f} min before {account}")
                     time.sleep(wait)
+                if not drive_ok():
+                    return 2
                 outdir = TIMELINES / f"{account}_{date.today().isoformat()}"
                 log(f"{tag}: scraping -> {outdir.relative_to(REPO)}")
                 try:
@@ -201,6 +241,8 @@ def main(argv=None):
                 except Exception as e:  # one bad account shouldn't stop the walk
                     timeline, n, status = None, 0, f"error: {e!r}"[:200]
                 scraped += 1
+                if status == "CAPPED":
+                    capped.append((account, n))
                 log(f"    {status}, {n} posts" + (f"  (hit --rounds {args.rounds}: older posts not reached; "
                                                      f"re-run with --refresh --rounds {args.rounds * 4})" if status == "CAPPED" else ""))
 
@@ -218,8 +260,10 @@ def main(argv=None):
                 fh.write(f"{account}\t{status}\t{n}\t{timeline or ''}\t{ws}\t"
                          f"{datetime.now(timezone.utc).isoformat(timespec='seconds')}\n")
     except KeyboardInterrupt:
+        write_capped(capped, queue_path, args.rounds, log)
         log("stopped (Ctrl-C). Run the same command again to carry on.")
         return 130
+    write_capped(capped, queue_path, args.rounds, log)
     # One graph per run, drawn only at the very end (John, 2026-10-04: no image after every account).
     if not args.dry_run:
         step_graph(read_queue(queue_path), run_dir)
