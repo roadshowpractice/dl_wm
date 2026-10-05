@@ -70,6 +70,14 @@ python bin/ig_tagged_posts.py timballard89 --name 'tim\s*ballard' --queue QUEUE.
     - then: dllink --list ~/Desktop/claude/<today>/analysis/timballard89_tagged_posts.urls.txt
 python bin/ig_collab_graph.py                                graph of ALL scrapes we have
 python bin/ig_collab_graph.py --center hiddenwarmovie --depth 2
+EVIDENCE-GRADE GRAPH of a group (added 2026-10-04)
+python bin/ig_group_members.py --seeds GROUP.txt --out DIR                 who's in the group: seeds + accounts tied to 2+ seeds
+python bin/ig_collab_graph.py --members DIR/members.txt --evidence --names --label-all --out DIR/graph
+    - GROUP.txt: one account per line, '# where our own work placed it' after it
+    - --evidence writes inputs.tsv (sha256 of every scrape used), edge_posts.tsv (every post behind every
+      line), members.tsv and manifest.json (code version, command, hash of every output)
+    - --names labels dots "Display Name / @handle" from downloaded-post metadata (+ a names TSV if given)
+    - --inputs FILE,FILE uses only those scrapes instead of all of them
 
 
 4. SCREENSHOTS -> COLLABORATORS
