@@ -51,7 +51,7 @@ collabnet ~/Desktop/claude/<today>/QUEUE.txt                 accounts in the fil
 collabnet QUEUE.txt --snowball --max-accounts 10             also queue each account's new collaborators
 collabnet QUEUE.txt --dry-run                                say what it would scrape, scrape nothing
     - queue file: one account per line, anything after # is a comment
-    - per account: scrape (skipped if we already have it) -> word sort -> graph redrawn
+    - per account: scrape (skipped if we already have it) -> word sort; ONE graph at the very end of the run
     - waits 3-6 min between accounts (--gap MIN MAX), 3-6 s between scrolls (--pause)
     - output: ~/Desktop/claude/<today>/collabnet_<queue name>/
           run_<time>.log  status.tsv  word_sorts/  graph/collab_graph.html (.png, edges.tsv, nodes.tsv)
