@@ -1,7 +1,19 @@
 #!/usr/bin/env bash
-# dllink — run the dl_wm pipeline on the link saved in ~/Downloads/link.md
-# (or on a URL passed as the first argument). Output lands in
-# dl_wm/outputs/<today>/. Log goes to ~/Desktop/claude/<today>/dllink_<time>.log
+# dllink — run the dl_wm pipeline (download -> watermark -> transcript, per conf/default_tasks.json)
+#
+#   dllink                      the first link in ~/Downloads/link.md
+#   dllink URL                  that one link
+#   dllink --list FILE          every link in FILE, one at a time            (added 2026-10-04)
+#
+# One link:  output in dl_wm/outputs/<today>/, log in ~/Desktop/claude/<today>/dllink_<time>.log
+#
+# --list FILE: one URL per line (anything after # is ignored, blank lines skipped).
+#   - waits a random 60-180 s between links (gentle on Instagram); DLLINK_GAP="MIN MAX" changes it
+#   - each link gets its own log:   ~/Desktop/claude/<today>/dllink_list_<time>/<shortcode>.log
+#   - running tally:                ~/Desktop/claude/<today>/dllink_list_<time>/_progress.log
+#   - finished links are written to FILE.done; running the same command again skips them,
+#     so Ctrl-C is safe and a re-run carries on. Failed links are NOT marked done (re-run retries them).
+#   - one failed link doesn't stop the list.
 set -euo pipefail
 
 REPO=~/Documents/repos/dl_wm
@@ -17,13 +29,6 @@ set -u
 PY=python
 LINKFILE=~/Downloads/link.md
 
-url="${1:-}"
-if [ -z "$url" ]; then
-  [ -f "$LINKFILE" ] || { echo "no URL given and $LINKFILE not found"; exit 1; }
-  url=$(grep -oE 'https?://[^ )>]+' "$LINKFILE" | head -1)
-fi
-[ -n "$url" ] || { echo "no URL found in $LINKFILE"; exit 1; }
-
 # outputs/ is a symlink onto the UBUNTU 26_0 USB drive, which keeps unmounting
 if ! findmnt -rn -S LABEL="UBUNTU 26_0" >/dev/null; then
   udisksctl mount -b "$(blkid -L 'UBUNTU 26_0')"
@@ -31,7 +36,53 @@ fi
 
 logdir=~/Desktop/claude/$(date +%F)
 mkdir -p "$logdir"
+
+# ---------- --list FILE (added 2026-10-04) ----------
+if [ "${1:-}" = "--list" ]; then
+  list=$(realpath "${2:?usage: dllink --list FILE}")
+  done_file="$list.done"
+  touch "$done_file"
+  read -r gap_min gap_max <<< "${DLLINK_GAP:-60 180}"
+  rundir="$logdir/dllink_list_$(date +%H%M%S)"
+  mkdir -p "$rundir"
+  progress="$rundir/_progress.log"
+  mapfile -t urls < <(sed -e 's/#.*//' -e 's/[[:space:]]//g' "$list" | grep -E '^https?://' || true)
+  total=${#urls[@]}
+  say() { echo "$(date +%T) $*" | tee -a "$progress"; }
+  say "dllink --list $list: $total links, gap ${gap_min}-${gap_max}s, logs in $rundir"
+  cd "$REPO"
+  n=0; ran=0; ok=0; failed=0; skipped=0
+  for url in "${urls[@]}"; do
+    n=$((n + 1))
+    if grep -qxF "$url" "$done_file"; then
+      skipped=$((skipped + 1)); continue
+    fi
+    if [ "$ran" -gt 0 ]; then
+      wait=$((gap_min + RANDOM % (gap_max - gap_min + 1)))
+      say "    waiting ${wait}s"
+      sleep "$wait"
+    fi
+    code=$(basename "${url%/}")
+    say "[$n/$total] $url"
+    ran=$((ran + 1))
+    if "$PY" bin/call_router.py "$url" > "$rundir/$code.log" 2>&1; then
+      echo "$url" >> "$done_file"; ok=$((ok + 1)); say "    ok"
+    else
+      failed=$((failed + 1)); say "    FAILED (see $rundir/$code.log)"
+    fi
+  done
+  say "finished: $ok ok, $failed failed, $skipped already done (from $done_file)"
+  exit 0
+fi
+
+# ---------- one link (unchanged) ----------
 log="$logdir/dllink_$(date +%H%M%S).log"
+url="${1:-}"
+if [ -z "$url" ]; then
+  [ -f "$LINKFILE" ] || { echo "no URL given and $LINKFILE not found"; exit 1; }
+  url=$(grep -oE 'https?://[^ )>]+' "$LINKFILE" | head -1)
+fi
+[ -n "$url" ] || { echo "no URL found in $LINKFILE"; exit 1; }
 
 echo "URL: $url"
 echo "log: $log"
