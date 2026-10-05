@@ -10,8 +10,9 @@ each partner's grid) is counted once, by shortcode.
 Writes to ~/Desktop/claude/<today>/analysis/collab_graph/ (or --out):
   edges.tsv          a, b, shared_posts, first, last, example shortcodes
   nodes.tsv          account, scraped (y/n), posts_scraped, partners, shared_posts
-  collab_graph.png   the picture: node size = shared posts, line width = shared posts,
-                     dark nodes = accounts we have scraped, light = only seen as collaborators
+  collab_graph.png   the picture, always with a key (John's standing rule for every graph).
+                     Line colour (and width) = band of shared posts, faint blue 1 -> near-white 100+;
+                     dot size = shared posts; gold = scraped, grey = only seen as a collaborator
   collab_graph.html  the picture plus both tables, one local file (open in a browser)
 
 Usage:
@@ -38,6 +39,24 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 TIMELINES = REPO / "outputs" / "ig_timelines"
+
+
+# Edge colour = how many posts the two accounts share, in bands (John's rule: edges defined by
+# colour, always with a key; no numbers on the lines). One hue, faint -> bright on the dark
+# background (ordinal blue ramp from the dataviz palette, checked: faintest 2.25:1 on #12151c,
+# every neighbouring step >= 9.5 dE, colour-blind too). Width grows with the band as well.
+EDGE_BANDS = [  # (lowest count in band, label, colour, width)
+    (1, "1 shared post", "#184f95", 0.6),
+    (2, "2-4 shared posts", "#256abf", 1.1),
+    (5, "5-19 shared posts", "#3987e5", 1.8),
+    (20, "20-99 shared posts", "#86b6ef", 2.8),
+    (100, "100+ shared posts", "#cde2fb", 4.0),
+]
+
+
+def edge_band(n):
+    """Index into EDGE_BANDS for a link seen on n posts."""
+    return max(i for i, (lo, *_rest) in enumerate(EDGE_BANDS) if n >= lo)
 
 
 def account_files(root=TIMELINES):
@@ -124,8 +143,11 @@ def draw(edges, scraped, out_png, label_top, title):
     fig, ax = plt.subplots(figsize=(16, 12), dpi=110)
     fig.patch.set_facecolor("#12151c")
     ax.set_facecolor("#12151c")
-    widths = [0.4 + 3.0 * (G[a][b]["weight"] / max(1, max(e["n"] for e in edges.values()))) ** 0.5 for a, b in G.edges]
-    nx.draw_networkx_edges(G, pos, ax=ax, width=widths, edge_color="#5b6b85", alpha=0.6)
+    band_of = {(a, b): edge_band(G[a][b]["weight"]) for a, b in G.edges}
+    for i, (_lo, _label, colour, width) in enumerate(EDGE_BANDS):  # faint first, strong drawn on top
+        es = [e for e, b in band_of.items() if b == i]
+        if es:
+            nx.draw_networkx_edges(G, pos, ax=ax, edgelist=es, width=width, edge_color=colour, alpha=0.9)
     sizes = [60 + 40 * strength[n] ** 0.7 for n in G]
     colors = ["#e0b93a" if n in scraped else "#7d8798" for n in G]
     nx.draw_networkx_nodes(G, pos, ax=ax, node_size=sizes, node_color=colors, edgecolors="#12151c", linewidths=1)
@@ -133,11 +155,25 @@ def draw(edges, scraped, out_png, label_top, title):
     nx.draw_networkx_labels(G, pos, ax=ax, labels={n: n for n in G if n in top}, font_size=9,
                             font_color="#e6e8ee", font_family="DejaVu Sans")
     ax.set_title(title, color="#e6e8ee", fontsize=14, loc="left")
-    ax.text(0.0, -0.02, "gold = accounts scraped · grey = only seen as collaborators · "
-            "size/width = shared posts", transform=ax.transAxes, color="#a2a9b8", fontsize=10)
+    # Key: ALWAYS (John's standing rule).
+    from matplotlib.lines import Line2D
+    band_counts = [sum(1 for v in band_of.values() if v == i) for i in range(len(EDGE_BANDS))]
+    key = [
+        Line2D([], [], marker="o", ls="", ms=11, mfc="#e0b93a", mec="#12151c", label="account we scraped"),
+        Line2D([], [], marker="o", ls="", ms=11, mfc="#7d8798", mec="#12151c", label="only seen as a collaborator"),
+        Line2D([], [], ls="", label="dot size = all shared posts for that account"),
+        Line2D([], [], ls="", label=""),
+        Line2D([], [], ls="", label="LINE COLOUR = posts the two accounts share"),
+    ] + [
+        Line2D([], [], color=colour, lw=max(width, 1.5) + 1, label=f"{label}  ({band_counts[i]} links)")
+        for i, (_lo, label, colour, width) in enumerate(EDGE_BANDS)
+    ]
+    leg = ax.legend(handles=key, loc="upper left", bbox_to_anchor=(1.01, 1.0), title="Key", fontsize=9, title_fontsize=10,
+                    facecolor="#1a1f29", edgecolor="#2e3544", labelcolor="#e6e8ee", framealpha=0.95)
+    leg.get_title().set_color("#e6e8ee")
     ax.axis("off")
     fig.tight_layout()
-    fig.savefig(out_png, facecolor=fig.get_facecolor())
+    fig.savefig(out_png, facecolor=fig.get_facecolor(), bbox_inches="tight")  # keeps the key (outside the axes) in frame
     plt.close(fig)
     return strength
 
