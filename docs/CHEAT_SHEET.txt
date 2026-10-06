@@ -71,6 +71,13 @@ python bin/stamp_sticker.py card.png [more.png ...]          -> card_stamped.png
     - --corner tl/tr/bl/br, --size 0.22, --rotate -8; never overwrites the input
     - sticker: assets/stickers/watch_buttfire.png (no Ballard in it, ever)
 
+X (TWITTER) THREAD with an at list (not yet run live: needs an X login exported to conf/x.cookies.txt)
+python bin/x_post.py --thread THREAD.txt --image card.png --at ats.txt --plan     (no browser: posts, lengths, tags)
+python bin/x_post.py --cookies conf/x.cookies.txt --thread THREAD.txt --image card.png --at ats.txt [--post]
+    - THREAD.txt: posts separated by "---" (or "1/5" header lines); image goes on post 1
+    - ats.txt: one handle per line; --at-where reply (default, a final "cc @a @b" post) / first / last
+    - checks every post against 280 (links = 23); stops instead of trimming; dry run unless --post
+
 COLLABNET — walk a collaborator network (its own pipeline, not dllink)
 collabnet ~/Desktop/claude/<today>/QUEUE.txt                 accounts in the file, one after the next
 collabnet QUEUE.txt --snowball --max-accounts 10             also queue each account's new collaborators
