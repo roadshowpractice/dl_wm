@@ -1,0 +1,42 @@
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Courier+Prime:wght@700&family=IBM+Plex+Sans+Condensed:wght@600&display=swap"><style>html,body{margin:0;width:1080px;height:1080px;background:transparent}</style>
+<svg width="1080" height="1080"><defs>
+    <radialGradient id="glow" cx="50%" cy="40%" r="50%"><stop offset="0" stop-color="#ff8a1e" stop-opacity=".45"/><stop offset="1" stop-color="#ff8a1e" stop-opacity="0"/></radialGradient>
+    <linearGradient id="flameO" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#e8401c"/><stop offset=".6" stop-color="#ff8a1e"/><stop offset="1" stop-color="#ffd65a"/></linearGradient>
+    <linearGradient id="flameY" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff8a1e"/><stop offset="1" stop-color="#fff2a8"/></linearGradient>
+  </defs>
+<circle cx="540" cy="540" r="470" fill="#fff" stroke="#12151c" stroke-width="10"/>
+<circle cx="540" cy="540" r="430" fill="#1d2433"/>
+<circle cx="540" cy="470" r="250" fill="#ff8a1e" opacity=".18"/>
+<g transform="translate(0,110) scale(1.0)"><g transform="translate(140,40) scale(0.74)">
+  <!-- FLAMES from the seat -->
+  <g transform="translate(-200,-80) scale(1.38)" stroke="#12151c" stroke-width="5" stroke-linejoin="round">
+    <path d="M420 470 C380 400 420 330 400 260 C450 300 455 340 470 360 C470 300 500 240 490 180 C545 240 545 300 545 340 C560 290 600 250 600 200 C650 260 640 330 625 370 C650 340 680 320 690 280 C720 360 690 430 660 470 Z" fill="url(#flameO)"/>
+    <path d="M455 465 C440 420 460 380 455 340 C485 370 490 395 500 410 C505 370 525 330 525 290 C560 340 560 380 560 405 C575 380 595 360 600 330 C625 380 610 430 595 465 Z" fill="url(#flameY)"/>
+  </g>
+  <!-- legs (running, seen from behind) -->
+  <g fill="#2b4a7a" stroke="#12151c" stroke-width="6" stroke-linejoin="round">
+    <path d="M455 520 L410 700 L370 790 L430 806 L478 712 L520 560 Z"/>
+    <path d="M560 560 L612 700 L690 760 L660 812 L575 745 L540 600 Z"/>
+  </g>
+  <!-- shoes -->
+  <g fill="#e6e8ee" stroke="#12151c" stroke-width="6">
+    <path d="M362 786 q-30 12 -24 34 h96 l6 -22 z"/>
+    <path d="M688 754 q30 4 38 30 l-14 30 l-62 -12 z"/>
+  </g>
+  <!-- trousers seat -->
+  <path d="M400 395 Q540 365 680 395 L690 520 Q640 600 540 585 Q440 600 392 520 Z" fill="#335a92" stroke="#12151c" stroke-width="7" stroke-linejoin="round"/>
+  <!-- belt -->
+  <rect x="396" y="380" width="288" height="34" rx="6" fill="#4a3424" stroke="#12151c" stroke-width="6"/>
+  <rect x="525" y="382" width="30" height="30" rx="4" fill="#c9a227" stroke="#12151c" stroke-width="4"/>
+  <!-- seam + back pockets -->
+  <path d="M540 414 L540 560" stroke="#22406e" stroke-width="5"/>
+  <path d="M445 445 h70 v52 l-35 14 l-35 -14 z" fill="none" stroke="#22406e" stroke-width="5"/>
+  <path d="M565 445 h70 v52 l-35 14 l-35 -14 z" fill="none" stroke="#22406e" stroke-width="5"/>
+  </g>
+</g>
+<path id="arcT" d="M190 540 A350 350 0 0 1 890 540" fill="none"/>
+<path id="arcB" d="M170 560 A370 370 0 0 0 910 560" fill="none"/>
+<text font-family="Archivo Black" font-size="92" fill="#ffd65a" letter-spacing="6"><textPath href="#arcT" startOffset="50%" text-anchor="middle">WATCH</textPath></text>
+<text font-family="Archivo Black" font-size="104" fill="#ffffff" letter-spacing="4"><textPath href="#arcB" startOffset="50%" text-anchor="middle">BUTTFIRE</textPath></text>
+<g fill="#ffd65a"><circle cx="300" cy="700" r="10"/><circle cx="780" cy="690" r="12"/><circle cx="330" cy="380" r="8"/></g>
+</svg>
