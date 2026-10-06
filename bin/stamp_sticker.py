@@ -60,11 +60,11 @@ def stamp(src, dst, sticker, corner="auto", size=0.22, margin=0.03, rotate=-8.0,
                                      _place(W, H, st.width, st.height, m, c)[1] + st.height))
                       for c in ("br", "bl", "tr", "tl")}
             corner = min(scores, key=scores.get)
-            if scores[corner] <= 0.005 or sz <= min_size:
+            if scores[corner] <= 0.001 or sz <= min_size:
                 break
             sz = round(sz - 0.02, 3)
             corner = "auto"
-        if scores[corner] > 0.005:
+        if scores[corner] > 0.001:
             note = f"  WARNING: covers {scores[corner]:.1%} non-background pixels even at size {sz}; check it"
         elif sz != size:
             note = f"  (shrunk to size {sz} to find a clear corner)"
