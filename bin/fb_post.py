@@ -63,7 +63,9 @@ async def main(a):
     permalink = None
 
     async with async_playwright() as p:
-        b = await p.chromium.launch(headless=True, args=["--disable-gpu", "--single-process", "--no-zygote"])
+        heavy = Path(a.image).suffix.lower() in (".mp4", ".mov", ".m4v", ".webm")
+        # single-process mode is fine for photos but hangs while the composer processes a video
+        b = await p.chromium.launch(headless=True, args=["--disable-gpu"] if heavy else ["--disable-gpu", "--single-process", "--no-zygote"])
         c = await b.new_context(viewport={"width": 1358, "height": 900}, user_agent=UA)
         await c.add_cookies(load_netscape_cookies(Path(a.cookies), "facebook.com"))
         pg = await c.new_page()
@@ -94,7 +96,7 @@ async def main(a):
             return 2
         log("feed", url=pg.url)
 
-        await box.first.click(); await asyncio.sleep(5)
+        await box.first.click(timeout=60000); await asyncio.sleep(5)
         log("composer", url=pg.url)
         tb = pg.get_by_role("textbox").filter(has_not=pg.locator("input")).first
         await tb.click()
@@ -116,7 +118,9 @@ async def main(a):
         # image last: click the composer's own "Add photos or videos" box and answer
         # the file chooser (setting the hidden input directly stopped taking), then
         # check it really attached (a blob: thumbnail shows up). Retry once.
-        photo = pg.locator('img[src^="blob:"]')
+        is_video = Path(image).suffix.lower() in (".mp4", ".mov", ".m4v", ".webm")
+        # a photo shows up as a blob: <img>; a video as a blob: <video> or a generated thumbnail <img>
+        photo = pg.locator('img[src^="blob:"], video[src^="blob:"], video') if is_video else pg.locator('img[src^="blob:"]')
         drop = pg.get_by_text("Add photos or videos")
         log("file_inputs", count=await pg.locator('input[type="file"]').count(), dropzone=await drop.count())
         for attempt in (1, 2):
@@ -127,7 +131,7 @@ async def main(a):
             else:
                 fi = pg.locator('input[type="file"]')
                 await fi.nth(await fi.count() - 1).set_input_files(image)
-            for _ in range(15):
+            for _ in range(60 if is_video else 15):     # videos upload/process slower
                 await asyncio.sleep(1)
                 if await photo.count():
                     break
@@ -140,6 +144,17 @@ async def main(a):
             log("abort", reason="photo never showed up in the composer (link preview won?)")
             await b.close(); return 3
 
+        if is_video:
+            await asyncio.sleep(30)
+            btns = []
+            for b in await pg.get_by_role("button").all():
+                try:
+                    if await b.is_visible():
+                        btns.append(((await b.get_attribute("aria-label")) or (await b.inner_text()) or "").strip()[:40] + (" [disabled]" if await b.is_disabled() or (await b.get_attribute("aria-disabled")) == "true" else ""))
+                except Exception:
+                    pass
+            log("composer_buttons", buttons=" | ".join(x for x in btns if x)[:3000])
+            await log.shot(pg, "ready_after_wait")
         if not a.post:
             log("dry_run", note="not posted; rerun with --post")
             await b.close(); return 0
@@ -162,7 +177,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cookies", required=True, help="Netscape cookies.txt for the posting account")
     ap.add_argument("--text", required=True, help="file with the post text")
-    ap.add_argument("--image", required=True, help="image to attach")
+    ap.add_argument("--image", required=True, help="image or video (.mp4/.mov/.m4v/.webm) to attach")
     ap.add_argument("--post", action="store_true", help="actually click Post (default: dry run)")
     ap.add_argument("--profile", default="merrill.p.jensen", help="profile username for the permalink")
     ap.add_argument("--outdir", default=str(Path.home() / "Desktop/claude" / time.strftime("%Y-%m-%d")))
