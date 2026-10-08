@@ -3,10 +3,10 @@
     "perform_download": true,
     "apply_watermark": true,
     "extract_audio": true,
-    "generate_srt": true,
+    "generate_srt": false,
     "burn_srt": false,
     "post_processed": false,
-    "split_scenes": true,
-    "render_reverse": true
+    "split_scenes": false,
+    "render_reverse": false
   }
 }

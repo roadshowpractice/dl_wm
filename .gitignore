@@ -27,4 +27,11 @@ conf/facebook.*.cookies.txt
 conf/instagram.cookies.*.txt
 conf/instagram.cookies.*.txt.bak*
 conf/facebook.cookies.txt
+conf/x.cookies.txt
+conf/x.*.cookies.txt
+conf/youtube.cookies*.txt
 conf/insta.*.txt
+# local run scratch (clips of private people; never commit)
+.pipeline_tmp/
+clips_manifest.json
+clips_with_intro_manifest.json

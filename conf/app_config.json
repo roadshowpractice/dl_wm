@@ -50,7 +50,7 @@
   },
   "transcription": {
     "_comment": "Prefer caller_command or caller_module/caller_function; fallback auto-detects bin/transcribe_media.py when present.",
-    "caller_command": "",
+    "caller_command": "python bin/transcribe_media_faster_whisper.py {input} --srt --txt --chunk-seconds 300",
     "caller_module": "",
     "caller_function": "transcribe",
     "python_path": "",

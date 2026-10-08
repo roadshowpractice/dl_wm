@@ -29,10 +29,8 @@ set -u
 PY=python
 LINKFILE=~/Downloads/link.md
 
-# outputs/ is a symlink onto the UBUNTU 26_0 USB drive, which keeps unmounting
-if ! findmnt -rn -S LABEL="UBUNTU 26_0" >/dev/null; then
-  udisksctl mount -b "$(blkid -L 'UBUNTU 26_0')"
-fi
+# outputs/ -> ~/boner_vault/dl_wm_outputs on the laptop disk since 2026-10-07 (the UBUNTU 26_0 USB failed;
+# the old auto-mount step was removed). The drive_check below still proves outputs/ is writable.
 
 logdir=~/Desktop/claude/$(date +%F)
 mkdir -p "$logdir"
