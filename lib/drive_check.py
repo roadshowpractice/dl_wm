@@ -41,8 +41,8 @@ def assert_outputs_writable(outputs=None):
     target = link.resolve()
     if not target.is_dir():
         raise OutputsDriveError(
-            f"{link} -> {target} is not there. Is the UBUNTU 26_0 USB drive plugged in? "
-            f"(it automounts at /mnt/ubuntu26)")
+            f"{link} -> {target} is not there. Is the boner_vault folder there? "
+            f"(since 2026-10-07: ~/boner_vault on the laptop disk; finished work moves to /mnt/vault2)")
     mnt, opts = _mount_for(target)
     if "ro" in opts.split(","):
         raise OutputsDriveError(

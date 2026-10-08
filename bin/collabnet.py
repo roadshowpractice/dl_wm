@@ -192,7 +192,7 @@ def main(argv=None):
     log(f"  cookies {args.cookies}  rounds {args.rounds}  gap {args.gap} min  pause {args.pause} s  "
         f"snowball {args.snowball}  max {args.max_accounts}{'  DRY RUN' if args.dry_run else ''}")
 
-    # The scrapes are saved on the USB drive (outputs/ -> /mnt/ubuntu26). Prove it can be
+    # The scrapes are saved on the USB drive (outputs/ -> the vault USB). Prove it can be
     # written to before starting, and again before every account (drives drop out mid-run).
     def drive_ok():
         try:

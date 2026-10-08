@@ -131,3 +131,11 @@ lands mid-line. Both were fixed by hand after the fact. The underlying bug in
 - [ ] Do **not** add the Suarez conviction detail anywhere — user's explicit instruction is to
       wait for the pending Utah Supreme Court ruling before touching that topic at all (see
       memory: `project_tim_ballard_documentation`)
+
+## 2026-09-29
+
+**Tim Ballard** (JustinR1970) — rev 1377491288: "Documentation of release date" — removed the unsourced
+bullet claiming YouTube upload metadata dates Episode 1 to Nov 2025; replaced with a sourced sentence: the
+YouTube Episodes 1–8 carry September 2026 upload dates, the compilation (pBo_2DYxfrY) September 4, 2026.
+Rev 1377491349: moved the Kevin Pearson/Kevin Hamilton paragraph from "Documentation of release date" to
+"Subsequent episodes and status", text unchanged. Verified 0 cite errors.
