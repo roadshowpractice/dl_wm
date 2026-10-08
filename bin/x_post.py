@@ -258,7 +258,11 @@ async def run(a, posts):
         await log.shot(pg, "ready")
 
         if a.monkey:
-            await dlg.locator('[data-testid="tweetButton"]').last.scroll_into_view_if_needed()
+            if not status_ids:  # a quick person may already have pressed Post (dialog gone): don't wait on the button
+                try:
+                    await dlg.locator('[data-testid="tweetButton"]').last.scroll_into_view_if_needed(timeout=5000)
+                except Exception:
+                    pass
             # the person presses Post in the open window; the script only watches for X's CreateTweet answer
             print("\n>>> MONKEY: check the window, then press Post (or Post all) yourself. Waiting "
                   f"{a.monkey_wait} min. Close the window to cancel. <<<\n", flush=True)
