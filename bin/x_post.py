@@ -148,8 +148,13 @@ async def open_x(p, a, log):
     """browser + context with the account's cookies; headed when a person may need to act (--monkey/--headed)"""
     from igp.cookies import load_netscape_cookies
     headed = a.monkey or a.headed
-    b = await p.chromium.launch(headless=not headed, args=["--disable-gpu", "--disable-blink-features=AutomationControlled"])
-    c = await b.new_context(viewport={"width": 1358, "height": 1000}, user_agent=UA)
+    args = ["--disable-gpu", "--disable-blink-features=AutomationControlled"]
+    if headed:  # fit the person's screen (a fixed 1000 px tall page hid the Post button on a 768 px laptop screen)
+        b = await p.chromium.launch(headless=False, args=args + ["--start-maximized"])
+        c = await b.new_context(no_viewport=True, user_agent=UA)
+    else:
+        b = await p.chromium.launch(headless=True, args=args)
+        c = await b.new_context(viewport={"width": 1358, "height": 1000}, user_agent=UA)
     cookies = load_netscape_cookies(Path(a.cookies), "x.com")
     if not any(ck["name"] == "auth_token" for ck in cookies):
         log("abort", reason="no auth_token cookie for x.com in the cookie file: not logged in")
@@ -253,6 +258,7 @@ async def run(a, posts):
         await log.shot(pg, "ready")
 
         if a.monkey:
+            await dlg.locator('[data-testid="tweetButton"]').last.scroll_into_view_if_needed()
             # the person presses Post in the open window; the script only watches for X's CreateTweet answer
             print("\n>>> MONKEY: check the window, then press Post (or Post all) yourself. Waiting "
                   f"{a.monkey_wait} min. Close the window to cancel. <<<\n", flush=True)
