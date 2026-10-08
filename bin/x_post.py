@@ -103,7 +103,10 @@ class Log:
 
     async def shot(self, page, name):
         p = self.dir / f"x_post_{self.stamp}_{name}.png"
-        await page.screenshot(path=str(p), full_page=True); self("screenshot", path=str(p))
+        try:  # a frozen page must not hide the real error
+            await page.screenshot(path=str(p), full_page=False, timeout=10000); self("screenshot", path=str(p))
+        except Exception as e:
+            self("screenshot_failed", name=name, error=str(e)[:200])
 
 
 def tweets_in(obj, out=None):
@@ -213,9 +216,15 @@ async def run(a, posts):
                 body = await r.text()
             except Exception:
                 return
-            m = re.search(r'"rest_id":"(\d+)"', body)
-            if m:
-                status_ids.append(m.group(1))
+            # the POST's id is data.create_tweet.tweet_results.result.rest_id; the first "rest_id" in the
+            # body is the author's user id (10-08: that mix-up sent --watch-replies to the wrong page)
+            try:
+                res = json.loads(body)["data"]["create_tweet"]["tweet_results"]["result"]
+                tid = res.get("rest_id") or (res.get("tweet") or {}).get("rest_id")
+            except Exception:
+                tid = None
+            if tid:
+                status_ids.append(tid)
             log("create_tweet", status=r.status, body=body[:1500])
         pg.on("response", lambda r: asyncio.ensure_future(on_response(r)))
 
@@ -223,21 +232,23 @@ async def run(a, posts):
             await pg.goto("https://x.com/compose/post", wait_until="domcontentloaded", timeout=60000)
             if "/login" in pg.url or "/i/flow/login" in pg.url:
                 raise RuntimeError(f"X sent the login page ({pg.url}): cookies expired, export them again")
-            await pg.wait_for_selector('[data-testid="tweetTextarea_0"]', timeout=a.composer_wait * 1000)
+            # /compose/post shows TWO composers (the pop-up and the home timeline's); work only inside the pop-up
+            dlg = pg.locator('[role="dialog"]').filter(has=pg.locator('[data-testid="tweetTextarea_0"]')).first
+            await dlg.locator('[data-testid="tweetTextarea_0"]').wait_for(timeout=a.composer_wait * 1000)
 
             for i, text in enumerate(posts):
                 if i > 0:
-                    await pg.locator('[data-testid="addButton"]').last.click(); await asyncio.sleep(1.5)
-                box = pg.locator(f'[data-testid="tweetTextarea_{i}"]')
+                    await dlg.locator('[data-testid="addButton"]').last.click(); await asyncio.sleep(1.5)
+                box = dlg.locator(f'[data-testid="tweetTextarea_{i}"]')
                 await box.click(); await pg.keyboard.insert_text(text); await asyncio.sleep(1)
                 got = (await box.inner_text()).replace("\n", "")
                 log("post_filled", n=i + 1, chars=x_length(text), box_ok=text.replace("\n", "")[:40] in got)
                 if i == 0 and a.image:
-                    await pg.locator('input[data-testid="fileInput"]').first.set_input_files(str(Path(a.image).resolve()))
-                    await pg.wait_for_selector('[data-testid="attachments"] img, [data-testid="attachments"] video', timeout=30000)
+                    await dlg.locator('input[data-testid="fileInput"]').first.set_input_files(str(Path(a.image).resolve()))
+                    await dlg.locator('[data-testid="attachments"] img, [data-testid="attachments"] video').first.wait_for(timeout=30000)
                     log("image_attached", path=a.image, ok=True)
         except Exception as e:
-            await log.shot(pg, "failed"); log("abort", reason=str(e)[:500], url=pg.url)
+            log("abort", reason=str(e)[:500], url=pg.url); await log.shot(pg, "failed")
             await b.close(); return 3
         await log.shot(pg, "ready")
 
@@ -254,7 +265,7 @@ async def run(a, posts):
                 await b.close(); return 4
             await asyncio.sleep(6)
         elif a.post:
-            await pg.locator('[data-testid="tweetButton"]').last.click()
+            await dlg.locator('[data-testid="tweetButton"]').last.click()
             log("post_clicked"); await asyncio.sleep(12)
         else:
             log("dry_run", note="not posted; rerun with --monkey (you press Post) or --post")

@@ -65,3 +65,13 @@ def test_save_replies_skips_the_post_itself_and_repeats(tmp_path):
     lines = (tmp_path / "replies_1.jsonl").read_text().splitlines()
     assert len(lines) == 1 and '"sha256"' in lines[0]
     assert "@grok" in (tmp_path / "replies_1.txt").read_text()
+
+
+def test_create_tweet_id_is_the_post_not_the_author():
+    import json
+    body = json.dumps({"data": {"create_tweet": {"tweet_results": {"result": {
+        "core": {"user_results": {"result": {"rest_id": "1910900974954176512"}}}, "rest_id": "2108230000000000000"}}}}})
+    res = json.loads(body)["data"]["create_tweet"]["tweet_results"]["result"]
+    assert res["rest_id"] == "2108230000000000000"
+    import inspect
+    assert 'json.loads(body)["data"]["create_tweet"]' in inspect.getsource(xp.run)
