@@ -24,11 +24,13 @@ from vendor_router import (
     VENDOR_YOUTUBE,
     VENDOR_VIMEO,
     extract_vendor_id,
+    infer_kind,
     metadata_filename,
     canonicalize_vendor_url,
 )
 from downloaders.instagram import download as download_instagram
 from downloaders.facebook import download as download_facebook
+from downloaders.facebook_photos import NoPhotosFound, download as download_facebook_photos
 from downloaders.youtube import download as download_youtube
 from downloaders.vimeo import download as download_vimeo
 
@@ -137,6 +139,7 @@ def is_cookie_identity_blocked_error(exc):
         "login required",
         "sign in to",
         "instagram api is not granting access",
+        "content not available to this account",
         "instagram sent an empty media response",
     ]
     return any(marker in text for marker in block_markers)
@@ -268,7 +271,14 @@ def main():
                         )
                 elif vendor == VENDOR_FACEBOOK:
                     logger.info("Facebook download attempt %s/%s using cookie file: %s", idx, len(cookie_paths), cookie_path)
-                    result = download_facebook(url, run_dir, metadata_dir, registry_record, ydl_cookie, video_download_cfg)
+                    if infer_kind(vendor, url) in {"post", "photo"}:
+                        try:
+                            result = download_facebook_photos(url, run_dir, metadata_dir, registry_record, ydl_cookie, video_download_cfg)
+                        except NoPhotosFound:
+                            logger.info("No photos in Facebook post; trying it as a video")
+                            result = download_facebook(url, run_dir, metadata_dir, registry_record, ydl_cookie, video_download_cfg)
+                    else:
+                        result = download_facebook(url, run_dir, metadata_dir, registry_record, ydl_cookie, video_download_cfg)
                 elif vendor == VENDOR_VIMEO:
                     logger.info("Vimeo download attempt %s/%s", idx, len(cookie_paths))
                     result = download_vimeo(url, run_dir, metadata_dir, registry_record, ydl_cookie, video_download_cfg)

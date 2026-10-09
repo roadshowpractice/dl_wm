@@ -84,6 +84,11 @@ python -m pytest tests/test_igp_capture_range.py::test_name -v   # single test
 | `google-chrome-goel/Default` | `Goel_Instagram.desktop` | haddamgoel (38012325418) | — |
 | `google-chrome-perlgonzales/Default` | — | haddamgoel (38012325418) | — |
 
+- **2026-10-08 Facebook kill-file status (Tim Ballard, `officialtimballard` = id 100044614771436):**
+  - **BLOCKED by TB 2026-10-08:** merrill.p.jensen (1236192977) and 61577459351712. Both get "This content isn't available" while logged in; the page loads logged-out.
+  - JustinR (61585496017234): John believes it's blocked too (2026-10-08), not verified.
+  - **Current scrape account: 61590880705869**, logged into Profile 2 on 2026-10-08, cookies in `conf/facebook.daystrom.cookies.txt` (first in `cookie_hierarchy.facebook`).
+    **Read-only. Never comment, react, reply, share or follow from it**, so TB doesn't kill-file it as well.
 - **merrillp.jensen (4067475941)** is not logged into Instagram in any Chrome profile; its only session is `conf/instagram.cookies.2.txt`. timballard89 blocks this account.
 - `conf/instagram.cookies.haddamgoel.txt` is the primary Instagram cookie file — refresh it with `bin/export_browser_cookies.py instagram.com conf/instagram.cookies.haddamgoel.txt ~/.config/google-chrome-goel/Default`. `conf/instagram.cookies.txt` is a **symlink** to it, so older scripts defaulting to that name get haddamgoel.
 - `conf/insta.justin.txt` is logged out (empty `ds_user_id`) and was dropped from `cookie_hierarchy.instagram`.
