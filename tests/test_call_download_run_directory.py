@@ -21,6 +21,7 @@ def _load_call_download_module():
     vendor_router.extract_vendor_id = lambda *_args, **_kwargs: "DXaslzKDRiD"
     vendor_router.metadata_filename = lambda *_args, **_kwargs: "instagram__DXaslzKDRiD.json"
     vendor_router.canonicalize_vendor_url = lambda _vendor, url: url
+    vendor_router.infer_kind = lambda *_args, **_kwargs: None
     sys.modules["vendor_router"] = vendor_router
 
     dl_pkg = types.ModuleType("downloaders")
@@ -38,6 +39,11 @@ def _load_call_download_module():
     fb = types.ModuleType("downloaders.facebook")
     fb.download = lambda *_args, **_kwargs: {}
     sys.modules["downloaders.facebook"] = fb
+
+    fb_photos = types.ModuleType("downloaders.facebook_photos")
+    fb_photos.NoPhotosFound = type("NoPhotosFound", (Exception,), {})
+    fb_photos.download = lambda *_args, **_kwargs: {}
+    sys.modules["downloaders.facebook_photos"] = fb_photos
 
     vimeo = types.ModuleType("downloaders.vimeo")
     vimeo.download = lambda *_args, **_kwargs: {}

@@ -13,6 +13,7 @@
         "conf/instagram.cookies.2.txt"
       ],
       "facebook": [
+        "conf/facebook.daystrom.cookies.txt",
         "conf/facebook.justinriggs.cookies.txt",
         "conf/facebook.cookies.txt"
       ],

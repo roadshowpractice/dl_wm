@@ -33,6 +33,10 @@ def detect_vendor(url: str):
             or path.startswith("share/r/")
             or path.startswith("share/v/")
             or "/videos/" in path
+            or "/posts/" in path
+            or "/photos/" in path
+            or path in ("photo", "photo.php", "permalink.php", "story.php")
+            or path.startswith("share/p/")
         ):
             return VENDOR_FACEBOOK
 
@@ -87,6 +91,17 @@ def extract_vendor_id(vendor: str, url: str):
             if match:
                 return match.group(1)
 
+        # Photo posts (downloaders/facebook_photos.py)
+        query = parse_qs(parsed.query)
+        if path in ("photo", "photo.php"):
+            return query.get("fbid", [None])[0]
+        if path in ("permalink.php", "story.php"):
+            return query.get("story_fbid", [None])[0]
+        for pattern in [r"^share/p/([^/?#]+)/?", r"^.+/posts/([^/?#]+)/?", r"^.+/photos/(?:[^/]+/)?(\d+)/?"]:
+            match = re.match(pattern, path)
+            if match:
+                return match.group(1)
+
     if vendor == VENDOR_YOUTUBE:
         host = (parsed.hostname or "").lower()
         if host == "youtu.be":
@@ -123,6 +138,10 @@ def infer_kind(vendor: str, url: str):
             return "reel"
         if path.startswith("watch") or "/videos/" in path or path.startswith("share/v/"):
             return "video"
+        if path in ("photo", "photo.php") or "/photos/" in path:
+            return "photo"
+        if "/posts/" in path or path.startswith("share/p/") or path in ("permalink.php", "story.php"):
+            return "post"
 
     if vendor == VENDOR_YOUTUBE:
         if path.startswith("shorts/"):
