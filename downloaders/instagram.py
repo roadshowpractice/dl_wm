@@ -402,6 +402,7 @@ def download_carousel_via_igp(url, vendor_id, output_dir, cookie_path, run_id):
         "owner": first.get("owner"),
         "collaborators": first.get("collaborators", []),
         "carousel_count": first.get("carousel_count"),
+        "taken_at": first.get("taken_at"),
     }
     logger.info("igp carousel: %s slide(s) saved", len(files))
     return {"items": items, "files": files, "meta": meta}
@@ -417,6 +418,7 @@ def _igp_info(igp, vendor_id):
         "description": caption,
         "uploader": owner.get("username") if isinstance(owner, dict) else owner,
         "ext": Path(igp["files"][0]).suffix.lstrip("."),
+        "timestamp": igp["meta"].get("taken_at"),  # -> video_date, for the photo watermark
     }
     return info, {"title": info["title"], "caption": caption, "uploader": info["uploader"]}
 

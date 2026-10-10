@@ -257,7 +257,21 @@ def main():
         failed_tasks = 0
         followups = carousel_followup_items(found_data, to_process)
         first_is_image = is_image_media(found_data, to_process)
+        if first_is_image and found_data.get("default_tasks", {}).get("apply_watermark") is True:
+            # Photos get their own watermark step; the video one can't read stills.
+            if dry_run:
+                logger.info("[dry-run] would watermark photos: {}".format(found_file))
+            else:
+                logger.info("🚀 Watermarking photos -> bin/call_watermark_images.py")
+                result = subprocess.run(
+                    [sys.executable, os.path.join(root_dir, "bin/call_watermark_images.py"), found_file], cwd=root_dir
+                )
+                if result.returncode != 0:
+                    logger.error("❌ Photo watermark failed (exit {})".format(result.returncode))
+                    failed_tasks += 1
         if first_is_image and not followups:
+            if failed_tasks:
+                return 1
             logger.info(
                 "Image media detected; download complete. Skipping video/audio pipeline."
             )

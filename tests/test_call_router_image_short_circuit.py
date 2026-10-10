@@ -148,8 +148,30 @@ def test_mixed_carousel_starting_with_image_runs_video_items(monkeypatch, tmp_pa
     noop = lambda *_a, **_k: None
     monkeypatch.setattr(call_router, "initialize_logging", lambda: types.SimpleNamespace(info=noop, warning=noop, error=noop))
     monkeypatch.setattr(call_router.sys, "argv", ["call_router.py", metadata["url"]])
+    calls = []
+    monkeypatch.setattr(call_router.subprocess, "run", lambda cmd, **_k: calls.append(cmd) or types.SimpleNamespace(returncode=0))
 
     call_router.main()
 
     assert ran == [str(video)]
+    assert [c[1].endswith("call_watermark_images.py") for c in calls] == [True]
     assert (tmp_path / "post__02.json").exists()
+
+
+def test_photo_post_runs_photo_watermark(monkeypatch):
+    metadata = {
+        "url": "https://www.facebook.com/x/posts/1",
+        "media_type": "carousel",
+        "default_tasks": {"perform_download": "/tmp/facebook__1__01.jpg", "apply_watermark": True},
+    }
+    monkeypatch.setattr(call_router, "find_url_json", lambda *_a, **_k: ("metadata/facebook__1.json", metadata))
+    monkeypatch.setattr(call_router, "wait_for_download_file", lambda *_a, **_k: True)
+    monkeypatch.setattr(call_router, "execute_tasks", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no video tasks")))
+    calls = []
+    monkeypatch.setattr(call_router.subprocess, "run", lambda cmd, **_k: calls.append(cmd) or types.SimpleNamespace(returncode=0))
+    noop = lambda *_a, **_k: None
+    monkeypatch.setattr(call_router, "initialize_logging", lambda: types.SimpleNamespace(info=noop, warning=noop, error=noop))
+    monkeypatch.setattr(call_router.sys, "argv", ["call_router.py", metadata["url"]])
+
+    assert not call_router.main()
+    assert calls[0][1].endswith("bin/call_watermark_images.py") and calls[0][2] == "metadata/facebook__1.json"

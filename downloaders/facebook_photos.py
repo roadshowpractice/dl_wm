@@ -16,6 +16,7 @@ from http.cookiejar import MozillaCookieJar
 
 import requests
 
+from lib.metadata_compactor import build_compact_metadata
 from lib.vendor_router import VENDOR_FACEBOOK, extract_vendor_id, metadata_filename
 
 logger = logging.getLogger(__name__)
@@ -167,7 +168,14 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         logger.info("facebook photo %s/%s: %s (%sx%s)", i, len(photos), dest, photo["width"], photo["height"])
 
     metadata_path = os.path.join(metadata_dir, metadata_filename(VENDOR_FACEBOOK, vendor_id))
-    compact = {
+    # Same compact shape as the yt-dlp downloaders, so default_tasks.perform_download is set
+    # and call_router counts the download as done.
+    created = int(datetime.fromisoformat(meta["creation_time"]).timestamp()) if meta["creation_time"] else None
+    info = {"id": vendor_id, "title": meta["title"], "uploader": meta["owner"], "timestamp": created,
+            "ext": os.path.splitext(files[0])[1].lstrip("."),
+            "width": photos[0]["width"], "height": photos[0]["height"]}
+    compact = build_compact_metadata(info, url=url, vendor=VENDOR_FACEBOOK, vendor_id=vendor_id, downloaded_path=files[0])
+    compact.update({
         "source_url": url,
         "final_url": response.url,
         "vendor": VENDOR_FACEBOOK,
@@ -180,7 +188,7 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         "downloaded_at": datetime.now(timezone.utc).isoformat(),
         "downloaded_file": files[0],
         "items": items,
-    }
+    })
     with open(metadata_path, "w", encoding="utf-8") as f:
         json.dump(compact, f, indent=2, ensure_ascii=False)
 
