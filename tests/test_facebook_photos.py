@@ -10,10 +10,14 @@ sys.path.insert(0, str(ROOT / "lib"))
 sys.path.insert(0, str(ROOT))
 
 # Load by path: the call_download tests leave stub "downloaders.*" modules in sys.modules.
+# Their lib stubs (vendor_router, tasks_lib, ...) are set aside while loading, then put back.
+_STUBBED = ("vendor_router", "tasks_lib", "teton_utils", "lib.vendor_router", "lib.metadata_compactor", "lib.teton_utils")
+_saved = {name: sys.modules.pop(name) for name in _STUBBED if name in sys.modules}
 _spec = importlib.util.spec_from_file_location("facebook_photos_under_test", ROOT / "downloaders" / "facebook_photos.py")
 fp = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(fp)
 from lib.vendor_router import detect_vendor, extract_vendor_id, infer_kind
+sys.modules.update(_saved)
 
 
 def _photo(pid, w, h, full_w, full_h):
@@ -92,3 +96,27 @@ def test_unavailable_page_raises_block_error(tmp_path, monkeypatch):
     monkeypatch.setattr(fp.requests.Session, "get", lambda self, url, timeout=0: Resp())
     with pytest.raises(RuntimeError, match="content not available to this account"):
         fp.download("https://www.facebook.com/x/posts/1", str(tmp_path), str(tmp_path), {}, None)
+
+
+def test_download_marks_perform_download_for_call_router(tmp_path, monkeypatch):
+    nodes = [{"media": _photo("1", 536, 590, 884, 973)}, {"media": _photo("2", 536, 590, 3720, 4096)}]
+    page = _page('{"creation_time":1791498695,"all_subattachments":' + json.dumps({"count": 2, "nodes": nodes}) + '}')
+
+    class Resp:
+        url = "https://www.facebook.com/x/posts/1"
+        headers = {"Content-Type": "image/jpeg"}
+        content = b"jpg"
+
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(fp.requests.Session, "get", lambda self, url, timeout=0: Resp(page))
+    result = fp.download("https://www.facebook.com/x/posts/1", str(tmp_path / "out"), str(tmp_path / "meta"), {}, None)
+    meta = json.loads(Path(result["metadata_path"]).read_text())
+    assert meta["default_tasks"]["perform_download"] == result["files"][0]
+    assert meta["video_date"] == "20261008"
+    assert meta["url"] == "https://www.facebook.com/x/posts/1"
+    assert [i["filename"] for i in meta["items"]] == ["facebook__1__01.jpg", "facebook__1__02.jpg"]

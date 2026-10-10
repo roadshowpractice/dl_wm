@@ -286,7 +286,7 @@ async def download_structured_assets(context, assets, outdir, request, post_mode
             dest.write_bytes(await resp.body())
         except Exception as e:
             status = f"error: {e}"
-        rows.append({"shortcode": request.shortcode, "requested_start": request.requested_start, "requested_end": request.requested_end, "carousel_index": idx, "carousel_count": post_model.get("carousel_count", 0), "source_shortcode": post_model.get("shortcode"), "source_media_id": post_model.get("media_id"), "parent_shortcode": post_model.get("shortcode"), "media_type": asset.get("media_type"), "extraction_reason": "target_post_asset", "path": dest.name, "selected_url": best_url, "variants_considered": len(variants), "owner": post_model.get("owner"), "collaborators": post_model.get("collaborators", []), "caption": post_model.get("caption", ""), "status": status})
+        rows.append({"shortcode": request.shortcode, "requested_start": request.requested_start, "requested_end": request.requested_end, "carousel_index": idx, "carousel_count": post_model.get("carousel_count", 0), "source_shortcode": post_model.get("shortcode"), "source_media_id": post_model.get("media_id"), "parent_shortcode": post_model.get("shortcode"), "media_type": asset.get("media_type"), "extraction_reason": "target_post_asset", "path": dest.name, "selected_url": best_url, "variants_considered": len(variants), "owner": post_model.get("owner"), "collaborators": post_model.get("collaborators", []), "caption": post_model.get("caption", ""), "taken_at": post_model.get("taken_at"), "status": status})
     return rows
 
 
@@ -315,7 +315,7 @@ def write_manifest(rows, manifest_path):
 
 
 def write_metadata(post_model, metadata_path):
-    Path(metadata_path).write_text(json.dumps({"shortcode": post_model.get("shortcode"), "caption": post_model.get("caption"), "owner": post_model.get("owner"), "collaborators": post_model.get("collaborators", []), "carousel_count": post_model.get("carousel_count", 0)}, ensure_ascii=False, indent=2))
+    Path(metadata_path).write_text(json.dumps({"shortcode": post_model.get("shortcode"), "caption": post_model.get("caption"), "owner": post_model.get("owner"), "collaborators": post_model.get("collaborators", []), "carousel_count": post_model.get("carousel_count", 0), "taken_at": post_model.get("taken_at")}, ensure_ascii=False, indent=2))
 
 
 async def run_capture(request: CaptureRequest):
