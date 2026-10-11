@@ -86,8 +86,8 @@ python -m pytest tests/test_igp_capture_range.py::test_name -v   # single test
 
 - **2026-10-08 Facebook kill-file status (Tim Ballard, `officialtimballard` = id 100044614771436):**
   - **BLOCKED by TB 2026-10-08:** merrill.p.jensen (1236192977) and 61577459351712. Both get "This content isn't available" while logged in; the page loads logged-out.
-  - JustinR (61585496017234): John believes it's blocked too (2026-10-08), not verified.
-  - **Current scrape account: 61590880705869**, logged into Profile 2 on 2026-10-08, cookies in `conf/facebook.daystrom.cookies.txt` (first in `cookie_hierarchy.facebook`).
+  - JustinR (61585496017234): **NOT blocked** (checked 2026-10-10: Tim's page loads logged in, shows "Following"). Since 2026-10-10 it is **first in `cookie_hierarchy.facebook`** (`conf/facebook.justinriggs.cookies.txt`, refresh from the `JustinRiggs1970` Chrome profile). Read-only, same rule as below.
+  - 61590880705869 ("Daystrom"): its cookie file had **expired by 2026-10-10** (loads logged out). Was the scrape account from 2026-10-08, logged into Profile 2 on 2026-10-08, cookies in `conf/facebook.daystrom.cookies.txt` (now second in `cookie_hierarchy.facebook`).
     **Read-only. Never comment, react, reply, share or follow from it**, so TB doesn't kill-file it as well.
 - **merrillp.jensen (4067475941)** is not logged into Instagram in any Chrome profile; its only session is `conf/instagram.cookies.2.txt`. timballard89 blocks this account.
 - `conf/instagram.cookies.haddamgoel.txt` is the primary Instagram cookie file — refresh it with `bin/export_browser_cookies.py instagram.com conf/instagram.cookies.haddamgoel.txt ~/.config/google-chrome-goel/Default`. `conf/instagram.cookies.txt` is a **symlink** to it, so older scripts defaulting to that name get haddamgoel.
@@ -127,3 +127,14 @@ Gotcha seen 2026-10-03: faster-whisper misdetected Spanish (Ecuador Assembly spe
 **Shared libs**: `lib/teton_utils.py` and `lib/tasks_lib.py` hold cross-cutting concerns — config loading, logging init, repo-relative path resolution, and all metadata read/write/index helpers (`find_url_json`, `upsert_metadata_index`, `update_task_output_path`, `get_task_states`).
 
 **Photo watermarks (2026-10-09)**: the video watermark step can't read stills, so `call_router.py` now runs `bin/call_watermark_images.py <metadata json>` for photo posts (and the photo slides of mixed carousels) when `apply_watermark` is `true`. `lib/image_watermarker.py` copies the video look with PIL: uploader top-left yellow, date bottom-left cyan, slide "N/M" bottom-right red (where video has the timestamp), sizes scaled to image width (1080 px = config size). Output `<stem>_watermarked.<ext>` next to each photo; the first is recorded as `apply_watermark`. For the date, `igp/capture.py` now keeps the post's `taken_at` and `downloaders/instagram.py` passes it as `timestamp`, so Instagram photo posts get a `video_date`. Facebook photo posts (`downloaders/facebook_photos.py`) now write the standard compact metadata, so `perform_download` is recorded (before this, dllink marked good photo downloads FAILED). Live-checked on Ballard's 2026-10-08 Tribune posts (FB 5 photos, IG 7).
+
+**fb_collabnet (2026-10-10)**: the Facebook analog of collabnet. `bin/fb_collabnet.py QUEUE.txt` (wrapper `~/.local/bin/fbcollabnet` -> `bin/wrappers/fbcollabnet`). Read-only headless Chrome as JustinR. It scrolls each profile and parses Facebook's own feed data (`Story` nodes in `/api/graphql/` responses and the page's `<script type="application/json">`), never the visible DOM. Before this, a reel in JustinR's notification menu got mistaken for a Tim post. FB has no Collaborators field, so it records links per post:
+- `coauthor`: more than one actor.
+- `with`: the header title's tagged User/Page entities, e.g. "Tim Ballard is with Julie Teron."
+- `shared_from`: the attached or reposted story's author.
+- `mention`: @-tags in the message text. Saved, but only drawn with `--mentions`.
+
+Accounts are keyed by vanity name from their URL, lower-case, else numeric id. Queue lines can be a vanity name, an id, or a URL.
+Output: `outputs/fb_timelines/<key>_<date>/<key>_posts.jsonl` (IG-timeline-compatible fields, so `ig_word_sort.py` reads it) and `~/Desktop/claude/<date>/fb_collabnet_<queue>/` (log, status.tsv, word_sorts/, graph/ with history/). The graph reuses `ig_collab_graph.draw` (key + colour bands), and `edges.tsv` also lists the relation types per link.
+Ends an account after 5 rounds with no new posts (`complete`) or at `--rounds` (default 60, `CAPPED`).
+`--parse-capture DIR OWNER` parses saved responses offline. Verified offline 2026-10-10 on a capture of Tim's page: 24 posts (09-27..10-08), one link, `with` Julie Teron (`juliecteron`, id 1211484679) on reel 927518363458513.

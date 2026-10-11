@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# fbcollabnet — the Facebook analog of collabnet: walk a FB account network from a queue file
+# (scrape posts read-only as JustinR -> word sort -> one graph at the end). Links = coauthor /
+# "is with" / shared_from (+ @-mentions with --mentions). Everything after the queue file is
+# passed through: --snowball, --max-accounts N, --rounds N, --gap MIN MAX, --dry-run, ...
+# Output: ~/Desktop/claude/<today>/fb_collabnet_<queue name>/  (log, status.tsv, word_sorts/, graph/)
+set -euo pipefail
+
+REPO=~/Documents/repos/dl_wm
+set +u
+source ~/miniforge3/etc/profile.d/conda.sh
+shopt -s expand_aliases
+source ~/.bash_aliases
+cad
+set -u
+
+[ $# -ge 1 ] || { echo "usage: fbcollabnet QUEUE.txt [--snowball] [--max-accounts N] [--dry-run] ..."; exit 1; }
+queue=$(realpath "$1"); shift
+cd "$REPO"
+python bin/fb_collabnet.py "$queue" "$@"
