@@ -10,6 +10,7 @@ any failure leaves a screenshot (x_post_<time>_failed.png).
         --monkey              visible window; the script fills it all, a PERSON presses Post; permalink is logged
         --post                the script presses Post itself (headless X tends to block this; prefer --monkey)
         --watch-replies 5     after posting, keep every reply for 5 minutes (verbatim + sha256 in outdir)
+    python bin/x_post.py --cookies conf/x.cookies.txt --thread T.txt --image card.png --reply-to https://x.com/<user>/status/<id> --monkey
     python bin/x_post.py --cookies conf/x.cookies.txt --replies-of https://x.com/<user>/status/<id> [--watch-replies 3]
 
 Replies land in <outdir>/replies_<id>.jsonl (one record per reply: id, author, time, reply-to, full text, sha256)
@@ -234,9 +235,17 @@ async def run(a, posts):
         pg.on("response", lambda r: asyncio.ensure_future(on_response(r)))
 
         try:
-            await pg.goto("https://x.com/compose/post", wait_until="domcontentloaded", timeout=60000)
+            await pg.goto(a.reply_to or "https://x.com/compose/post", wait_until="domcontentloaded", timeout=60000)
             if "/login" in pg.url or "/i/flow/login" in pg.url:
                 raise RuntimeError(f"X sent the login page ({pg.url}): cookies expired, export them again")
+            if a.reply_to:
+                # open THAT post's Reply box: a status page also shows the parent post(s) above it, so pick the
+                # article that links to the status id (10-10: "first article" replied to the parent instead)
+                sid = a.reply_to.rstrip("/").split("/")[-1]
+                btn = pg.locator("article").filter(has=pg.locator(f'a[href*="/status/{sid}"] time')).locator('[data-testid="reply"]').first
+                await btn.wait_for(timeout=a.composer_wait * 1000)
+                await btn.click(); await asyncio.sleep(2)
+                log("reply_box_opened", reply_to=a.reply_to)
             # /compose/post shows TWO composers (the pop-up and the home timeline's); work only inside the pop-up
             dlg = pg.locator('[role="dialog"]').filter(has=pg.locator('[data-testid="tweetTextarea_0"]')).first
             await dlg.locator('[data-testid="tweetTextarea_0"]').wait_for(timeout=a.composer_wait * 1000)
@@ -309,6 +318,7 @@ def main(argv=None):
     ap.add_argument("--composer-wait", type=int, default=60, help="seconds to wait for the composer (default 60)")
     ap.add_argument("--watch-replies", type=float, default=0, metavar="MIN",
                     help="after posting, collect replies for MIN minutes (verbatim + sha256 into outdir)")
+    ap.add_argument("--reply-to", metavar="URL", help="post the thread as a reply to this post (opens its Reply box)")
     ap.add_argument("--replies-of", metavar="URL", help="only collect the replies to this post (no posting)")
     ap.add_argument("--outdir", default=str(Path.home() / "Desktop/claude" / time.strftime("%Y-%m-%d")))
     a = ap.parse_args(argv)
