@@ -214,6 +214,13 @@ def main():
             else None
         )
 
+        # A recorded download whose file is gone (e.g. it lived on the UBUNTU 26_0 stick that died in Oct 2026)
+        # counts as not downloaded: fetch it again instead of failing on "Input file does not exist".
+        if (isinstance(perform_download_done, str) and not os.path.exists(perform_download_done)
+                and not wait_for_download_file(perform_download_done, logger)):
+            logger.info("📥 Recorded download is missing on disk ({}), downloading again".format(perform_download_done))
+            perform_download_done = None
+
         if not found_file or not perform_download_done:
             logger.info("📥 No completed download or metadata found — running downloader...")
             download_success = run_my_existing_downloader(url, logger)
