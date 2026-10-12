@@ -63,9 +63,16 @@ def _resolve_inputs(input_video: str, app_config: dict, logger) -> tuple[str, st
     source_video = default_tasks.get(video_task) if isinstance(default_tasks.get(video_task), str) else input_video
     source_srt = default_tasks.get(srt_task) if isinstance(default_tasks.get(srt_task), str) else ""
 
-    if not source_srt:
-        base, _ = os.path.splitext(source_video)
-        source_srt = f"{base}.srt"
+    if not source_srt or not source_srt.endswith(".srt"):
+        # The transcript step (extract_audio) writes <download>.srt next to the raw download, not
+        # <download>_watermarked.srt, so try the watermarked name, then the download's own name.
+        candidates = [os.path.splitext(source_video)[0] + ".srt"]
+        if source_video.endswith("_watermarked" + os.path.splitext(source_video)[1]):
+            candidates.append(source_video[: -len("_watermarked" + os.path.splitext(source_video)[1])] + ".srt")
+        download = default_tasks.get("perform_download")
+        if isinstance(download, str):
+            candidates.append(os.path.splitext(download)[0] + ".srt")
+        source_srt = next((c for c in candidates if os.path.isfile(c)), candidates[0])
 
     if not os.path.isfile(source_video):
         raise RuntimeError(f"Source video does not exist: {source_video}")

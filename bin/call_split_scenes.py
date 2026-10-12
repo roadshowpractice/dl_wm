@@ -53,6 +53,11 @@ def main() -> int:
         )
         return 1
 
+    # If subtitles were burned in (burn_srt ran first), split that version so every clip carries them.
+    burned_path = metadata.get("default_tasks", {}).get("burn_srt")
+    if isinstance(burned_path, str) and os.path.isfile(burned_path):
+        logger.info("split_scenes: using the subtitle-burned video %s", burned_path)
+        watermarked_path = burned_path
     video = Path(watermarked_path)
     out_dir = video.parent / "scene_clips"
     result = scene_split.run(video, out_dir, fps=5.0, threshold=50.0, flicker_threshold=2.0)
