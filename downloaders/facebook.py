@@ -3,6 +3,7 @@ import os
 
 import yt_dlp
 
+from downloaders import facebook_dash
 from lib.metadata_compactor import build_compact_metadata, write_raw_metadata
 from lib.teton_utils import load_app_config
 from lib.vendor_router import VENDOR_FACEBOOK, extract_vendor_id, metadata_filename
@@ -27,9 +28,16 @@ def download(url, output_dir, metadata_dir, registry_record, cookie_path, video_
         "writeinfojson": False,
     }
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        downloaded_path = ydl.prepare_filename(info)
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            downloaded_path = ydl.prepare_filename(info)
+    except yt_dlp.utils.DownloadError as exc:
+        # Some reel pages (e.g. Alan Mortensen's, 2026-10) keep the video links where yt-dlp doesn't look.
+        # They're still on the page: read them ourselves. See docs/facebook_reels_cannot_parse.md.
+        if not facebook_dash.is_cannot_parse_error(exc):
+            raise
+        return facebook_dash.download(url, output_dir, metadata_dir, registry_record, cookie_path, video_download)
 
     ext = info.get("ext")
     if ext:
