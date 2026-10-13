@@ -284,7 +284,14 @@ async def run(a, posts):
                 await b.close(); return 4
             await asyncio.sleep(6)
         elif a.post:
-            await dlg.locator('[data-testid="tweetButton"]').last.click()
+            # Post stays disabled while X processes the image; 10-12 a tall card took over 30 s
+            btn = dlg.locator('[data-testid="tweetButton"]').last
+            try:
+                await btn.click(timeout=180000)
+            except Exception:
+                await log.shot(pg, "post_disabled")
+                log("abort", reason="Post button never enabled in 180 s; nothing was posted")
+                await b.close(); return 5
             log("post_clicked"); await asyncio.sleep(12)
         else:
             log("dry_run", note="not posted; rerun with --monkey (you press Post) or --post")
