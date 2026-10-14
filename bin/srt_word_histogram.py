@@ -47,6 +47,11 @@ ha han había habia tiene tienen tener hacer hace hizo va van vamos voy todo tod
 cada mismo misma así asi bien entonces porque eh este pues
 """.split())
 
+def filler_label(es=False, pt=False):
+    """The key's note on dropped filler words, with examples in each language that was filtered."""
+    ex = ["the, and, you"] + (["el, que, y"] if es else []) + (["o, de, que"] if pt else [])
+    return f"filler words left out ({'; '.join(ex)}...)"
+
 TIMING = re.compile(r"^\d+:\d+:\d+[,.]\d+\s*-->")
 
 def srt_text(path):
@@ -109,7 +114,7 @@ def main():
     from matplotlib.patches import Patch
     key = [Patch(color="#1f4e8c", label=f"times the word is said, all {len(a.srt)} SRT(s) together ({len(all_w)} words total)")]
     if not a.all_words:
-        key.append(Patch(color="none", label="filler words (the, and, you...) left out"))
+        key.append(Patch(color="none", label=filler_label(a.es, a.pt)))
     # key below the axis so it covers no bars
     ax.legend(handles=key, title="Key", loc="upper left", bbox_to_anchor=(0, -0.06 - 1.2 / max(4, len(top))),
               fontsize=8, title_fontsize=8, frameon=True)
