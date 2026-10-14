@@ -149,7 +149,12 @@ async def open_x(p, a, log):
     """browser + context with the account's cookies; headed when a person may need to act (--monkey/--headed)"""
     from igp.cookies import load_netscape_cookies
     headed = a.monkey or a.headed
-    args = ["--disable-gpu", "--disable-blink-features=AutomationControlled"]
+    # keep rendering when the window is minimized or covered: without these, Chromium stops painting a hidden window, and
+    # Playwright's click (waits for "visible and stable") and screenshots hang. 10-12 and 10-13 composer timeouts: box found,
+    # click timed out, screenshot timed out; the one success had the window on screen.
+    args = ["--disable-gpu", "--disable-blink-features=AutomationControlled",
+            "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
+            "--disable-background-timer-throttling", "--disable-features=CalculateNativeWinOcclusion"]
     if headed:  # fit the person's screen (a fixed 1000 px tall page hid the Post button on a 768 px laptop screen)
         b = await p.chromium.launch(headless=False, args=args + ["--start-maximized"])
         c = await b.new_context(no_viewport=True, user_agent=UA)
@@ -254,7 +259,11 @@ async def run(a, posts):
                 if i > 0:
                     await dlg.locator('[data-testid="addButton"]').last.click(); await asyncio.sleep(1.5)
                 box = dlg.locator(f'[data-testid="tweetTextarea_{i}"]')
-                await box.click(); await pg.keyboard.insert_text(text); await asyncio.sleep(1)
+                try:
+                    await box.click(timeout=10000)
+                except Exception:  # window not painting: focus needs no "visible and stable" check
+                    await box.focus(); log("click_fallback_focus", n=i + 1)
+                await pg.keyboard.insert_text(text); await asyncio.sleep(1)
                 got = (await box.inner_text()).replace("\n", "")
                 log("post_filled", n=i + 1, chars=x_length(text), box_ok=text.replace("\n", "")[:40] in got)
                 if i == 0 and a.image:
