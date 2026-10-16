@@ -22,6 +22,10 @@ from inside the logged-in page with our cursor. Between requests it acts like so
 page: mouse drifts, small scrolls, a random pause (--pause, default 3-7 s), and a 15-40 s "read"
 every 10-20 requests.
 
+Cookies (John, 10-16: "try not to get skunked by stale cookies"): before each run a fresh cookie is exported from the
+live Chrome profile (--fresh-from, default Profile 2 = haddamgoel) and tried first; files older than 12 h are skipped;
+the headless browser announces the installed Chrome version. Stop at the first stuck run; don't cycle sessions.
+
 Stuck logins: if a login hits an HTTP error, a login wall or a non-JSON answer, the tool moves
 to the next cookie file (--cookies files first, in order, then conf/app_config.json's Instagram
 cookie_hierarchy; logged-out files skipped) and carries on from where it stopped. The run.log
@@ -48,6 +52,7 @@ Writes outputs/ig_timelines/<username>_<UTC date>_reverse[_HHMM]/ (never overwri
 """
 import argparse
 import asyncio
+import subprocess
 import json
 import random
 import re
@@ -65,6 +70,30 @@ APP_ID = "936619743392459"             # the web app's X-IG-App-ID
 IG_LAUNCH = datetime(2010, 10, 6, tzinfo=timezone.utc).timestamp()
 SHORTCODE_ABC = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
 TARGET_PER_WINDOW = 20
+
+
+def chrome_ua():
+    """The installed Chrome's own version, so the headless browser doesn't announce a stale one (John's rule, 10-16)."""
+    try:
+        v = subprocess.run(["google-chrome", "--version"], capture_output=True, text=True, timeout=10).stdout.split()[-1]
+        major = v.split(".")[0]
+    except Exception:
+        major = "152"
+    return f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
+
+
+STALE_HOURS = 12
+
+
+def fresh_cookie(profile_dir):
+    """Export a fresh Instagram cookie from a live Chrome profile (dl_wm's own exporter) into conf/, dated."""
+    out = REPO / "conf" / f"instagram.cookies.fresh_{datetime.now():%Y-%m-%d_%H%M%S}.txt"
+    r = subprocess.run([sys.executable, str(REPO / "bin/export_browser_cookies.py"), "instagram.com", str(out),
+                        str(Path(profile_dir).expanduser())], capture_output=True, text=True, timeout=120)
+    if r.returncode or not out.exists():
+        return None, (r.stderr or r.stdout)[-300:]
+    out.chmod(0o600)
+    return out, None
 
 
 def id_time(pk):
@@ -408,9 +437,17 @@ def load_resume(pages_file):
     return {"back": b, "style": "back"}
 
 
-def cookie_candidates(args):
-    """--cookies first (in the order given), then dl_wm's Instagram cookie hierarchy. Logged-out files are skipped."""
-    files = list(args.cookies or [])
+def cookie_candidates(args, say=print):
+    """A fresh export from live Chrome first (unless --no-fresh), then --cookies, then dl_wm's Instagram cookie hierarchy.
+    Logged-out files and files older than STALE_HOURS are skipped (unless --stale-ok): don't get skunked by stale cookies."""
+    files = []
+    if not getattr(args, "no_fresh", False):
+        f, err = fresh_cookie(args.fresh_from)
+        if f:
+            files.append(str(f)); say(f"fresh cookie exported from {args.fresh_from}: {f.name}")
+        else:
+            say(f"could not export a fresh cookie from {args.fresh_from}: {err}")
+    files += list(args.cookies or [])
     try:
         cfg = json.loads((REPO / "conf/app_config.json").read_text())
         files += [str(REPO / f) for f in cfg["video_download"]["cookie_hierarchy"]["instagram"]]
@@ -425,6 +462,10 @@ def cookie_candidates(args):
         seen.add(real)
         if not any(c["name"] == "ds_user_id" and c["value"] for c in load_netscape_cookies(f)):
             continue                                  # logged out: no use here
+        age_h = (time.time() - f.stat().st_mtime) / 3600
+        if age_h > STALE_HOURS and not getattr(args, "stale_ok", False):
+            say(f"skipping {f.name}: {age_h:.0f} h old (stale; --stale-ok to use it)")
+            continue
         out.append(f)
     return out
 
@@ -459,7 +500,7 @@ async def main_async(args, out, say):
                 summary["date_mismatches"].append(r["shortcode"])
                 say(f"  DATE MISMATCH {r['shortcode']}: taken_at {iso(r['taken_at'])}, id says {iso(r['id_time'])}")
 
-    cands = cookie_candidates(args)
+    cands = cookie_candidates(args, say)
     if not cands:
         say("no logged-in Instagram cookie file found")
     requests = 0
@@ -470,7 +511,7 @@ async def main_async(args, out, say):
             say(f"login {k + 1}/{len(cands)}: {account_of(cf)}")
             summary["cookies_used"].append(account_of(cf))
             ctx = await browser.new_context(viewport={"width": 1024, "height": 800},
-                                            user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36")
+                                            user_agent=chrome_ua())
             await ctx.route(re.compile(r".*\.(png|jpg|jpeg|webp|gif|svg|woff2?|ttf|mp4|css)(\?.*)?$"), lambda r: r.abort())
             await ctx.add_cookies(load_netscape_cookies(cf))
             page = await ctx.new_page()
@@ -517,6 +558,10 @@ def main():
     ap.add_argument("--from", dest="from_", help="skip the first-post search; walk forward from YYYY-MM-DD")
     ap.add_argument("--pause", type=float, nargs=2, default=(3, 7), metavar=("MIN", "MAX"))
     ap.add_argument("--max-requests", type=int, default=800)
+    ap.add_argument("--fresh-from", default="~/.config/google-chrome/Profile 2",
+                    help="live Chrome profile to export a fresh cookie from before the run (default: Profile 2 = haddamgoel)")
+    ap.add_argument("--no-fresh", action="store_true", help="don't export a fresh cookie")
+    ap.add_argument("--stale-ok", action="store_true", help=f"allow cookie files older than {STALE_HOURS} h")
     ap.add_argument("--resume", metavar="DIR", help="carry on a killed/stuck run in DIR (reads its *_timeline.pages.jsonl)")
     args = ap.parse_args()
 
