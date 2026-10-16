@@ -37,7 +37,7 @@ Usage:
 
 Writes outputs/ig_timelines/<username>_<UTC date>_reverse[_HHMM]/ (never overwrites):
   <username>_timeline.jsonl   one post per line, oldest first. Incidence + origin only: shortcode,
-                              taken_at, id_time, collaborators, credits (@handles named in the
+                              taken_at, id_time, owner (added 10-16: Instagram omits it from collaborators), collaborators, credits (@handles named in the
                               caption; the caption itself is not kept), date_mismatch when set
   <username>_timeline.pages.jsonl  while running: every page as it arrives (cursor + posts); a killed run keeps it,
                               `--resume DIR` carries on from its last cursor; deleted when the walk finishes
@@ -92,12 +92,12 @@ def credits_in(caption):
     return list(dict.fromkeys(m.lower() for m in re.findall(r"(?<![\w.])@([A-Za-z0-9_.]*[A-Za-z0-9_])", caption or "")))
 
 
-MASK = ("shortcode", "taken_at", "id_time", "collaborators", "credits", "date_mismatch")
+MASK = ("shortcode", "taken_at", "id_time", "owner", "collaborators", "credits", "date_mismatch")
 
 
 def post_record(item, owner):
-    """Incidence + origin only: shortcode, taken_at, id_time, collaborators, credits (@handles in the
-    caption), date_mismatch when set. Nothing else is kept. None if the item isn't the owner's."""
+    """Incidence + origin only: shortcode, taken_at, id_time, owner (the posting account: Instagram leaves it OUT of
+    its own collaborator list), collaborators, credits (@handles in the caption), date_mismatch when set. Nothing else is kept. None if the item isn't the owner's."""
     code = item.get("code")
     if not code or "taken_at" not in item:
         return None
@@ -110,7 +110,7 @@ def post_record(item, owner):
     cap = cap.get("text", "") if isinstance(cap, dict) else (cap or "")
     pk = item.get("pk") or shortcode_pk(code)
     rec = {"shortcode": code, "taken_at": item["taken_at"], "id_time": round(id_time(pk)),
-           "collaborators": collabs, "credits": credits_in(cap)}
+           "owner": post_owner, "collaborators": collabs, "credits": credits_in(cap)}
     if abs(rec["taken_at"] - rec["id_time"]) > 3600:
         rec["date_mismatch"] = True
     return rec
