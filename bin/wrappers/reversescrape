@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# reversescrape — an Instagram account's posts OLDEST FIRST, from its very first post forward.
+# Metadata mask only (collabnet's fields + id_time). Everything after the username is passed
+# through: --until YYYY-MM-DD, --from YYYY-MM-DD, --pause 3 7, --max-requests N, --cookies FILE.
+# Output: outputs/ig_timelines/<username>_<date>_reverse/  (outputs -> ~/boner_vault/dl_wm_outputs)
+set -euo pipefail
+
+REPO=~/Documents/repos/dl_wm
+set +u
+source ~/miniforge3/etc/profile.d/conda.sh
+shopt -s expand_aliases
+source ~/.bash_aliases
+cad
+set -u
+
+[ $# -ge 1 ] || { echo "usage: reversescrape USERNAME [--until YYYY-MM-DD] [--from YYYY-MM-DD] [--pause 3 7]"; exit 1; }
+cd "$REPO"
+python bin/reversescrape.py "$@"
