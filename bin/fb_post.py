@@ -147,10 +147,10 @@ async def main(a):
         if is_video:
             await asyncio.sleep(30)
             btns = []
-            for b in await pg.get_by_role("button").all():
+            for btn in await pg.get_by_role("button").all():
                 try:
-                    if await b.is_visible():
-                        btns.append(((await b.get_attribute("aria-label")) or (await b.inner_text()) or "").strip()[:40] + (" [disabled]" if await b.is_disabled() or (await b.get_attribute("aria-disabled")) == "true" else ""))
+                    if await btn.is_visible():
+                        btns.append(((await btn.get_attribute("aria-label")) or (await btn.inner_text()) or "").strip()[:40] + (" [disabled]" if await btn.is_disabled() or (await btn.get_attribute("aria-disabled")) == "true" else ""))
                 except Exception:
                     pass
             log("composer_buttons", buttons=" | ".join(x for x in btns if x)[:3000])
