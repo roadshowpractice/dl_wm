@@ -9,6 +9,7 @@ the body) goes to <outdir>/fb_post_<time>.jsonl, plus screenshots.
 
 Usage:
   fb_post.py --cookies conf/facebook.merrill.cookies.txt --text intro.txt --image card.png [--post] [--outdir DIR]
+  fb_post.py --cookies ... --text reply.txt --comment-on https://www.facebook.com/<profile>/posts/<id> [--post]
 
 Lessons from the manual run (see ~/Desktop/claude/2026-09-29/2026-09-29_fb_post_isaiah_log.md):
   - a URL in the text makes FB build a link preview; attach the image AFTER the
@@ -53,6 +54,45 @@ class Log:
     async def shot(self, page, name):
         p = self.dir / f"fb_post_{self.stamp}_{name}.png"
         await page.screenshot(path=str(p)); self("screenshot", path=str(p))
+
+
+async def comment(a):
+    """--comment-on: open the post, type the text into its comment box, Enter to send (only with --post)."""
+    from playwright.async_api import async_playwright
+    log = Log(a.outdir)
+    text = Path(a.text).read_text().strip()
+    async with async_playwright() as p:
+        b = await p.chromium.launch(headless=True, args=["--disable-gpu"])
+        c = await b.new_context(viewport={"width": 1358, "height": 900}, user_agent=UA)
+        await c.add_cookies(load_netscape_cookies(Path(a.cookies), "facebook.com"))
+        pg = await c.new_page()
+        async def on_response(r):
+            if "/api/graphql" in r.url:
+                name = r.request.headers.get("x-fb-friendly-name", "")
+                if "Comment" in name:
+                    try: body = await r.text()
+                    except Exception as e: body = f"<unreadable: {e}>"
+                    log("graphql", name=name, status=r.status, body=body[:4096])
+        pg.on("response", lambda r: asyncio.ensure_future(on_response(r)))
+        await pg.goto(a.comment_on, wait_until="domcontentloaded", timeout=60000)
+        await asyncio.sleep(8)
+        log("post_page", url=pg.url, title=await pg.title())
+        box = pg.get_by_role("textbox", name=re.compile(r"comment", re.I))
+        if not await box.count():
+            await log.shot(pg, "no_comment_box"); log("abort", reason="no comment box (logged out?)")
+            await b.close(); return 2
+        await box.first.click(); await asyncio.sleep(1)
+        await pg.keyboard.insert_text(text); await asyncio.sleep(4)
+        typed = await box.first.inner_text()
+        log("text_inserted", chars=len(text), box_text=typed)
+        await log.shot(pg, "comment_ready")
+        if not a.post:
+            log("dry_run", note="not sent; rerun with --post"); await b.close(); return 0
+        await pg.keyboard.press("Enter"); log("enter_pressed")
+        await asyncio.sleep(10)
+        await log.shot(pg, "comment_posted")
+        await b.close()
+    return 0
 
 
 async def main(a):
@@ -177,8 +217,12 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cookies", required=True, help="Netscape cookies.txt for the posting account")
     ap.add_argument("--text", required=True, help="file with the post text")
-    ap.add_argument("--image", required=True, help="image or video (.mp4/.mov/.m4v/.webm) to attach")
+    ap.add_argument("--image", help="image or video (.mp4/.mov/.m4v/.webm) to attach (new post)")
+    ap.add_argument("--comment-on", help="post URL: add the text as a comment there instead of a new post (2026-10-18)")
     ap.add_argument("--post", action="store_true", help="actually click Post (default: dry run)")
     ap.add_argument("--profile", default="merrill.p.jensen", help="profile username for the permalink")
     ap.add_argument("--outdir", default=str(Path.home() / "Desktop/claude" / time.strftime("%Y-%m-%d")))
-    sys.exit(asyncio.run(main(ap.parse_args())))
+    a = ap.parse_args()
+    if not a.comment_on and not a.image:
+        ap.error("--image is required for a new post")
+    sys.exit(asyncio.run(comment(a) if a.comment_on else main(a)))
