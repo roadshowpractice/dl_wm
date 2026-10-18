@@ -19,11 +19,12 @@ Writes <out>/incidence_<accounts>.png and <out>/incidence_<accounts>.tsv.
 Usage:
     python bin/incidence_venn.py docs/data/congruence/incidence_matrix.csv LDA LDC TB
     python bin/incidence_venn.py M.csv LDA LDC
-    python bin/incidence_venn.py M.csv A B C --out ~/Desktop/claude/<date>/analysis
+    python bin/incidence_venn.py M.csv A B C --out ~/Desktop/claude/<date>/<handle>
 """
 import argparse
 import csv
 import itertools
+import os
 from collections import Counter
 from datetime import date
 from pathlib import Path
@@ -104,21 +105,21 @@ def draw3(names, sets, regions, out):
         (A, B, C): (0.0, -0.02),
     }
     for key, n in regions.items():
-        if n == 0:
-            continue
         x, y = pos[key]
         ax.text(x, y, str(n), ha="center", va="center",
                 fontsize=15 if len(key) == 3 else 13,
-                color=HUE[4] if len(key) == 3 else INK,
-                fontweight="bold" if len(key) == 3 else "normal")
+                color=MUTED if n == 0 else (HUE[4] if len(key) == 3 else INK),
+                fontweight="bold" if (len(key) == 3 and n) else "normal")
     for k in names:
         x, y = cen[k]
         ax.text(x, y + (0.86 if k == A else -0.60 if y < 0 else 0.86), f"{k}\n{len(sets[k])}",
                 ha="center", va="center", fontsize=11, color=INK)
     ax.set_title(f"{A} / {B} / {C} — posts in common", fontsize=16, color=INK,
-                 fontweight="bold", pad=14)
-    ax.text(0.0, 1.012, "incidence only · a weight is an overlap",
-            transform=ax.transAxes, ha="left", va="bottom", fontsize=11, color=MUTED)
+                 fontweight="bold", pad=30)
+    ax.text(0.5, 1.008, "incidence only · a weight is an overlap",
+            transform=ax.transAxes, ha="center", va="bottom", fontsize=11, color=MUTED)
+    ax.text(0.0, -1.10, "circles schematic; counts exact (incidence only)",
+            ha="center", va="top", fontsize=9.5, color=MUTED, style="italic")
     ax.set_xlim(-1.25, 1.25); ax.set_ylim(-1.15, 1.2)
     fig.tight_layout()
     p = out / f"incidence_{A}_{B}_{C}.png"
@@ -130,7 +131,9 @@ def main():
     ap = argparse.ArgumentParser(description="Weights and Venns from an incidence matrix.")
     ap.add_argument("matrix", help="incidence_matrix.csv (account, post, post, ...)")
     ap.add_argument("accounts", nargs="+", help="accounts to compare (2 or 3)")
-    ap.add_argument("--out", default=None, help="output dir (default ~/Desktop/claude/<today>/analysis)")
+    ap.add_argument("--out", default=None,
+                    help="output dir (default ~/Desktop/claude/<today>/<handle>, "
+                         "handle from $AGENT_HANDLE or 'opencode')")
     args = ap.parse_args()
 
     sets = load_matrix(args.matrix)
@@ -141,7 +144,8 @@ def main():
     if len(names) not in (2, 3):
         raise SystemExit("give 2 or 3 accounts")
 
-    out = Path(args.out) if args.out else Path.home() / "Desktop/claude" / str(date.today()) / "analysis"
+    handle = os.environ.get("AGENT_HANDLE") or "opencode"
+    out = Path(args.out) if args.out else Path.home() / "Desktop/claude" / str(date.today()) / handle
     out.mkdir(parents=True, exist_ok=True)
 
     print(f"matrix: {args.matrix}  ({len(sets)} accounts)")
