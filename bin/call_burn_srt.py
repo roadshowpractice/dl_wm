@@ -94,6 +94,13 @@ def _burn_subtitles(video_path: str, srt_path: str, app_config: dict) -> str:
     base, ext = os.path.splitext(video_path)
     output_video = f"{base}{suffix}{ext}"
 
+    from transcribe_common import is_zero_srt
+    if is_zero_srt(srt_path):
+        # Silent video: its SRT is the "[  ]" placeholder. Nothing to burn, so the output is a plain copy.
+        import shutil
+        shutil.copyfile(video_path, output_video)
+        return output_video
+
     fonts_dir, force_style = _ass_force_style_from_config(app_config)
     subtitle_filter = f"subtitles='{_escape_sub_path(srt_path)}'"
     if fonts_dir:

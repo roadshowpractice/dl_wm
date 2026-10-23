@@ -10,6 +10,8 @@ if lib_path not in sys.path:
 
 from teton_utils import initialize_logging
 from transcription_caller import NO_AUDIO, has_audio_stream, run_transcription, update_task_for_media
+from pathlib import Path
+from transcribe_common import media_duration_seconds, write_zero_srt
 
 
 def main() -> int:
@@ -27,9 +29,16 @@ def main() -> int:
     srt_path = f"{base}.srt"
 
     if has_audio_stream(input_video) is False:
-        # Silent post (Instagram offers no audio track): nothing to transcribe.
-        logger.warning("No audio stream in %s; skipping transcription.", input_video)
-        update_task_for_media(input_video, "generate_srt", NO_AUDIO)
+        # Silent post (Instagram offers no audio track): nothing to transcribe, but later steps
+        # (midpoint screenshots, scene split) need an SRT, so write the zero-value one.
+        logger.warning("No audio stream in %s; writing zero-value SRT.", input_video)
+        duration = media_duration_seconds(Path(input_video))
+        if duration:
+            write_zero_srt(Path(srt_path), duration)
+            update_task_for_media(input_video, "generate_srt", srt_path)
+            print(srt_path)
+        else:
+            update_task_for_media(input_video, "generate_srt", NO_AUDIO)
         return 0
 
     if not run_transcription(input_video, srt_path, "srt"):

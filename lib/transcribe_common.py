@@ -312,9 +312,32 @@ def format_timestamp(seconds: float, for_vtt: bool = False) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}{separator}{ms:03d}"
 
 
-def write_srt(segments: list[dict[str, Any]], output_path: Path) -> None:
+ZERO_SRT_TEXT = "[  ]"  # no-speech placeholder: one cue as long as the video, empty brackets (John, 2026-10-23)
+
+
+def write_zero_srt(output_path: Path, duration_seconds: float) -> None:
+    """A silent video still gets an SRT (the midpoint screenshots/scene steps need one)."""
+    end = format_timestamp(max(0.0, float(duration_seconds)))
+    output_path.write_text(f"1\n00:00:00,000 --> {end}\n{ZERO_SRT_TEXT}\n", encoding="utf-8")
+
+
+def is_zero_srt(srt_path) -> bool:
+    """True when an SRT holds nothing but the no-speech placeholder (or nothing at all)."""
+    try:
+        lines = Path(srt_path).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return False
+    text = [l.strip() for l in lines if l.strip() and "-->" not in l and not l.strip().isdigit()]
+    return all(t == ZERO_SRT_TEXT.strip() or t == ZERO_SRT_TEXT for t in text)
+
+
+def write_srt(segments: list[dict[str, Any]], output_path: Path, duration_seconds: Optional[float] = None) -> None:
+    rows = list(srt_rows_from_segments(segments))
+    if not rows and duration_seconds:
+        write_zero_srt(output_path, duration_seconds)
+        return
     with output_path.open("w", encoding="utf-8") as handle:
-        for index, seg in enumerate(srt_rows_from_segments(segments), start=1):
+        for index, seg in enumerate(rows, start=1):
             start = format_timestamp(float(seg.get("start", 0.0)))
             end = format_timestamp(float(seg.get("end", 0.0)))
             text = str(seg.get("text", "")).strip()
@@ -551,7 +574,7 @@ def run_cli(
 
     segments = result.get("segments") or []
     if args.srt:
-        write_srt(segments, outdir / f"{stem}.srt")
+        write_srt(segments, outdir / f"{stem}.srt", media_duration_seconds(input_path))
     if args.vtt:
         write_vtt(segments, outdir / f"{stem}.vtt")
     if args.minute_json:
