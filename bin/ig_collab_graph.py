@@ -62,7 +62,11 @@ def edge_band(n):
 
 
 def account_files(root=TIMELINES):
-    """{account: newest non-empty jsonl} for every account under root."""
+    """{account: [non-empty jsonl paths, oldest mtime first]} for every account under root.
+
+    Keeps ALL captures, not just the newest: a later re-scrape can be sparser
+    than an earlier one (latterdaychad: 2026-10-07 has 240 posts, 2026-10-13
+    only 36), so "newest by mtime" silently drops history."""
     found = collections.defaultdict(list)
     for p in root.glob("*_*/*_timeline.jsonl"):
         found[p.name[: -len("_timeline.jsonl")]].append(p)
@@ -72,9 +76,9 @@ def account_files(root=TIMELINES):
         found[p.stem].append(p)
     out = {}
     for acct, paths in found.items():
-        paths = [p for p in paths if p.stat().st_size > 0]
+        paths = sorted((p for p in paths if p.stat().st_size > 0), key=lambda p: p.stat().st_mtime)
         if paths:
-            out[acct.lower()] = max(paths, key=lambda p: p.stat().st_mtime)
+            out[acct.lower()] = paths
     return out
 
 
@@ -82,25 +86,28 @@ def load_posts(files):
     """{shortcode: {"people": set, "taken_at": int}} merged across all accounts' scrapes."""
     posts = {}
     counts = {}
-    for acct, path in files.items():
+    for acct, paths in files.items():
+        if isinstance(paths, (str, Path)):
+            paths = [paths]
         n = 0
-        with open(path, encoding="utf-8") as fh:
-            for line in fh:
-                if not line.strip():
-                    continue
-                r = json.loads(line)
-                code = r.get("shortcode") or r.get("code")
-                if not code:
-                    continue
-                n += 1
-                people = {acct} | {c.lower() for c in (r.get("collaborators") or [])}
-                rec = posts.setdefault(code, {"people": set(), "taken_at": int(r.get("taken_at") or 0),
-                                              "credited": set(), "seen_in": set(), "caption": ""})
-                rec["people"] |= people
-                # evidence: who Instagram credited on the post, and which scrape(s) it came from
-                rec["credited"] |= {c.lower() for c in (r.get("collaborators") or [])}
-                rec["seen_in"].add(acct)
-                rec["caption"] = rec["caption"] or (r.get("caption") or "")
+        for path in paths:
+            with open(path, encoding="utf-8") as fh:
+                for line in fh:
+                    if not line.strip():
+                        continue
+                    r = json.loads(line)
+                    code = r.get("shortcode") or r.get("code")
+                    if not code:
+                        continue
+                    n += 1
+                    people = {acct} | {c.lower() for c in (r.get("collaborators") or [])}
+                    rec = posts.setdefault(code, {"people": set(), "taken_at": int(r.get("taken_at") or 0),
+                                                  "credited": set(), "seen_in": set(), "caption": ""})
+                    rec["people"] |= people
+                    # evidence: who Instagram credited on the post, and which scrape(s) it came from
+                    rec["credited"] |= {c.lower() for c in (r.get("collaborators") or [])}
+                    rec["seen_in"].add(acct)
+                    rec["caption"] = rec["caption"] or (r.get("caption") or "")
         counts[acct] = n
     return posts, counts
 
@@ -172,11 +179,14 @@ def write_evidence(out, files, posts, edges, members, argv, started):
     day = lambda t: datetime.fromtimestamp(t, timezone.utc).strftime("%Y-%m-%d %H:%M:%SZ") if t else ""
     with open(out / "inputs.tsv", "w", encoding="utf-8") as fh:
         fh.write("account\tfile\tsha256\tbytes\tlines\tmodified_utc\n")
-        for acct, path in sorted(files.items()):
-            st = Path(path).stat()
-            lines = sum(1 for l in open(path, encoding="utf-8") if l.strip())
-            fh.write(f"{acct}\t{path}\t{sha256(path)}\t{st.st_size}\t{lines}\t"
-                     f"{datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat(timespec='seconds')}\n")
+        for acct, paths in sorted(files.items()):
+            if isinstance(paths, (str, Path)):
+                paths = [paths]
+            for path in paths:
+                st = Path(path).stat()
+                lines = sum(1 for l in open(path, encoding="utf-8") if l.strip())
+                fh.write(f"{acct}\t{path}\t{sha256(path)}\t{st.st_size}\t{lines}\t"
+                         f"{datetime.fromtimestamp(st.st_mtime, timezone.utc).isoformat(timespec='seconds')}\n")
     with open(out / "edge_posts.tsv", "w", encoding="utf-8") as fh:
         fh.write("a\tb\tshortcode\turl\tposted_utc\tcredited_collaborators\tseen_in_scrape_of\tcaption_start\n")
         for (a, b), e in sorted(edges.items(), key=lambda kv: (-kv[1]["n"], kv[0])):

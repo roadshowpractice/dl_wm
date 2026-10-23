@@ -35,3 +35,7 @@ conf/insta.*.txt
 .pipeline_tmp/
 clips_manifest.json
 clips_with_intro_manifest.json
+
+# dated backups of configs and cookie files - never commit
+conf/*.bak_*
+conf/*.cookies.txt.bak*
