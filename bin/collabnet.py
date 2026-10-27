@@ -4,7 +4,7 @@
 Not the dl_wm per-link pipeline (call_router / dllink). This one works on whole
 accounts, metadata only, nothing downloaded. For each account in a queue file:
 
-  1. scrape     its post history with igp.profile_history (as haddamgoel), slowly,
+  1. scrape     its post history with igp.profile_history (as the conf default login), slowly,
                 into outputs/ig_timelines/<account>_<date>/  (skipped if we already
                 have a full scrape of it; --refresh scrapes again)
   2. word sort  bin/ig_word_sort.py on it -> <run>/word_sorts/<account>_word_sort.txt
@@ -21,6 +21,8 @@ capped_<queue name>.txt next to the queue file, with the re-scrape command at it
 --snowball: collaborators found on each account's posts that aren't in the queue yet
 are appended to the queue file ("# from <account>, N posts") and walked too, until
 --max-accounts scrapes have been done this run.
+Don't snowball for group-membership questions: membership is a direct co-post (depth one);
+a partner's partner is association, not membership. See ~/glossary.md "boner depth one" (John, 2026-10-24).
 
 Queue file: one account per line, anything after # is a comment.
 Run folder: ~/Desktop/claude/<today>/collabnet_<queue name>/
@@ -31,7 +33,7 @@ Ctrl-C stops cleanly; the same command again carries on (scraped accounts are sk
 
 Usage:
     python bin/collabnet.py QUEUE.txt [--snowball] [--max-accounts 25] [--gap 3 6] [--pause 3 6]
-        [--rounds 150] [--cookies conf/instagram.cookies.haddamgoel.txt] [--refresh] [--dry-run]
+        [--rounds 150] [--cookies conf/instagram.cookies.daystrom.txt] [--refresh] [--dry-run]
     collabnet QUEUE.txt ...        (wrapper in ~/.local/bin: activates the env, mounts the USB drive)
 
     --gap MIN MAX     minutes between accounts (default 3 6)
@@ -173,7 +175,7 @@ class Log:
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("queue")
-    ap.add_argument("--cookies", default=str(REPO / "conf" / "instagram.cookies.haddamgoel.txt"))
+    ap.add_argument("--cookies", default=str(REPO / "conf" / "instagram.cookies.daystrom.txt"))
     ap.add_argument("--rounds", type=int, default=150, help="max scroll rounds per account (default 150)")
     ap.add_argument("--gap", type=float, nargs=2, default=[3, 6], metavar=("MIN", "MAX"))
     ap.add_argument("--pause", type=float, nargs=2, default=[3, 6], metavar=("MIN", "MAX"))
