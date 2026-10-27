@@ -157,6 +157,7 @@ class Session:
         self.page, self.username, self.errors, self.say = page, username, errors, say
         self.pause, self.max_requests, self.n = pause, max_requests, 0
         self.uid = self.style = self.template = None
+        self.network = []                      # (url, status, content-type, method) for the stuck dump
 
     async def capture_template(self):
         """Scroll the profile until the page itself asks for a page of the timeline; keep that request."""
@@ -164,7 +165,10 @@ class Session:
 
         async def on_response(resp):
             try:
-                if "/graphql/query" in resp.url and resp.request.method == "POST":
+                self.network.append({"url": resp.url, "status": resp.status,
+                                     "content_type": resp.headers.get("content-type", ""),
+                                     "method": resp.request.method})
+                if resp.request.method == "POST" and ("/graphql/query" in resp.url or "/api/graphql" in resp.url):
                     text = await resp.text()
                     if TIMELINE_KEY in text:
                         req = resp.request
@@ -175,11 +179,23 @@ class Session:
         for _ in range(8):
             if any("after" in v for v, _, _ in [(pd, h, t) for pd, h, t in seen.get("all", [])]):
                 break
+            try:
+                await self.page.mouse.move(512, 500)   # the wheel goes where the pointer is; keep it over the feed
+            except Exception:
+                pass
             await self.page.mouse.wheel(0, 3000)
             await asyncio.sleep(random.uniform(*self.pause))
         self.page.remove_listener("response", on_response)
         caps = seen.get("all", [])
         if not caps:
+            out = Path(self.errors).parent
+            try:                                   # make a stuck run readable offline
+                out.joinpath("stuck_page.html").write_text(await self.page.content(), encoding="utf-8")
+                out.joinpath("stuck_page.txt").write_text(await self.page.inner_text("body"), encoding="utf-8")
+                out.joinpath("stuck_network.jsonl").write_text(
+                    "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in self.network), encoding="utf-8")
+            except Exception:
+                pass
             raise Stuck("the profile page never asked for its timeline (login wall or block?)")
         pd, headers, text = next(((pd, h, t) for pd, h, t in caps if "after" in pd), caps[0])
         from urllib.parse import parse_qsl
@@ -512,7 +528,11 @@ async def main_async(args, out, say):
             summary["cookies_used"].append(account_of(cf))
             ctx = await browser.new_context(viewport={"width": 1024, "height": 800},
                                             user_agent=chrome_ua())
-            await ctx.route(re.compile(r".*\.(png|jpg|jpeg|webp|gif|svg|woff2?|ttf|mp4|css)(\?.*)?$"), lambda r: r.abort())
+            # CSS must load: with stylesheets aborted the grid never asks for page 2 (tested 2026-10-27)
+            block = r".*\.(png|jpg|jpeg|webp|gif|svg|woff2?|ttf|mp4)(\?.*)?$"
+            if args.block_css:
+                block = r".*\.(png|jpg|jpeg|webp|gif|svg|woff2?|ttf|mp4|css)(\?.*)?$"
+            await ctx.route(re.compile(block), lambda r: r.abort())
             await ctx.add_cookies(load_netscape_cookies(cf))
             page = await ctx.new_page()
             s = Session(page, args.username, out / "errors.jsonl", say, args.pause, args.max_requests - requests)
@@ -562,6 +582,7 @@ def main():
                     help="live Chrome profile to export a fresh cookie from before the run (default: Profile 2 = haddamgoel)")
     ap.add_argument("--no-fresh", action="store_true", help="don't export a fresh cookie")
     ap.add_argument("--stale-ok", action="store_true", help=f"allow cookie files older than {STALE_HOURS} h")
+    ap.add_argument("--block-css", action="store_true", help="also abort stylesheets (saves RAM, but stops pagination)")
     ap.add_argument("--resume", metavar="DIR", help="carry on a killed/stuck run in DIR (reads its *_timeline.pages.jsonl)")
     args = ap.parse_args()
 

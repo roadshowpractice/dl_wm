@@ -136,7 +136,7 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
         # (this machine has 3.2GB RAM total and a full Chromium render of IG's
         # image-heavy grid was OOM-killing the scrape).
         await context.route(
-            re.compile(r".*\.(png|jpg|jpeg|webp|gif|svg|woff2?|ttf|mp4|css)(\?.*)?$"),
+            re.compile(r".*\.(png|jpg|jpeg|webp|gif|svg|woff2?|ttf|mp4)(\?.*)?$"),
             lambda route: route.abort(),
         )
         cookies = [] if _logged_out else load_netscape_cookies(cookie_file)
@@ -144,6 +144,7 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
             await context.add_cookies(cookies)
 
         page = await context.new_page()
+        network = []                        # what the sniffer saw, for a self-diagnosing 0
 
         async def on_response(response):
             try:
@@ -160,16 +161,18 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
                     return
                 if "json" not in ctype and "javascript" not in ctype:
                     return
-                if "javascript" in ctype and "/graphql/query" not in response.url and "/api/v1/" not in response.url:
+                # 2026-10-27: the profile's posts now come from /api/graphql (PolarisProfilePostsQuery)
+                if "javascript" in ctype and not any(k in response.url for k in ("/graphql/query", "/api/graphql", "/api/v1/")):
                     return  # plain JS bundles, not data
                 text = await response.text()
                 if raw_sink is not None:
                     raw_sink({"url": response.url, "status": response.status,
                               "content_type": ctype, "text": text})
-                if '"taken_at"' not in text or '"caption"' not in text:
+                if '"taken_at"' not in text:
                     return
+                network.append({"url": response.url, "content_type": ctype, "head": text[:200]})
                 before = len(found)
-                extract_posts_from_json(json.loads(text), found, username)
+                extract_posts_from_json(json.loads(text.removeprefix("for (;;);")), found, username)
                 after = len(found)
                 if after > before:
                     print(f"  +{after - before} posts (total {after})")
@@ -225,6 +228,10 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
                     LAST_END = "stop_before"
                     break
 
+        if not found:
+            print(f"diagnostic: {len(network)} JSON/JS responses, none parsed")
+            for rec in network[:20]:
+                print(f"  {rec['content_type']:35} {rec['url'][:100]}  {rec['head'][:80]!r}")
         await browser.close()
 
     if _logged_out:
