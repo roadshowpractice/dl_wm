@@ -23,7 +23,7 @@ needed to show where each record came from:
   run.log                 console output.
 
 Usage:
-    python bin/ig_scrape_account.py <username> [--cookies conf/instagram.cookies.haddamgoel.txt]
+    python bin/ig_scrape_account.py <username> [--cookies conf/instagram.cookies.daystrom.txt]
         [--out DIR] [--max-rounds 200] [--pause 4 9] [--stall-limit 12]
 
 --out defaults to outputs/ig_timelines/<username>_<UTC date>_forensic/ and must not
@@ -195,7 +195,7 @@ def rebuild(raw_path, username):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("username")
-    ap.add_argument("--cookies", default=str(REPO / "conf" / "instagram.cookies.haddamgoel.txt"))
+    ap.add_argument("--cookies", default=str(REPO / "conf" / "instagram.cookies.daystrom.txt"))
     ap.add_argument("--out")
     ap.add_argument("--max-rounds", type=int, default=200)
     ap.add_argument("--pause", type=float, nargs=2, default=[4.0, 9.0], metavar=("MIN", "MAX"))

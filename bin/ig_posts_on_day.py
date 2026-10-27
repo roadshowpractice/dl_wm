@@ -68,8 +68,8 @@ def main():
     parser.add_argument("username")
     parser.add_argument("day", help="YYYY-MM-DD")
     parser.add_argument("--tz", default="America/Los_Angeles", help="timezone the day is counted in (default: %(default)s)")
-    parser.add_argument("--cookies", default=os.path.join(root_dir, "conf", "instagram.cookies.haddamgoel.txt"),
-                        help="Netscape cookies.txt (default: haddamgoel — timballard89 blocks merrillp.jensen)")
+    parser.add_argument("--cookies", default=os.path.join(root_dir, "conf", "instagram.cookies.daystrom.txt"),
+                        help="Netscape cookies.txt (default: daystrom (John Daystrom IG, 2026-10-24); timballard89 blocks merrillp.jensen)")
     parser.add_argument("--max-rounds", type=int, default=150)
     parser.add_argument("--pause", type=float, nargs=2, default=[4.0, 9.0], metavar=("MIN", "MAX"),
                         help="seconds to wait after each scroll, random in [MIN, MAX] (default: 4 9)")
