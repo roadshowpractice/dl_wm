@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# pipeline2 — the second pipeline: a reel's scenes, one by one and back to front. Runs after dllink (pipeline 1).
+# Was the day-folder cutfirst.sh (2026-10-21/22/27); moved into dl_wm 2026-10-27 so it has a name we can find.
+#
+#   pipeline2 ID                  default = split + render reverse (scene numbers only, no subtitles)
+#   pipeline2 ID split            1  scene clips from the watermarked video          -> scene_clips/clips/, segments.json
+#   pipeline2 ID reverse          2+3 scene order + reverse-to-forward video          -> scene_clips/clips_labeled_reverse.mp4
+#   options:
+#   pipeline2 ID forward          4  forward video                                    -> scene_clips/clips_labeled_forward.mp4
+#   pipeline2 ID commutator ORDER 5  joins the labeled videos, ORDER from F and R:
+#                                    FR = ABBA (forward then reverse), RFR = reverse . forward . reverse (10-22/23)
+#                                                                                     -> scene_clips/commutator_<ORDER>_<ID>_<time>.mp4
+#   pipeline2 ID srt              6a one SRT per clip (cut from the full SRT) + word histogram; read them before burning
+#   pipeline2 ID burn             6b burn each clip's SRT                              -> scene_clips/clips_burned/
+#
+# ID = the reel's id or shortcode (the folder name after facebook__ / instagram__).
+# reverse / forward use clips_burned/ when it exists (after burn), otherwise the plain clips.
+# Word histograms go to ~/Desktop/claude/<today>/pipeline2/.
+set -euo pipefail
+
+PY=~/miniforge3/envs/dl_wm/bin/python
+REPO=~/Documents/repos/dl_wm
+[ $# -ge 1 ] || { sed -n 2,18p "$0"; exit 1; }
+ID=$1; shift
+WM=$(ls -t ~/boner_vault/dl_wm_outputs/*/*"$ID"*/*_watermarked.mp4 2>/dev/null | grep -v burned | head -1 || true)
+[ -n "$WM" ] || { echo "No watermarked video for $ID yet: run dllink first."; exit 1; }
+DIR=$(dirname "$WM"); SRT="${WM%_watermarked.mp4}.srt"; SC="$DIR/scene_clips"
+echo "video: $WM"; echo "clips: $SC"
+
+split() { (cd "$REPO" && $PY bin/scene_split.py "$WM" --out-dir "$SC"); }
+
+# render one order (forward|reverse) from the burned clips if there are any, else the plain clips
+render() {
+  (cd "$REPO" && $PY bin/render_scene_cards.py "$SC")   # writes scenes_forward/reverse.jsonl
+  local src="$SC"
+  if [ -d "$SC/clips_burned" ]; then
+    src="$DIR/scene_clips_burned"; mkdir -p "$src"
+    ln -sfn "$SC/clips_burned" "$src/clips"
+    cp "$SC"/scenes_forward.jsonl "$SC"/scenes_reverse.jsonl "$src/"
+  fi
+  (cd "$REPO" && $PY bin/render_labeled_scene_video.py "$src" "$src/scenes_$1.jsonl" "$SC/clips_labeled_$1.mp4")
+  echo "$1: $SC/clips_labeled_$1.mp4"
+}
+
+case "${1:-}" in
+"")
+  split; render reverse
+  ;;
+split)   split ;;
+reverse) render reverse ;;
+forward) render forward ;;
+commutator)
+  ORDER=${2:?usage: pipeline2 ID commutator FR|RFR|...  (F = forward, R = reverse)}
+  [[ "$ORDER" =~ ^[FR]+$ ]] || { echo "ORDER is letters F and R only, e.g. FR or RFR"; exit 2; }
+  list="$SC/commutator_${ORDER}_list.txt"; : > "$list"
+  for ((i = 0; i < ${#ORDER}; i++)); do
+    o=forward; [ "${ORDER:i:1}" = R ] && o=reverse
+    [ -f "$SC/clips_labeled_$o.mp4" ] || render $o
+    printf "file '%s'\n" "clips_labeled_$o.mp4" >> "$list"
+  done
+  out="$SC/commutator_${ORDER}_${ID}_$(date +%H%M%S).mp4"
+  (cd "$SC" && ffmpeg -hide_banner -y -f concat -safe 0 -i "$list" -c:v libx264 -preset veryfast -crf 20 -c:a aac "$out")
+  echo "commutator: $out"
+  ;;
+srt)
+  [ -f "$SRT" ] || { echo "No SRT at $SRT"; exit 1; }
+  [ -f "$SC/segments.json" ] || split
+  # one SRT per clip, cut out of the full-video SRT and shifted to start at 0 (same words as the full SRT)
+  $PY - "$SRT" "$SC" <<'EOF'
+import json, re, sys
+from pathlib import Path
+srt, sc = Path(sys.argv[1]), Path(sys.argv[2])
+def sec(t): h, m, s = t.replace(",", ".").split(":"); return int(h) * 3600 + int(m) * 60 + float(s)
+def ts(x): x = max(0.0, x); return f"{int(x//3600):02}:{int(x%3600//60):02}:{int(x%60):02},{int(round((x-int(x))*1000))%1000:03}"
+cues = []
+for block in re.split(r"\n\s*\n", srt.read_text().strip()):
+    lines = block.splitlines()
+    if len(lines) >= 3 and "-->" in lines[1]:
+        a, b = [sec(x.strip()) for x in lines[1].split("-->")]
+        cues.append((a, b, "\n".join(lines[2:])))
+(sc / "subtitles").mkdir(exist_ok=True)
+for s in json.load(open(sc / "segments.json")):
+    out = []
+    for a, b, text in cues:
+        if b > s["start"] and a < s["end"]:
+            out.append(f"{len(out)+1}\n{ts(max(a, s['start']) - s['start'])} --> {ts(min(b, s['end']) - s['start'])}\n{text}\n")
+    (sc / "subtitles" / f"{s['clip_id']}.srt").write_text("\n".join(out))
+    print(s["clip_id"], f"{s['start']:.1f}-{s['end']:.1f}s", len(out), "cues")
+EOF
+  HERE=~/Desktop/claude/$(date +%F)/pipeline2; mkdir -p "$HERE"
+  $PY "$REPO/bin/srt_word_histogram.py" "$SRT" -o "$HERE/$(date +%F)_${ID}" --title "$ID: top words"
+  echo; echo "NEXT: read the SRTs in $SC/subtitles/ (fix any word in place), then: pipeline2 $ID burn"
+  ;;
+burn)
+  mkdir -p "$SC/clips_burned"
+  for c in "$SC"/clips/clip_*.mp4; do
+    n=$(basename "$c" .mp4); s="$SC/subtitles/$n.srt"
+    # placeholder-only SRT ("[  ]" = no speech, as long as the clip) has nothing to burn
+    if [ -s "$s" ] && grep -vqE '^[0-9]+$|-->|^\[  \]$|^\s*$' "$s"; then
+      ffmpeg -v error -y -i "$c" -vf "subtitles='$s':fontsdir='$REPO/fonts'" -c:v libx264 -crf 18 -preset medium -c:a aac "$SC/clips_burned/$n.mp4"
+    else
+      cp "$c" "$SC/clips_burned/$n.mp4"   # no words in this clip
+    fi
+    echo "burned $n"
+  done
+  ;;
+*) sed -n 2,18p "$0"; exit 2 ;;
+esac
