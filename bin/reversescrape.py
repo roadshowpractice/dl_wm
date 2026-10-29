@@ -352,6 +352,8 @@ async def walk(s, st, args, say, write, summary):
             st["style"] = "back"
     s.style = st["style"]
     if st["style"] == "back":
+        if args.from_:                               # paging back: stop once a whole page is older than --from
+            st["back_from"] = datetime.strptime(args.from_, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp()
         await walk_back(s, st, say, write, summary, newest)
         return
 
@@ -431,10 +433,20 @@ async def walk_back(s, st, say, write, summary, newest):
             say(f"  paged back to {iso(oldest)[:10]}: {len(b['posts'])} posts, requests {s.n}")
         if not got and b["cursor"]:
             raise Stuck("an empty page with more to come")
+        if st.get("back_from") and got and all(r["taken_at"] < st["back_from"] for r in got):
+            say(f"  paged past --from {iso(st['back_from'])[:10]}: stopping ({len(b['posts'])} posts, requests {s.n})")
+            break
     allp = sorted(b["posts"].values(), key=lambda r: r["taken_at"])
+    if st.get("back_from"):                          # keep only the window (drops pinned/older posts on the last page)
+        allp = [r for r in allp if r["taken_at"] >= st["back_from"]]
+        if not allp:
+            say(f"no posts since --from {iso(st['back_from'])[:10]}")
+            st["done_to"] = time.time()
+            return
     f0 = allp[0]
     summary["first_post"] = {**f0, "url": f"https://www.instagram.com/p/{f0['shortcode']}/", "posted_utc": iso(f0["taken_at"])}
-    say(f"FIRST POST: {iso(f0['taken_at'])} UTC  https://www.instagram.com/p/{f0['shortcode']}/")
+    label = "FIRST POST since --from" if st.get("back_from") else "FIRST POST"
+    say(f"{label}: {iso(f0['taken_at'])} UTC  https://www.instagram.com/p/{f0['shortcode']}/")
     say(f"  collaborators: {f0['collaborators']}  credits: {f0['credits']}")
     write(allp)
     st["done_to"] = time.time()
