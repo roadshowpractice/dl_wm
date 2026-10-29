@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# topoff — bring a list of Instagram accounts up to date: for each account, fetch only the posts
+# since the date we already hold (metadata only), one account at a time. Uses reversescrape --from.
+#
+# Usage:  topoff LIST [reversescrape options...]
+#   LIST   text file, one account per line:   <username>   <YYYY-MM-DD>
+#          # starts a comment; blank lines are skipped; a line with "none" (or no date) is skipped
+#          and reported (nothing held yet: that's a first capture, not a top-off).
+#   options are passed to every reversescrape run, e.g.  --no-fresh --cookies conf/instagram.cookies.haddamgoel.txt
+# Env:     PAUSE=90   seconds between accounts      DRY=1   print the commands, run nothing
+# Logs:    ~/Desktop/claude/<today>/topoff/<username>_<HHMMSS>.log, plus topoff_<HHMMSS>.log for the whole list
+# Stops at the first account whose run fails or says STOPPED, so nothing piles onto a stuck login.
+set -uo pipefail
+[ $# -ge 1 ] && [ -r "$1" ] || { echo "usage: topoff LIST [reversescrape options...]"; exit 1; }
+list=$(readlink -f "$1"); shift
+logdir=~/Desktop/claude/$(date +%F)/topoff; mkdir -p "$logdir"
+main="$logdir/topoff_$(date +%H%M%S).log"
+say() { echo "$(date +%T)  $*" | tee -a "$main"; }
+
+say "topoff $list  (extra options: ${*:-none})"
+first=1
+while read -r name date _rest; do
+  [ -z "${name:-}" ] && continue
+  case $name in \#*) continue ;; esac
+  if [[ ! ${date:-} =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then say "$name: no date held, skipped (first capture, not a top-off)"; continue; fi
+  log="$logdir/${name}_$(date +%H%M%S).log"
+  cmd=(~/.local/bin/reversescrape "$name" --from "$date" "$@")
+  if [ "${DRY:-}" = 1 ]; then say "would run: ${cmd[*]}"; continue; fi
+  [ $first = 1 ] || sleep "${PAUSE:-90}"; first=0
+  say "$name: posts since $date -> $log"
+  "${cmd[@]}" > "$log" 2>&1 < /dev/null; rc=$?
+  say "$name: $(grep -h 'done:\|STOPPED\|no posts since' "$log" | tail -1)"
+  if [ $rc -ne 0 ] || grep -q "STOPPED" "$log"; then say "STOP at $name (exit $rc); the rest of the list was not run"; exit 1; fi
+done < "$list"
+say "list finished"
