@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# openedposts — the Instagram posts/reels John opened in a Chrome profile today, from its History.
+# Close Chrome first (flushes History). Everything is passed through: --name LABEL, --date YYYY-MM-DD,
+# --since HH:MM, --until HH:MM, --profile DIR, --timeline FILE.jsonl, --outdir DIR.
+# Output: ~/Desktop/claude/<today>/claude/<name>_opened_posts/  (list ready for dllink --list)
+set -euo pipefail
+
+REPO=~/Documents/repos/dl_wm
+cd "$REPO"
+python3 bin/ig_opened_posts.py "$@"
