@@ -196,6 +196,21 @@ class Session:
                     "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in self.network), encoding="utf-8")
             except Exception:
                 pass
+            try:
+                body = await self.page.inner_text("body")
+                html = await self.page.content()
+            except Exception:
+                body = html = ""
+            if "Sorry, this page isn't available" in body:
+                raise Gone("Instagram: \"Sorry, this page isn't available\" to this login (gone, renamed, or hidden from it)")
+            # [claude 2026-11-06] A grid that fits on one page (elders_in_the_endzone, 7 posts) never asks for its
+            # timeline: the posts are already on the page. That is not a cookie problem (John: "baloney").
+            grid = page_grid(html, body, self.username)
+            if grid is not None:
+                raise SmallGrid(grid)
+            if profile_post_count(body) is not None:
+                raise NoQuery("the profile loaded for this login but never asked for its timeline, and its grid "
+                              "isn't all on the page: not a cookie problem (page saved as stuck_page.*)")
             raise Stuck("the profile page never asked for its timeline (login wall or block?)")
         pd, headers, text = next(((pd, h, t) for pd, h, t in caps if "after" in pd), caps[0])
         from urllib.parse import parse_qsl
@@ -309,6 +324,49 @@ class Session:
 
 class Stuck(RuntimeError):
     """This login can't go on (HTTP error, login wall, not JSON): try the next cookie file."""
+
+
+class Gone(RuntimeError):
+    """Instagram shows this login "Sorry, this page isn't available". Not a cookie problem, but it can be per login:
+    timballard89 on 2026-11-06 was unavailable to daystromjohn and fine for haddamgoel. So try the next login;
+    only when every login sees it is it a red herring."""
+
+
+class NoQuery(RuntimeError):
+    """The profile rendered for this login but no timeline query came, and the grid isn't all on the page."""
+
+
+class SmallGrid(Exception):
+    """The whole grid is already on the page (one page or less), so no timeline query is needed. Carries the records."""
+    def __init__(self, recs):
+        super().__init__(f"{len(recs)} posts read from the page")
+        self.recs = recs
+
+
+def profile_post_count(body):
+    """The 'N posts' figure from the profile header text, as an int (None if not shown, or given as 1.2K etc.)."""
+    m = re.search(r"(?m)^\s*([\d,]+)\s+posts?\s*$", body or "")
+    return int(m.group(1).replace(",", "")) if m else None
+
+
+def page_grid(html, body, username):
+    """Records for a grid that is wholly on the page: the profile header says N posts and the page links N distinct
+    /<username>/p|reel/<code>/ (or bare /p|reel/<code>/) posts. None otherwise. These carry shortcode, taken_at and
+    id_time from the post id (taken_at = id_time, flagged), owner = username; collaborators and credits are NOT on
+    the grid page, so they are None (unknown), not [] (none). Tested offline on 2026-11-06's elders_in_the_endzone dump."""
+    n = profile_post_count(body)
+    if n is None:
+        return None
+    codes = list(dict.fromkeys(re.findall(
+        r'href="(?:/' + re.escape(username) + r')?/(?:p|reel)/([A-Za-z0-9_-]{11})/"', html or "")))
+    if n == 0 or len(codes) < n:
+        return None
+    recs = []
+    for c in codes:
+        t = round(id_time(shortcode_pk(c)))
+        recs.append({"shortcode": c, "taken_at": t, "id_time": t, "owner": username,
+                     "collaborators": None, "credits": None, "from_page_grid": True})
+    return recs
 
 
 async def walk(s, st, args, say, write, summary):
@@ -560,6 +618,18 @@ async def main_async(args, out, say):
                     say(f"{args.username}: {m.group(1)} posts on the profile")
                 await walk(s, st, args, say, write, summary)
                 summary["end"] = "reached_until"
+            except SmallGrid as g:
+                write(g.recs)
+                summary["end"] = "reached_until"
+                summary["small_grid"] = True
+                say(f"small grid: all {len(g.recs)} posts are on the page (no timeline query needed). "
+                    "Dates from the post ids; collaborators/credits not on the grid page (left unknown)")
+            except Gone as e:
+                summary["end"] = f"unavailable: {e}"
+                say(f"UNAVAILABLE to this login (not a cookie problem): {e}" + ("  -> next cookie file" if k + 1 < len(cands) else ""))
+            except NoQuery as e:
+                summary["end"] = f"NO TIMELINE QUERY: {e}"
+                say(f"NO TIMELINE QUERY: {e}")
             except Stuck as e:
                 summary["end"] = f"stuck: {e}"
                 say(f"STUCK on this login: {e}" + ("  -> next cookie file" if k + 1 < len(cands) else ""))
@@ -568,9 +638,13 @@ async def main_async(args, out, say):
                 say(f"STOPPED: {e}")
             requests += s.n
             await browser.close()
-            if not summary["end"].startswith("stuck"):
+            if not summary["end"].startswith(("stuck", "unavailable")):
                 break
-    if summary["end"] and summary["end"].startswith("stuck") or not cands:
+    if summary["end"] and summary["end"].startswith("unavailable"):
+        summary["end"] = "RED HERRING: unavailable to every login tried. " + summary["end"]
+        say(f"RED HERRING: {args.username} is unavailable to every login tried ({', '.join(summary['cookies_used'])}): "
+            "gone, renamed, or hidden from all of them. Not a cookie problem.")
+    elif summary["end"] and summary["end"].startswith("stuck") or not cands:
         summary["end"] = "I NEED COOKIES: every login is stuck. " + (summary["end"] or "")
         say("I NEED COOKIES: every login got stuck. Export a fresh one, e.g. "
             "bin/export_browser_cookies.py instagram.com conf/instagram.cookies.haddamgoel.txt ~/.config/google-chrome-goel/Default, "
