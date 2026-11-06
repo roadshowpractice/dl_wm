@@ -33,7 +33,7 @@ Ctrl-C stops cleanly; the same command again carries on (scraped accounts are sk
 
 Usage:
     python bin/collabnet.py QUEUE.txt [--snowball] [--max-accounts 25] [--gap 3 6] [--pause 3 6]
-        [--rounds 150] [--cookies conf/instagram.cookies.daystrom.txt] [--refresh] [--dry-run]
+        [--rounds 150] [--cookies conf/instagram.cookies.haddamgoel.txt] [--refresh] [--dry-run]
     collabnet QUEUE.txt ...        (wrapper in ~/.local/bin: activates the env, mounts the USB drive)
 
     --gap MIN MAX     minutes between accounts (default 3 6)
@@ -175,7 +175,7 @@ class Log:
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("queue")
-    ap.add_argument("--cookies", default=str(REPO / "conf" / "instagram.cookies.daystrom.txt"))
+    ap.add_argument("--cookies", default=str(REPO / "conf" / "instagram.cookies.haddamgoel.txt"))   # 2026-11-06: daystrom does not see timballard89
     ap.add_argument("--rounds", type=int, default=150, help="max scroll rounds per account (default 150)")
     ap.add_argument("--gap", type=float, nargs=2, default=[3, 6], metavar=("MIN", "MAX"))
     ap.add_argument("--pause", type=float, nargs=2, default=[3, 6], metavar=("MIN", "MAX"))

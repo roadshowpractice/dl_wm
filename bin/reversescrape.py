@@ -23,7 +23,8 @@ page: mouse drifts, small scrolls, a random pause (--pause, default 3-7 s), and 
 every 10-20 requests.
 
 Cookies (John, 10-16: "try not to get skunked by stale cookies"): before each run a fresh cookie is exported from the
-live Chrome profile (--fresh-from, default Profile 2 = haddamgoel) and tried first; files older than 12 h are skipped;
+live Chrome profile (--fresh-from, default the goel profile = haddamgoel; changed 2026-11-06: Profile 2 is daystromjohn,
+which Instagram does not show timballard89 to) and tried first; files older than 12 h are skipped;
 the headless browser announces the installed Chrome version. Stop at the first stuck run; don't cycle sessions.
 
 Stuck logins: if a login hits an HTTP error, a login wall or a non-JSON answer, the tool moves
@@ -664,8 +665,8 @@ def main():
     ap.add_argument("--from", dest="from_", help="skip the first-post search; walk forward from YYYY-MM-DD")
     ap.add_argument("--pause", type=float, nargs=2, default=(3, 7), metavar=("MIN", "MAX"))
     ap.add_argument("--max-requests", type=int, default=800)
-    ap.add_argument("--fresh-from", default="~/.config/google-chrome/Profile 2",
-                    help="live Chrome profile to export a fresh cookie from before the run (default: Profile 2 = haddamgoel)")
+    ap.add_argument("--fresh-from", default="~/.config/google-chrome-goel/Default",
+                    help="live Chrome profile to export a fresh cookie from before the run (default: goel profile = haddamgoel; NOT Profile 2 = daystromjohn, which does not see timballard89)")
     ap.add_argument("--no-fresh", action="store_true", help="don't export a fresh cookie")
     ap.add_argument("--stale-ok", action="store_true", help=f"allow cookie files older than {STALE_HOURS} h")
     ap.add_argument("--block-css", action="store_true", help="also abort stylesheets (saves RAM, but stops pagination)")
