@@ -23,6 +23,10 @@ dependencies:
   # ✅ Numpy from conda (prevents pip/conda mismatch with torch)
   - numpy=1.26.4
 
+  # torch 2.5.1 needs fsspec and sympy==1.13.1; pinned here (conda), not pip
+  - fsspec
+  - sympy=1.13.1
+
   # pip-only packages (pure python / safe wheels)
   - pip:
       - setuptools==68.2.2
