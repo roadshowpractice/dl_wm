@@ -125,7 +125,7 @@ async def scrape(username, cookie_file, max_rounds=150, stall_limit=6, stop_befo
     async with async_playwright() as p:
         browser = await p.chromium.launch(
             headless=True,
-            args=["--disable-gpu", "--single-process", "--no-zygote"],
+            args=["--disable-gpu", "--disable-software-rasterizer", "--single-process", "--no-zygote"],
         )
         context = await browser.new_context(
             viewport={"width": 1024, "height": 800},

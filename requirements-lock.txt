@@ -1,34 +1,61 @@
-# NOTE:
-# - numpy is installed via conda (see environment.yml); do NOT pip-install numpy here.
-# - openai-whisper is installed by setup_env.sh (default WHISPER_VERSION=20230314). See below.
-
-setuptools==68.2.2
-
-# Core
-moviepy==1.0.3
-requests==2.32.3
-yt-dlp==2024.8.6
-
-# Imaging / MoviePy stack
-Pillow==9.5.0
-imageio==2.34.0
-imageio-ffmpeg==0.4.9
-
-# MoviePy dependencies
-decorator==4.4.2
-tqdm==4.66.1
-proglog==0.1.10
-
-# Optional helpers
-python-dotenv==1.0.1
-
-# Whisper (setup_env.sh installs this; keeping it here documents the exact version)
+# Frozen snapshot of conda env "dl_wm" — 2026-11-18
+# Captured with: python -m pip list --format=freeze   (env: ~/micromamba/envs/dl_wm)
+#
+# Source of truth for installing is still environment.yml (setup_env.sh runs it).
+# This file is the exact installed state (name==version) for diffing / reproducibility;
+# it is NOT a `pip install -r` list — numpy, torch, opencv, sympy, fsspec, etc. are
+# provided by conda, so pip-installing those here would fight the conda env.
+#
+# playwright's Chromium browser is a separate download, not a pip package:
+#   python -m playwright install chromium
+#
+# whisper/faster-whisper are installed by setup_env.sh, not by this env by default
+# (kept commented so their exact versions stay documented — see docs/transcription_engines.md):
 #openai-whisper==20230314
-
-# faster-whisper (setup_env.sh installs this too; alternate transcription
-# engine, see docs/transcription_engines.md - CTranslate2 backend, no CUDA-
-# wheel disk-quota issue like openai-whisper, so no special install ordering
-# needed, but kept out of environment.yml/pip-installed-here for consistency
-# with how openai-whisper is handled)
 #faster-whisper==1.2.1
 #ctranslate2==4.8.2
+
+certifi==2026.10.23
+charset-normalizer==3.5.2
+contourpy==1.3.2
+cycler==0.12.1
+decorator==4.4.2
+filelock==3.32.5
+fonttools==4.65.0
+fsspec==2026.7.0
+gmpy2==2.3.1
+greenlet==3.5.6
+idna==3.20
+imageio==2.34.0
+imageio-ffmpeg==0.4.9
+Jinja2==3.1.6
+kiwisolver==1.5.1
+MarkupSafe==3.0.3
+matplotlib==3.10.9
+moviepy==1.0.3
+mpmath==1.3.0
+networkx==3.4.2
+numpy==1.26.4
+opencv-python==5.0.0
+opencv-python-headless==5.0.0
+packaging==26.3
+Pillow==9.5.0
+pip==26.2.1
+playwright==1.65.2
+proglog==0.1.10
+pyparsing==3.3.3
+python-dateutil==3.0.0
+python-dotenv==1.0.1
+PyYAML==6.0.3
+requests==2.32.3
+scipy==1.15.3
+setuptools==68.2.2
+six==1.17.0
+sympy==1.13.1
+torch==2.5.1
+tqdm==4.66.1
+typing_extensions==4.16.0
+tzdata==2026.6
+urllib3==2.8.0
+wheel==0.48.0
+yt-dlp==2026.10.21

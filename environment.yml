@@ -53,3 +53,8 @@ dependencies:
       - networkx>=3.4
       - matplotlib>=3.10
       - scipy>=1.15
+
+      # scraping: collabnet -> igp.profile_history / igp.capture / reversescrape
+      # drive a headless Chromium. The pip package alone isn't enough; after the
+      # env is built also run:  python -m playwright install chromium
+      - playwright>=1.40

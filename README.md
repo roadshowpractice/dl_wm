@@ -25,6 +25,19 @@ This project ships an `environment.yml` file you can use directly.
    ```bash
    conda env update -f environment.yml --prune
    ```
+5. Install the headless browser Playwright needs for scraping (`collabnet`,
+   `igp`, `reversescrape`):
+   ```bash
+   python -m playwright install chromium
+   ```
+
+### Disk footprint (baseline)
+
+Expect the built `dl_wm` environment to be about **3.3 GB** (237 conda packages,
+measured 2026-11-18 on Ubuntu with `du -sh` over the env prefix). The surrounding
+micromamba/conda root is ~4.3 GB including package cache. A much smaller env means
+packages failed to install; a much larger one usually means an unexpected second
+CUDA/torch stack got pulled in. Keep ~5 GB free before creating the env.
 
 ## Configuration
 
