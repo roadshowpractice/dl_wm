@@ -39,3 +39,6 @@ clips_with_intro_manifest.json
 # dated backups of configs and cookie files - never commit
 conf/*.bak_*
 conf/*.cookies.txt.bak*
+
+# test suite resume state (local)
+t/.suite_state
