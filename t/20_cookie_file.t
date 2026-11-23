@@ -8,6 +8,9 @@ my $repo   = "$home/repos/dl_wm";
 my $rel    = 'conf/instagram.cookies.haddamgoel.txt';
 my $cookie = "$repo/$rel";
 
+plan skip_all => "no local cookie file; refresh with: bin/refresh_cookies.py instagram.com $rel (never committed)"
+    unless -f $cookie;
+
 sub capture_cmd {
     my @cmd = @_;
     open(my $fh, '-|', @cmd) or return (127, '');

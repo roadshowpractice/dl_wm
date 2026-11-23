@@ -42,3 +42,8 @@ conf/*.cookies.txt.bak*
 
 # test suite resume state (local)
 t/.suite_state
+
+# Never commit browser cookies or Chrome profiles (use bin/refresh_cookies.py)
+.browser_profiles/
+*.cookies.txt
+cookies.txt
